@@ -310,8 +310,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [update]);
 
   const loadDemo = useCallback(() => {
-    setData(demoData());
-    notify('已加载示例档案：5 趟旅行、12 个城市');
+    const demo = demoData();
+    const cities = new Set(demo.trips.flatMap((t) => t.cityNames)).size;
+    setData(demo);
+    notify(`已加载示例档案：${demo.trips.length} 趟旅行、${cities} 个城市`);
   }, [notify]);
 
   const resetAll = useCallback(() => {

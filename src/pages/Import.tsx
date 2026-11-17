@@ -152,11 +152,13 @@ export function ImportPage() {
       await new Promise((r) => setTimeout(r, 110));
       setProgress(pct);
     }
-    addPhotos(createDemoScanPhotos());
+    const demoPhotos = createDemoScanPhotos();
+    const groups = splitPhotosIntoTrips(demoPhotos, data.config).length;
+    addPhotos(demoPhotos);
     await tick();
-    setScanLabel('扫描完成 · 112 张示例照片 · 找到 4 段候选');
+    setScanLabel(`扫描完成 · ${demoPhotos.length} 张示例照片 · 找到 ${groups} 段候选`);
     setScanning(false);
-    notify('示例扫描完成：4 段候选，全部在本地生成');
+    notify(`示例扫描完成：${groups} 段候选，全部在本地生成`);
   };
 
   const splitDays = useMemo(() => {
