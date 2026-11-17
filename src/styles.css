@@ -1,0 +1,197 @@
+/* App-level additions layered on top of the extracted prototype styles. */
+
+.boot-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: #8b8b8b;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+/* Photo thumbnails: the prototype used CSS-only placeholders, v1 can render real thumbs. */
+.trip-cover img,
+.cand-cover img,
+.merge-cover img,
+.wish-cover img,
+.thumb img,
+.fill-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photo:has(img)::before,
+.photo:has(img)::after,
+.thumb:has(img)::before,
+.thumb:has(img)::after {
+  display: none;
+}
+
+.thumb img {
+  z-index: 0;
+}
+
+/* World map (Natural Earth 110m, equirectangular, 1000 x 640). */
+.world-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.world-svg:focus {
+  outline: none;
+}
+
+.world-country {
+  vector-effect: non-scaling-stroke;
+  transition: fill 0.15s linear;
+}
+
+.world-country.is-visited {
+  stroke: #b3b3b3;
+}
+
+.graticule line {
+  stroke: #ededed;
+  stroke-width: 1;
+}
+
+.world-routes path {
+  fill: none;
+  stroke: #6f6f6f;
+  stroke-width: 1.2;
+  stroke-dasharray: 5 4;
+  opacity: 0.72;
+}
+
+.world-cities circle {
+  fill: #3d3d3d;
+  stroke: #f6f6f6;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.world-cities .city-halo {
+  fill: none;
+  stroke: #6f6f6f;
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.world-cities text {
+  font-size: 10px;
+  font-family: var(--font);
+  fill: #5c5c5c;
+  paint-order: stroke;
+  stroke: #f6f6f6;
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.world-city {
+  cursor: pointer;
+  outline: none;
+}
+
+.world-city.is-dim {
+  opacity: 0.2;
+}
+
+.world-city.is-selected circle:not(.city-halo) {
+  fill: #111;
+  stroke: #111;
+}
+
+.world-city.is-selected text {
+  fill: #1f1f1f;
+  font-weight: 700;
+}
+
+/* Replay photo stage with a real thumbnail behind the label. */
+.replay-photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.9;
+}
+
+.replay-photo.has-img::before,
+.replay-photo.has-img::after {
+  display: none;
+}
+
+.replay-photo.has-img .rp-label {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2;
+  background: rgba(35, 35, 35, 0.86);
+  border-color: #6a6a6a;
+  color: #ddd;
+  text-align: left;
+}
+
+.replay-photo.has-img .rp-label b {
+  color: #fff;
+}
+
+/* Small layout fixes for the data-driven pages. */
+.city-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mapx-side-foot {
+  flex-wrap: wrap;
+}
+
+.fillpage-row select.fill-place {
+  min-width: 0;
+}
+
+.loc-map .empty-map {
+  min-height: 100%;
+}
+
+.frog-big {
+  min-height: 150px;
+}
+
+.element-card {
+  text-align: left;
+}
+
+.frog-memories {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.memory-trips {
+  display: flex;
+  flex-direction: column;
+}
+
+.mt-row .mt-actions {
+  flex: none;
+}
+
+/* Empty states reused outside the home screen. */
+.screen .empty-map {
+  border: 1px dashed var(--line-2);
+  background: #fafafa;
+}
+
+.trip-main > span {
+  display: block;
+}
