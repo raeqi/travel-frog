@@ -31,22 +31,31 @@ export function visitedCities(data: AppData): VisitedCity[] {
   const map = new Map<string, VisitedCity>();
   for (const trip of data.trips) {
     const year = new Date(trip.endAt).getFullYear();
-    const photos = photosOfTrip(data, trip.id).length;
-    const seen = new Set<string>();
+    const photoCounts = new Map<string, number>();
+    const visitCity = new Map<string, string>();
+    const cityMeta = new Map<string, { name: string; country: string }>();
     for (const visit of trip.visits) {
       if (visit.lat == null || visit.lng == null) continue;
       const hit = nearestCity(visit.lat, visit.lng);
       const name = hit?.city ?? visit.city;
       const country = hit?.country ?? visit.country;
       const key = `${name}|${country}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      visitCity.set(visit.id, key);
+      cityMeta.set(key, { name, country });
+      if (!photoCounts.has(key)) photoCounts.set(key, 0);
+    }
+    for (const p of photosOfTrip(data, trip.id)) {
+      const key = p.visitId ? visitCity.get(p.visitId) : undefined;
+      if (key) photoCounts.set(key, (photoCounts.get(key) ?? 0) + 1);
+    }
+    for (const [key, photoCount] of photoCounts) {
+      const meta = cityMeta.get(key) as { name: string; country: string };
       const found = map.get(key);
       if (found) {
-        found.photos += photos;
+        found.photos += photoCount;
         found.year = Math.max(found.year, year);
       } else {
-        map.set(key, { name, country, year, photos });
+        map.set(key, { name: meta.name, country: meta.country, year, photos: photoCount });
       }
     }
   }

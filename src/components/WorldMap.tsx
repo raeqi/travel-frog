@@ -16,33 +16,47 @@ export interface MapCity {
 
 export const COUNTRY_FILL = ['#dfe6e0', '#e9e2d8', '#e0e3ea', '#ebe4dc', '#e4e9de', '#e7dfe6'];
 
-export function citiesFromTrips(trips: Trip[], photos: Record<string, { tripId?: string }>): MapCity[] {
+export function citiesFromTrips(trips: Trip[], photos: Record<string, { tripId?: string; visitId?: string }>): MapCity[] {
   const map = new Map<string, MapCity>();
   for (const trip of trips) {
     const year = new Date(trip.endAt).getFullYear();
-    const tripPhotos = Object.values(photos).filter((p) => p.tripId === trip.id).length;
-    const seen = new Set<string>();
+    const visitCity = new Map<string, string>();
+    const cityMeta = new Map<string, { name: string; country: string; code: string; lat: number; lng: number }>();
+    const photoCounts = new Map<string, number>();
     for (const visit of trip.visits) {
       if (visit.lat == null || visit.lng == null) continue;
       const hit = nearestCity(visit.lat, visit.lng);
       const name = hit?.city ?? visit.city;
       const key = `${name}|${hit?.countryCode ?? ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const existing = map.get(key);
-      if (existing) {
-        existing.photos += tripPhotos;
-        existing.trips += 1;
-        existing.year = Math.max(existing.year, year);
-      } else {
-        map.set(key, {
+      visitCity.set(visit.id, key);
+      if (!cityMeta.has(key)) {
+        cityMeta.set(key, {
           name,
           country: hit?.country ?? visit.country,
           code: hit?.countryCode ?? '',
           lat: hit?.lat ?? visit.lat,
           lng: hit?.lng ?? visit.lng,
+        });
+      }
+      if (!photoCounts.has(key)) photoCounts.set(key, 0);
+    }
+    for (const p of Object.values(photos)) {
+      if (p.tripId !== trip.id) continue;
+      const key = p.visitId ? visitCity.get(p.visitId) : undefined;
+      if (key) photoCounts.set(key, (photoCounts.get(key) ?? 0) + 1);
+    }
+    for (const [key, photoCount] of photoCounts) {
+      const meta = cityMeta.get(key) as { name: string; country: string; code: string; lat: number; lng: number };
+      const existing = map.get(key);
+      if (existing) {
+        existing.photos += photoCount;
+        existing.trips += 1;
+        existing.year = Math.max(existing.year, year);
+      } else {
+        map.set(key, {
+          ...meta,
           year,
-          photos: tripPhotos,
+          photos: photoCount,
           trips: 1,
         });
       }
@@ -78,6 +92,38 @@ export function WorldMap({
     Array.from(visitedCodes).forEach((code, i) => palette.set(code, COUNTRY_FILL[i % COUNTRY_FILL.length]));
     return palette;
   }, [visitedCodes]);
+
+  const labelPositions = useMemo(() => {
+    const boxes: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    const placed = new Map<string, { x: number; y: number; anchor: 'start' | 'end' }>();
+    const ordered = cities.slice().sort((a, b) => {
+      if (a.name === selected) return -1;
+      if (b.name === selected) return 1;
+      return b.photos - a.photos;
+    });
+    for (const city of ordered) {
+      const p = project(city.lat, city.lng);
+      const width = city.name.length * 12 + 4;
+      const height = 14;
+      const options = [
+        { x: p.x + 9, y: p.y + 4, anchor: 'start' as const },
+        { x: p.x - 9, y: p.y + 4, anchor: 'end' as const },
+        { x: p.x + 9, y: p.y - 10, anchor: 'start' as const },
+        { x: p.x - 9, y: p.y - 10, anchor: 'end' as const },
+        { x: p.x + 9, y: p.y + 18, anchor: 'start' as const },
+        { x: p.x - 9, y: p.y + 18, anchor: 'end' as const },
+      ];
+      for (const opt of options) {
+        const x1 = opt.anchor === 'start' ? opt.x : opt.x - width;
+        const box = { x1, y1: opt.y - height, x2: x1 + width, y2: opt.y + 2 };
+        if (boxes.some((b) => box.x1 < b.x2 && box.x2 > b.x1 && box.y1 < b.y2 && box.y2 > b.y1)) continue;
+        boxes.push(box);
+        placed.set(`${city.name}-${city.code}`, opt);
+        break;
+      }
+    }
+    return placed;
+  }, [cities, selected]);
 
   const routes = useMemo(() => {
     return trips
@@ -138,11 +184,14 @@ export function WorldMap({
             >
               {isSelected ? <circle cx={p.x} cy={p.y} r="9" className="city-halo" /> : null}
               <circle cx={p.x} cy={p.y} r={isSelected ? 5 : 3.6} />
-              {showLabels && (
-                <text x={p.x + (p.x > 900 ? -9 : 9)} y={p.y + 3} textAnchor={p.x > 900 ? 'end' : 'start'}>
-                  {c.name}
-                </text>
-              )}
+              {showLabels && labelPositions.has(`${c.name}-${c.code}`) && (() => {
+                const label = labelPositions.get(`${c.name}-${c.code}`)!;
+                return (
+                  <text x={label.x} y={label.y} textAnchor={label.anchor}>
+                    {c.name}
+                  </text>
+                );
+              })()}
               <title>{`${c.name} · ${c.country} · ${c.year} · ${c.photos} 张`}</title>
             </g>
           );
