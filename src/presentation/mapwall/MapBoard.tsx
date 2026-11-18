@@ -48,6 +48,7 @@ export interface MapBoardProps {
   readonly highlightCity: string | null;
   readonly highlightWish: string | null;
   readonly fan: { readonly cityKey: string; readonly photoIds: readonly string[] } | null;
+  readonly house: { readonly x: number; readonly y: number; readonly name: string } | null;
   readonly now: number;
   readonly photoImage: (photo: WallPhoto) => string;
   readonly photoById: ReadonlyMap<string, WallPhoto>;
@@ -60,6 +61,7 @@ export interface MapBoardProps {
   readonly onFrogAction: (action: FrogAction) => void;
   readonly onBubbleDismiss: () => void;
   readonly onDestTag: (destination: DestinationCandidate) => void;
+  readonly onHouseClick: () => void;
   readonly onBackgroundClick: () => void;
 }
 
@@ -226,6 +228,7 @@ export function MapBoard(props: MapBoardProps) {
     highlightCity,
     highlightWish,
     fan,
+    house,
     now,
     photoImage,
     photoById,
@@ -235,6 +238,7 @@ export function MapBoard(props: MapBoardProps) {
     onFrogAction,
     onBubbleDismiss,
     onDestTag,
+    onHouseClick,
     onBackgroundClick,
   } = props;
 
@@ -276,6 +280,22 @@ export function MapBoard(props: MapBoardProps) {
             />
           )}
           <FanCards fan={fan} piles={props.piles} photoById={photoById} photoImage={photoImage} onPhotoOpen={props.onPhotoOpen} />
+          {house ? (
+            <button
+              type="button"
+              className="house-marker"
+              style={{ left: `${house.x}px`, top: `${house.y}px` }}
+              aria-label={`回家 · ${house.name}`}
+              title={`回家 · ${house.name}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onHouseClick();
+              }}
+            >
+              <span className="house-roof" aria-hidden="true" />
+              <span className="house-body" aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
 
         <div className="wish-layer" id="wishLayer">

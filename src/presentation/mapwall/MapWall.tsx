@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useArchive, useService } from '../context';
-import { buildWallModel, isNewWish, wallModelIsEmpty, type WallModel, type WallPhoto, type WallWish } from './model';
+import { buildWallModel, formattedDay, isNewWish, wallModelIsEmpty, type WallModel, type WallPhoto, type WallWish } from './model';
 import {
   EMPTY_METRICS,
   WORLD_CAMERA,
@@ -31,8 +31,12 @@ import { PoiList } from './PoiList';
 import { Crumb, EmptyCard, TopBar, Toast, Tray, ZoomControls } from './Chrome';
 import { MemoryOverlay } from './MemoryOverlay';
 import { Drawer, type DrawerTab } from './Drawer';
-import { WishFocus } from './Postcard';
+import { WishFocus, type WishBackPhoto } from './Postcard';
+import { HomeRoom, SpecialtyFocus, type SpecialtyProvenance } from './HomeRoom';
 import { ReplayBar, type FrogAction, type FrogMode } from './Frog';
+import { furnitureFor, luggageTier, type SpecialtyAward } from '../../domain/home/collection';
+import { nextPerch, perchForDisplay, perchFromRandom, type FrogPerch, type HomeDisplay } from '../../domain/home/perch';
+import type { MapViewState } from '../../domain/home/map-view';
 import { SettingsPanel, type ThemeChoice } from './SettingsPanel';
 import { SearchPanel, type SearchItem } from './SearchPanel';
 import type { PlacedPostcard } from './Postcard';
@@ -210,8 +214,10 @@ const NOTE_TAILS = ['路口的面包店还亮着灯。', '风从河面吹过来�
 export function MapWall() {
   const service = useService();
   const snapshot = useArchive();
-  const model = useMemo(() => buildWallModel(snapshot), [snapshot]);
+  const model = useMemo(() => buildWallModel(snapshot, snapshot.home.city.key), [snapshot]);
   const empty = wallModelIsEmpty(model);
+
+  const [scene, setScene] = useState<'wall' | 'home'>('wall');
 
   const [mode, setMode] = useState<Mode>('world');
   const [level, setLevel] = useState<Level>('world');
@@ -230,7 +236,7 @@ export function MapWall() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>('candidates');
-  const [listOpen, setListOpen] = useState(true);
+  const [listOpen, setListOpen] = useState(false);
   const [linked, setLinked] = useState(false);
   const [entrusting, setEntrusting] = useState(false);
   const [frogMode, setFrogMode] = useState<FrogMode>('rest');
@@ -249,12 +255,17 @@ export function MapWall() {
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(() => new Set());
   const [dropping, setDropping] = useState<ReadonlySet<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
+  const [specialtyFocus, setSpecialtyFocus] = useState<SpecialtyAward | null>(null);
 
   const toastTimer = useRef<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
   const linkedTimer = useRef<number | null>(null);
   const deliveryTimers = useRef<number[]>([]);
   const entrustBusy = useRef<Set<string>>(new Set());
+  const poiScrollRef = useRef<HTMLDivElement>(null);
+  const savedView = useRef<MapViewState | null>(null);
+  const pendingScroll = useRef<number | null>(null);
+  const restoredView = useRef(false);
 
   const notify = useCallback((message: string) => {
     setToastMessage(message);
@@ -319,6 +330,27 @@ export function MapWall() {
     cameraRef.current = camera;
   }, [camera]);
 
+  useLayoutEffect(() => {
+    if (snapshot.status !== 'ready') return;
+    if (!restoredView.current) {
+      restoredView.current = true;
+      const saved = snapshot.mapView;
+      if (saved) {
+        savedView.current = saved;
+        setMode(saved.mode);
+        setLevel(saved.level);
+        setCamera(saved.camera);
+        pendingScroll.current = saved.poiScrollTop;
+      }
+      return;
+    }
+    if (scene !== 'wall' || pendingScroll.current === null) return;
+    const element = poiScrollRef.current;
+    const value = pendingScroll.current;
+    pendingScroll.current = null;
+    if (element) element.scrollTop = value;
+  }, [snapshot.status, snapshot.mapView, scene]);
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
@@ -353,8 +385,8 @@ export function MapWall() {
     document.body.classList.toggle('drawer-open', drawerOpen);
     document.body.classList.toggle('is-entrusting', entrusting);
     document.body.dataset.level = level;
-    document.body.dataset.scene = empty ? 'empty' : 'wall';
-  }, [resolvedTheme, mode, level, listOpen, drawerOpen, entrusting, empty]);
+    document.body.dataset.scene = scene === 'home' ? 'home' : empty ? 'empty' : 'wall';
+  }, [resolvedTheme, mode, level, listOpen, drawerOpen, entrusting, empty, scene]);
 
   useEffect(
     () => () => {
@@ -483,6 +515,15 @@ export function MapWall() {
   }, [model, level, effectiveCityKey, metrics, mode, camera]);
 
   const photoPoints = useMemo(() => cityPhotos.map((marker) => ({ x: marker.x, y: marker.y })), [cityPhotos]);
+
+  const house = useMemo(() => {
+    const marker = snapshot.home.marker;
+    if (!marker || empty || metrics.sheetW <= 0) return null;
+    if (level === 'city' || level === 'region') return null;
+    const point = toScreen(projectAt(mode, marker.lat, marker.lng), camera, metrics);
+    if (!inBoard(point.x, point.y, metrics, 42)) return null;
+    return { x: point.x, y: point.y, name: snapshot.home.city.name };
+  }, [snapshot.home, empty, metrics, mode, camera, level]);
 
   const replayPoints = useMemo(() => {
     if (!replay) return [];
@@ -633,12 +674,12 @@ export function MapWall() {
         arriving,
         dropping: dropping.has(card.wish.id),
         leaving: leaving.has(card.wish.id),
-        flipping: false,
+        flipping: wishFocus?.wishId === card.wish.id,
         flyX: from.x - card.cx,
         flyY: from.y - card.cy,
       };
     });
-  }, [wishPlacement.cards, frogPos, metrics, now, flew, dropping, leaving]);
+  }, [wishPlacement.cards, frogPos, metrics, now, flew, dropping, leaving, wishFocus]);
 
   const arrivingKey = postcards
     .filter((card) => card.arriving)
@@ -662,6 +703,34 @@ export function MapWall() {
   const totalPoi = poiTotal(groups);
   const visitedCountries = useMemo(() => new Set(model.cities.map((city) => city.countryName)), [model]);
   const charmCount = useMemo(() => model.wishes.filter((wish) => wish.status === 'fulfilled').length, [model]);
+  const homeFurniture = useMemo(
+    () => furnitureFor({ tripCount: model.trips.length, countryCount: visitedCountries.size }),
+    [model.trips.length, visitedCountries],
+  );
+  const homeLuggage = useMemo(() => luggageTier(visitedCountries.size), [visitedCountries]);
+  const homePostcards = useMemo(
+    () =>
+      model.wishes
+        .filter((wish) => wish.status !== 'declined')
+        .map((wish) => ({
+          id: wish.id,
+          name: wish.name,
+          status: wish.status,
+          year: new Date(wish.createdAt).getUTCFullYear(),
+        })),
+    [model.wishes],
+  );
+  const homeMapPhotos = useMemo(() => {
+    const trip = model.trips[0];
+    if (!trip) return [];
+    const photos: Array<{ id: string; image: string }> = [];
+    for (const photoId of trip.photoIds) {
+      if (photos.length >= 4) break;
+      const photo = model.photoById.get(photoId);
+      if (photo) photos.push({ id: photo.id, image: imageFor(photo) });
+    }
+    return photos;
+  }, [model, imageFor]);
 
   const searchItems = useMemo<SearchItem[]>(() => {
     const items: SearchItem[] = [];
@@ -777,14 +846,19 @@ export function MapWall() {
   const openWishFocus = useCallback(
     (wish: WallWish) => {
       const center = wishPlacement.centers.get(wish.id);
-      const board = boardRef.current?.getBoundingClientRect();
-      if (!center || !board) return;
+      const board = boardRef.current?.getBoundingClientRect() ?? {
+        left: 0,
+        top: 0,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      };
       const halfW = 142;
-      const halfH = 140;
+      const halfH = 160;
+      const anchor = center ?? { cx: board.width / 2, cy: board.height / 2 };
       setWishFocus({
         wishId: wish.id,
-        left: clamp(board.left + center.cx, board.left + halfW, board.left + board.width - halfW),
-        top: clamp(board.top + center.cy, board.top + halfH, board.top + board.height - halfH),
+        left: clamp(board.left + anchor.cx, board.left + halfW, board.left + board.width - halfW),
+        top: clamp(board.top + anchor.cy, board.top + halfH, board.top + board.height - halfH),
       });
     },
     [wishPlacement.centers],
@@ -835,24 +909,25 @@ export function MapWall() {
 
   const handleWishClick = useCallback(
     (wish: WallWish) => {
-      if (wish.status === 'received') {
-        openWishFocus(wish);
+      if (wishFocus?.wishId === wish.id) {
+        setWishFocus(null);
         return;
       }
-      if (wish.status === 'wished') {
-        void guard(async () => {
-          await service.setWishStatus(wish.id, 'received');
-          notify(`已取消想去 · ${wish.name}`);
-        });
-        return;
-      }
-      if (wish.status === 'pending') {
-        notify(`等青蛙路过 · ${wish.name}`);
-        return;
-      }
-      notify(`已兑现 · ${wish.name} · 照片已经在地图上`);
+      openWishFocus(wish);
     },
-    [guard, notify, openWishFocus, service],
+    [openWishFocus, wishFocus],
+  );
+
+  const cancelWished = useCallback(
+    (wishId: string) => {
+      const wish = model.wishById.get(wishId);
+      setWishFocus(null);
+      void guard(async () => {
+        await service.setWishStatus(wishId, 'received');
+        notify(`已取消想去 · ${wish?.name ?? '这张明信片'}`);
+      });
+    },
+    [guard, model, notify, service],
   );
 
   const startEntrust = useCallback(() => {
@@ -1042,6 +1117,95 @@ export function MapWall() {
     setMemoryTripId(null);
   }, []);
 
+  // ---------------------------------------------------------------- home
+
+  const openHome = useCallback(() => {
+    const view: MapViewState = {
+      camera,
+      mode,
+      level,
+      poiScrollTop: poiScrollRef.current?.scrollTop ?? 0,
+      savedAt: Date.now(),
+    };
+    savedView.current = view;
+    void service.saveMapView(view).catch(() => undefined);
+    setWishFocus(null);
+    setSpecialtyFocus(null);
+    setFan(null);
+    setFrogActionsOpen(false);
+    setEntrusting(false);
+    setMemoryTripId(null);
+    setScene('home');
+    void service.setFrogPerch(perchFromRandom(Math.random())).catch(() => undefined);
+  }, [camera, mode, level, service]);
+
+  const returnToMap = useCallback(() => {
+    setScene('wall');
+    setSpecialtyFocus(null);
+    const view = savedView.current ?? snapshot.mapView;
+    if (!view) return;
+    if (cameraFrame.current !== null) cancelAnimationFrame(cameraFrame.current);
+    cameraFrame.current = null;
+    setMode(view.mode);
+    setLevel(view.level);
+    setCamera(view.camera);
+    pendingScroll.current = view.poiScrollTop;
+  }, [snapshot.mapView]);
+
+  const moveFrogTo = useCallback(
+    (perch: FrogPerch) => {
+      void guard(() => service.setFrogPerch(perch));
+    },
+    [guard, service],
+  );
+
+  const handleHomeDisplay = useCallback(
+    (display: HomeDisplay) => {
+      if (display === 'map') {
+        returnToMap();
+        return;
+      }
+      moveFrogTo(perchForDisplay(display));
+    },
+    [moveFrogTo, returnToMap],
+  );
+
+  const moveHomeCity = useCallback(
+    (cityName: string) => guard(() => service.moveHome(cityName)),
+    [guard, service],
+  );
+
+  const focusWishPhotos = useMemo<WishBackPhoto[]>(() => {
+    if (!wishFocus) return [];
+    const wish = model.wishById.get(wishFocus.wishId);
+    if (!wish) return [];
+    const trip = model.trips.find(
+      (item) => item.cityKeys.includes(wish.cityKey) || item.visits.some((visit) => visit.cityKey === wish.cityKey),
+    );
+    if (!trip) return [];
+    return trip.photoIds
+      .slice(0, 4)
+      .map((id) => model.photoById.get(id))
+      .filter((photo): photo is WallPhoto => photo !== undefined)
+      .map((photo) => ({ id: photo.id, at: photo.capturedAt }));
+  }, [wishFocus, model]);
+
+  const specialtyProvenance = useMemo<SpecialtyProvenance | null>(() => {
+    if (!specialtyFocus) return null;
+    const trip = model.tripById.get(specialtyFocus.tripId);
+    const photos = specialtyFocus.photoIds
+      .map((id) => model.photoById.get(id))
+      .filter((photo): photo is WallPhoto => photo !== undefined)
+      .slice(0, 4)
+      .map((photo) => ({ id: photo.id, image: imageFor(photo), day: formattedDay(photo.capturedAt) }));
+    return {
+      award: specialtyFocus,
+      cityName: model.cityByKey.get(specialtyFocus.cityKey)?.name ?? specialtyFocus.cityKey,
+      tripTitle: trip?.title ?? '一趟旅行',
+      photos,
+    };
+  }, [specialtyFocus, model, imageFor]);
+
   // ---------------------------------------------------------------- keyboard
 
   useEffect(() => {
@@ -1053,6 +1217,8 @@ export function MapWall() {
       }
       if (event.key === 'Escape') {
         if (wishFocus) setWishFocus(null);
+        else if (specialtyFocus) setSpecialtyFocus(null);
+        else if (scene === 'home') returnToMap();
         else if (entrusting) setEntrusting(false);
         else if (settingsOpen || searchOpen) closeOverlays();
         else if (memoryTripId) setMemoryTripId(null);
@@ -1075,6 +1241,9 @@ export function MapWall() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     wishFocus,
+    specialtyFocus,
+    scene,
+    returnToMap,
     entrusting,
     settingsOpen,
     searchOpen,
@@ -1107,6 +1276,25 @@ export function MapWall() {
 
   return (
     <>
+      {scene === 'home' ? (
+        <HomeRoom
+          home={snapshot.home}
+          furniture={homeFurniture}
+          luggage={homeLuggage}
+          mapPhotos={homeMapPhotos}
+          postcards={homePostcards}
+          onFrog={() => moveFrogTo(nextPerch(snapshot.home.perch))}
+          onPerch={moveFrogTo}
+          onDisplay={handleHomeDisplay}
+          onMap={returnToMap}
+          onSpecialty={setSpecialtyFocus}
+          onPostcard={(wishId) => {
+            const wish = model.wishById.get(wishId);
+            if (wish) openWishFocus(wish);
+          }}
+          onMoveHome={moveHomeCity}
+        />
+      ) : (
       <MapBoard
         boardRef={boardRef}
         sheetRef={sheetRef}
@@ -1130,6 +1318,7 @@ export function MapWall() {
         highlightCity={highlightCity}
         highlightWish={highlightWish}
         fan={fan}
+        house={house}
         now={now}
         photoImage={imageFor}
         photoById={model.photoById}
@@ -1145,11 +1334,13 @@ export function MapWall() {
         onFrogAction={onFrogAction}
         onBubbleDismiss={() => setBubbleText(null)}
         onDestTag={entrustTo}
+        onHouseClick={openHome}
         onBackgroundClick={() => {
           setFan(null);
           setFrogActionsOpen(false);
         }}
       />
+      )}
 
       <TopBar
         onImport={() => {
@@ -1165,7 +1356,7 @@ export function MapWall() {
         onSettings={() => setSettingsOpen(true)}
       />
 
-      {!empty ? (
+      {!empty && scene === 'wall' ? (
         <>
           <PoiList
             groups={groups}
@@ -1174,6 +1365,8 @@ export function MapWall() {
             linked={linked}
             highlightCity={highlightCity}
             highlightWish={highlightWish}
+            homeCityName={snapshot.home.city.name}
+            scrollRef={poiScrollRef}
             imageForPhoto={(photoId) => {
               const photo = model.photoById.get(photoId);
               return photo ? imageFor(photo) : null;
@@ -1181,6 +1374,7 @@ export function MapWall() {
             onToggle={() => setListOpen((open) => !open)}
             onCity={focusCityFromList}
             onWish={focusWishRow}
+            onHome={openHome}
           />
           <Crumb
             level={level}
@@ -1296,10 +1490,20 @@ export function MapWall() {
           wish={focusWishValue}
           left={wishFocus.left}
           top={wishFocus.top}
+          photos={focusWishPhotos}
+          photoImage={(photoId) => {
+            const photo = model.photoById.get(photoId);
+            return photo ? imageFor(photo) : null;
+          }}
           onKeep={() => keepWish(focusWishValue.id)}
           onDecline={() => declineWish(focusWishValue.id)}
+          onCancelWished={() => cancelWished(focusWishValue.id)}
           onClose={() => setWishFocus(null)}
         />
+      ) : null}
+
+      {specialtyProvenance ? (
+        <SpecialtyFocus provenance={specialtyProvenance} onClose={() => setSpecialtyFocus(null)} />
       ) : null}
 
       <SettingsPanel

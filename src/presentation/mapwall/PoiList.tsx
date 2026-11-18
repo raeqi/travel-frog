@@ -1,3 +1,4 @@
+import type { RefObject } from 'react';
 import type { PoiGroups } from './groups';
 
 export interface PoiListProps {
@@ -7,10 +8,13 @@ export interface PoiListProps {
   readonly linked: boolean;
   readonly highlightCity: string | null;
   readonly highlightWish: string | null;
+  readonly homeCityName: string;
+  readonly scrollRef: RefObject<HTMLDivElement | null>;
   readonly imageForPhoto: (photoId: string) => string | null;
   readonly onToggle: () => void;
   readonly onCity: (cityKey: string) => void;
   readonly onWish: (wishId: string) => void;
+  readonly onHome: () => void;
 }
 
 const MENU_ICON = (
@@ -29,10 +33,13 @@ export function PoiList({
   linked,
   highlightCity,
   highlightWish,
+  homeCityName,
+  scrollRef,
   imageForPhoto,
   onToggle,
   onCity,
   onWish,
+  onHome,
 }: PoiListProps) {
   return (
     <>
@@ -56,7 +63,7 @@ export function PoiList({
             <span>足迹</span>
             <em>{total} 处</em>
           </header>
-          <div className="poi-scroll" id="poiScroll">
+          <div className="poi-scroll" id="poiScroll" ref={scrollRef}>
             {groups.years.map((group) => (
               <div key={group.year}>
                 <div className="poi-year">{group.year}</div>
@@ -108,6 +115,21 @@ export function PoiList({
               ))}
             </div>
           ) : null}
+          <div className="poi-home-entry">
+            <button
+              type="button"
+              className="poi-home"
+              title={`回家 · ${homeCityName}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onHome();
+              }}
+            >
+              <span className="poi-home-icon" aria-hidden="true" />
+              <span className="poi-home-name">回家</span>
+              <em>{homeCityName}</em>
+            </button>
+          </div>
         </div>
       </aside>
       <button

@@ -47,6 +47,15 @@ function FrogArt({ mode, charmCount }: { mode: FrogMode; charmCount: number }) {
   );
 }
 
+/** The frog drawing on its own, for the home scene where placement is CSS-driven. */
+export function FrogFigure({ mode = 'rest', charmCount = 0 }: { readonly mode?: FrogMode; readonly charmCount?: number }) {
+  return (
+    <div className="frog-figure">
+      <FrogArt mode={mode} charmCount={charmCount} />
+    </div>
+  );
+}
+
 export function FrogNode({
   x,
   y,

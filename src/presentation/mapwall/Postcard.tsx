@@ -114,36 +114,84 @@ export function PostcardNode({ card, now, highlighted, onClick }: PostcardNodePr
   );
 }
 
+export interface WishBackPhoto {
+  readonly id: string;
+  readonly at: number;
+}
+
 export interface WishFocusProps {
   readonly wish: WallWish;
   readonly left: number;
   readonly top: number;
+  readonly photos: readonly WishBackPhoto[];
+  readonly photoImage: (photoId: string) => string | null;
   readonly onKeep: () => void;
   readonly onDecline: () => void;
+  readonly onCancelWished: () => void;
   readonly onClose: () => void;
 }
 
-export function WishFocus({ wish, left, top, onKeep, onDecline, onClose }: WishFocusProps) {
+/**
+ * The postcard lifted off the wall and turned over. Clicking anywhere on the card pins it
+ * back; the only state changes are the explicit postcard transitions on the back side.
+ */
+export function WishFocus({
+  wish,
+  left,
+  top,
+  photos,
+  photoImage,
+  onKeep,
+  onDecline,
+  onCancelWished,
+  onClose,
+}: WishFocusProps) {
   return (
-    <div className="wish-focus" role="dialog" aria-label={`${wish.name} 的明信片`} onClick={onClose}>
+    <div className="wish-focus" role="dialog" aria-label={`${wish.name} 的明信片背面`} onClick={onClose}>
       <div
         className="wish-focus-card"
         style={{ left: `${left}px`, top: `${top}px`, '--tilt': postcardTilt(wish.id) } as CSSProperties}
-        onClick={(event) => event.stopPropagation()}
+        onClick={onClose}
       >
         <span className="wf-place">{wish.name}</span>
+        {photos.length > 0 ? (
+          <span className="wf-photos">
+            {photos.map((photo) => {
+              const image = photoImage(photo.id);
+              return (
+                <span
+                  key={photo.id}
+                  className="wf-photo"
+                  style={image ? { backgroundImage: `url("${image}")` } : undefined}
+                />
+              );
+            })}
+          </span>
+        ) : null}
         <span className="wf-note">{wish.note ?? ''}</span>
         <span className="wf-date">青蛙寄于 {formattedDay(wish.createdAt)}</span>
+        <span className="wf-coords">
+          {wish.lat.toFixed(4)}, {wish.lng.toFixed(4)}
+        </span>
         <span className="pc-ring" />
         <span className="pc-stamp" />
-        <div className="wf-actions">
-          <button type="button" className="primary" onClick={onKeep}>
-            留着
-          </button>
-          <button type="button" onClick={onDecline}>
-            这次不去
-          </button>
-        </div>
+        {wish.status === 'received' ? (
+          <div className="wf-actions" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="primary" onClick={onKeep}>
+              留着
+            </button>
+            <button type="button" onClick={onDecline}>
+              这次不去
+            </button>
+          </div>
+        ) : null}
+        {wish.status === 'wished' ? (
+          <div className="wf-actions" onClick={(event) => event.stopPropagation()}>
+            <button type="button" onClick={onCancelWished}>
+              取消想去
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
