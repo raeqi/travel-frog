@@ -3,7 +3,7 @@ import { makeCityRef, type CityRef } from '../../../domain/city/city-ref';
 import type { DataOrigin } from '../../../domain/photo/photo';
 import type { GeoPoint } from '../../../domain/geo/geo-point';
 import { migrateLegacyArchive } from './legacy';
-import { SCHEMA_V2, STORES, type StoreSpec } from './schema';
+import { SCHEMA_V2, SCHEMA_V4, STORES, type StoreSpec } from './schema';
 
 export interface MigrationContext {
   readonly db: IDBDatabase;
@@ -131,7 +131,18 @@ const migrationV3: Migration = {
   },
 };
 
-export const MIGRATIONS: readonly Migration[] = [migrationV2, migrationV3];
+const migrationV4: Migration = {
+  version: 4,
+  name: 'home-and-map-view',
+  up: ({ db, tx, now }) => {
+    for (const spec of SCHEMA_V4) createStore(db, spec);
+    const meta = tx.objectStore(STORES.meta);
+    meta.put({ key: 'schema', schemaVersion: 4, revision: 0, lastOpenedAt: now });
+    tx.objectStore(STORES.migrations).put({ version: 4, name: 'home-and-map-view', appliedAt: now });
+  },
+};
+
+export const MIGRATIONS: readonly Migration[] = [migrationV2, migrationV3, migrationV4];
 
 /** Runs every migration whose target version is newer than the database. */
 export function runMigrations(context: MigrationContext): void {

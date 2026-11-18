@@ -12,6 +12,8 @@ import type { Instant } from './common/time';
 import type { Candidate } from './candidate/candidate';
 import type { CityRef } from './city/city-ref';
 import type { GeoPoint } from './geo/geo-point';
+import type { HomeState } from './home/home';
+import type { MapViewState } from './home/map-view';
 import type { ImportBatch, ImportIssue } from './import/import-issue';
 import type { Memory } from './memory/memory';
 import type { Photo } from './photo/photo';
@@ -84,6 +86,16 @@ export interface SettingsRepository {
   save(settings: Settings): Promise<void>;
 }
 
+export interface HomeRepository {
+  get(): Promise<HomeState>;
+  save(home: HomeState): Promise<void>;
+}
+
+export interface MapViewRepository {
+  get(): Promise<MapViewState | null>;
+  save(view: MapViewState): Promise<void>;
+}
+
 export interface ImportBatchRepository {
   get(id: ImportBatchId): Promise<ImportBatch | null>;
   listRecent(limit: number): Promise<ImportBatch[]>;
@@ -125,6 +137,8 @@ export interface Repositories {
   readonly wishes: WishRepository;
   readonly manualVisits: ManualVisitRepository;
   readonly settings: SettingsRepository;
+  readonly home: HomeRepository;
+  readonly mapView: MapViewRepository;
   readonly batches: ImportBatchRepository;
   readonly issues: ImportIssueRepository;
   readonly thumbnails: ThumbnailStore;

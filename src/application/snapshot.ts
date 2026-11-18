@@ -8,6 +8,8 @@ import type { Visit } from '../domain/visit/visit';
 import type { ManualVisit } from '../domain/wish/manual-visit';
 import type { Wish } from '../domain/wish/wish';
 import type { Instant } from '../domain/common/time';
+import { DEFAULT_HOME_STATE, type HomeState } from '../domain/home/home';
+import type { MapViewState } from '../domain/home/map-view';
 
 export type ArchiveStatus = 'loading' | 'ready' | 'error';
 
@@ -24,6 +26,8 @@ export interface ArchiveSnapshot {
   readonly wishes: readonly Wish[];
   readonly manualVisits: readonly ManualVisit[];
   readonly settings: Settings;
+  readonly home: HomeState;
+  readonly mapView: MapViewState | null;
   readonly batches: readonly ImportBatch[];
   readonly issues: readonly ImportIssue[];
 }
@@ -51,6 +55,8 @@ export const INITIAL_SNAPSHOT: ArchiveSnapshot = {
   wishes: [],
   manualVisits: [],
   settings: EMPTY_SETTINGS,
+  home: DEFAULT_HOME_STATE,
+  mapView: null,
   batches: [],
   issues: [],
 };

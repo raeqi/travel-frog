@@ -1,5 +1,5 @@
 export const DB_NAME = 'travel-frog';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 export interface IndexSpec {
   readonly name: string;
@@ -25,6 +25,8 @@ export const STORES = {
   importBatches: 'importBatches',
   importIssues: 'importIssues',
   settings: 'settings',
+  home: 'home',
+  mapView: 'mapView',
   blobs: 'blobs',
   audit: 'audit',
   migrations: 'migrations',
@@ -92,4 +94,9 @@ export const SCHEMA_V2: readonly StoreSpec[] = [
     ],
   },
   { name: STORES.migrations, keyPath: 'version', indexes: [] },
+];
+
+export const SCHEMA_V4: readonly StoreSpec[] = [
+  { name: STORES.home, keyPath: 'key', indexes: [] },
+  { name: STORES.mapView, keyPath: 'key', indexes: [] },
 ];

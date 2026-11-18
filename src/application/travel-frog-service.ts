@@ -19,6 +19,9 @@ import { DEFAULT_SPLIT_CONFIG } from '../domain/services/split-trips';
 import { resolveVisits } from '../domain/services/build-visits';
 import { suggestLocations } from '../domain/services/fill-locations';
 import { normalizeSettings, type Settings } from '../domain/settings/settings';
+import { moveHome as moveHomeState, setHomePerch, syncHomeSpecialties, type HomeState } from '../domain/home/home';
+import type { MapViewState } from '../domain/home/map-view';
+import type { FrogPerch } from '../domain/home/perch';
 import { createTrip, findOverlappingTrip, tripTitleFrom, validateTripPhotos } from '../domain/trip/trip';
 import type { Trip } from '../domain/trip/trip';
 import type { Visit } from '../domain/visit/visit';
@@ -53,6 +56,7 @@ export interface ArchiveExport {
   readonly wishes: readonly Wish[];
   readonly manualVisits: readonly unknown[];
   readonly settings: Settings;
+  readonly home: HomeState;
 }
 
 function fail(code: DomainErrorCode, message: string): never {
@@ -82,7 +86,7 @@ export class TravelFrogService {
 
   private async readAll(): Promise<Omit<ArchiveSnapshot, 'status' | 'error' | 'revision' | 'loadedAt'>> {
     return this.deps.gateway.read(async (repos) => {
-      const [trips, photos, visits, candidates, memories, wishes, manualVisits, settings, batches, issues] =
+      const [trips, photos, visits, candidates, memories, wishes, manualVisits, settings, home, mapView, batches, issues] =
         await Promise.all([
           repos.trips.listAll(),
           repos.photos.listAll(),
@@ -92,6 +96,8 @@ export class TravelFrogService {
           repos.wishes.list(),
           repos.manualVisits.list(),
           repos.settings.get(),
+          repos.home.get(),
+          repos.mapView.get(),
           repos.batches.listRecent(20),
           repos.issues.listRecent(100),
         ]);
@@ -104,6 +110,8 @@ export class TravelFrogService {
         wishes,
         manualVisits,
         settings,
+        home,
+        mapView,
         batches,
         issues,
       };
@@ -114,8 +122,10 @@ export class TravelFrogService {
     this.store.patch({ status: 'loading', error: null });
     try {
       const data = await this.readAll();
+      const home = await this.persistHome(data);
       this.store.set({
         ...data,
+        home,
         status: 'ready',
         error: null,
         revision: this.store.getSnapshot().revision + 1,
@@ -134,10 +144,29 @@ export class TravelFrogService {
     }
   }
 
+  private async persistHome(
+    data: Pick<ArchiveSnapshot, 'home' | 'trips' | 'visits' | 'photos'>,
+  ): Promise<HomeState> {
+    const now = this.deps.clock.now();
+    const synced = syncHomeSpecialties({
+      home: data.home,
+      trips: data.trips,
+      visits: data.visits,
+      photos: data.photos,
+      now,
+    });
+    if (synced !== data.home || data.home.updatedAt === 0) {
+      await this.deps.gateway.run((repos) => repos.home.save(synced));
+    }
+    return synced;
+  }
+
   private async refresh(): Promise<void> {
     const data = await this.readAll();
+    const home = await this.persistHome(data);
     this.store.set({
       ...data,
+      home,
       status: 'ready',
       error: null,
       revision: this.store.getSnapshot().revision + 1,
@@ -594,10 +623,33 @@ export class TravelFrogService {
     await this.refresh();
   }
 
+  async moveHome(cityName: string): Promise<void> {
+    const name = cityName.trim();
+    if (name.length === 0) throw new AppError('INVALID_INPUT', '请填写家的城市');
+    const city = this.deps.cityResolver.resolveByName(name);
+    if (!city) throw new AppError('CITY_NOT_FOUND', '没有找到这个城市');
+    const next = moveHomeState(this.store.getSnapshot().home, city, this.deps.clock.now());
+    if (!next.ok) throw new DomainViolation(next.error);
+    await this.deps.gateway.run((repos) => repos.home.save(next.value));
+    await this.refresh();
+  }
+
+  async setFrogPerch(perch: FrogPerch): Promise<void> {
+    const next = setHomePerch(this.store.getSnapshot().home, perch, this.deps.clock.now());
+    if (!next.ok) throw new DomainViolation(next.error);
+    await this.deps.gateway.run((repos) => repos.home.save(next.value));
+    await this.refresh();
+  }
+
+  async saveMapView(view: MapViewState): Promise<void> {
+    await this.deps.gateway.run((repos) => repos.mapView.save(view));
+    await this.refresh();
+  }
+
   async exportArchive(includeCoordinates: boolean): Promise<ArchiveExport> {
     const data = await this.readAll();
     return {
-      version: 3,
+      version: 4,
       exportedAt: this.deps.clock.now(),
       includeCoordinates,
       trips: data.trips,
@@ -618,6 +670,7 @@ export class TravelFrogService {
         source: visit.source,
       })),
       settings: data.settings,
+      home: data.home,
     };
   }
 

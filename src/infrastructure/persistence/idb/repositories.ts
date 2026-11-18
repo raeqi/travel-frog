@@ -2,6 +2,8 @@ import type {
   AuditEntry,
   AuditRepository,
   CandidateRepository,
+  HomeRepository,
+  MapViewRepository,
   ImportBatchRepository,
   ImportIssueRepository,
   ManualVisitRepository,
@@ -24,6 +26,8 @@ import { DEFAULT_SETTINGS, normalizeSettings, type Settings } from '../../../dom
 import { validateWish, type Wish } from '../../../domain/wish/wish';
 import type { ManualVisit } from '../../../domain/wish/manual-visit';
 import type { Memory } from '../../../domain/memory/memory';
+import { DEFAULT_HOME_STATE, validateHomeState, type HomeState } from '../../../domain/home/home';
+import { validateMapViewState, type MapViewState } from '../../../domain/home/map-view';
 import type { ImportBatch, ImportIssue } from '../../../domain/import/import-issue';
 import type { IdbDatabase, WriteBuffer } from './database';
 import { STORES } from './schema';
@@ -299,6 +303,32 @@ class SettingsRepositoryImpl extends Repo implements SettingsRepository {
   }
 }
 
+class HomeRepositoryImpl extends Repo implements HomeRepository {
+
+  async get(): Promise<HomeState> {
+    const row = await this.db.get<{ key: string; state?: HomeState }>(STORES.home, 'app');
+    const buffered = overlay(this.buffer, STORES.home, 'app', row);
+    return buffered?.state ? must(validateHomeState(buffered.state)) : DEFAULT_HOME_STATE;
+  }
+
+  async save(home: HomeState): Promise<void> {
+    put(this.buffer, STORES.home, 'app', { key: 'app', state: must(validateHomeState(home)) });
+  }
+}
+
+class MapViewRepositoryImpl extends Repo implements MapViewRepository {
+
+  async get(): Promise<MapViewState | null> {
+    const row = await this.db.get<{ key: string; state?: MapViewState }>(STORES.mapView, 'map');
+    const buffered = overlay(this.buffer, STORES.mapView, 'map', row);
+    return buffered?.state ? must(validateMapViewState(buffered.state)) : null;
+  }
+
+  async save(view: MapViewState): Promise<void> {
+    put(this.buffer, STORES.mapView, 'map', { key: 'map', state: must(validateMapViewState(view)) });
+  }
+}
+
 class Batches extends Repo implements ImportBatchRepository {
 
   async get(id: string): Promise<ImportBatch | null> {
@@ -379,6 +409,8 @@ export function createRepositories(db: IdbDatabase, buffer: WriteBuffer): Reposi
     wishes: new Wishes(db, buffer),
     manualVisits: new ManualVisits(db, buffer),
     settings: new SettingsRepositoryImpl(db, buffer),
+    home: new HomeRepositoryImpl(db, buffer),
+    mapView: new MapViewRepositoryImpl(db, buffer),
     batches: new Batches(db, buffer),
     issues: new Issues(db, buffer),
     thumbnails: new Thumbnails(db, buffer),
