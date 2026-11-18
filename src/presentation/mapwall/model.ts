@@ -14,6 +14,7 @@ export interface WallPhoto {
   readonly capturedAt: number;
   readonly palette: PaletteName;
   readonly thumbRef: string | null;
+  readonly origin?: 'user' | 'demo';
   readonly inferred: boolean;
 }
 
@@ -198,6 +199,7 @@ export function buildWallModel(snapshot: ArchiveSnapshot, homeCityKey: string | 
       capturedAt: photo.capturedAt,
       palette: paletteOf(photo.id),
       thumbRef: photo.thumbRef,
+      origin: photo.origin,
       inferred: photo.locationSource === 'candidate' || photo.geo.approximate,
     });
   }

@@ -82,16 +82,6 @@ const CITY_ROADS = [
   { d: 'M944 0V640', major: false },
 ];
 
-const CITY_LABELS = [
-  { x: 648, y: 470, text: '清水寺' },
-  { x: 574, y: 412, text: '祇園' },
-  { x: 762, y: 342, text: '南禅寺' },
-  { x: 728, y: 188, text: '哲学之道', vertical: true },
-  { x: 548, y: 196, text: '鴨川', vertical: true },
-  { x: 26, y: 316, text: '四条通' },
-  { x: 884, y: 86, text: '東山' },
-];
-
 export function CityLayer({ viewBox }: LayerProps) {
   return (
     <svg id="citySvg" className="map-layer" viewBox={viewBox} preserveAspectRatio="none" aria-hidden="true">
@@ -133,11 +123,6 @@ export function CityLayer({ viewBox }: LayerProps) {
       <circle cx="622" cy="440" r="3" fill="#A8573F" opacity=".75" />
       <circle cx="577" cy="377" r="3" fill="#A8573F" opacity=".75" />
       <circle cx="687" cy="320" r="3" fill="#A8573F" opacity=".75" />
-      {CITY_LABELS.map((label) => (
-        <text key={label.text} className={`street-label${label.vertical ? ' vert' : ''}`} x={label.x} y={label.y}>
-          {label.text}
-        </text>
-      ))}
     </svg>
   );
 }
@@ -221,8 +206,6 @@ export function RegionLayer({ viewBox }: LayerProps) {
       <circle cx="636" cy="219" r="3.4" fill="rgba(74,60,44,.62)" />
       <circle cx="656" cy="298" r="3.4" fill="rgba(74,60,44,.62)" />
       <circle cx="470" cy="418" r="3.4" fill="rgba(74,60,44,.62)" />
-      <text className="street-label" x="820" y="176">比叡山</text>
-      <text className="street-label" x="742" y="470">奈良</text>
       <text className="street-label" x="264" y="170">关西 · 京都 — 宇治 — 大阪</text>
     </svg>
   );

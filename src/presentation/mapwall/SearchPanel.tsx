@@ -31,6 +31,7 @@ export interface SearchPanelProps {
 
 export function SearchPanel({ open, items, onClose, onPick }: SearchPanelProps) {
   const [query, setQuery] = useState('');
+  const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -43,9 +44,9 @@ export function SearchPanel({ open, items, onClose, onPick }: SearchPanelProps) 
   }, [open]);
 
   if (!open) return null;
-  const needle = query.trim();
+  const needle = query.trim().toLocaleLowerCase();
   const matches = needle
-    ? items.filter((item) => item.title.includes(needle) || item.subtitle.includes(needle))
+    ? items.filter((item) => item.title.toLocaleLowerCase().includes(needle) || item.subtitle.toLocaleLowerCase().includes(needle))
     : items;
   const groups: SearchKind[] = ['trip', 'city', 'wish'];
 
@@ -64,9 +65,10 @@ export function SearchPanel({ open, items, onClose, onPick }: SearchPanelProps) 
             placeholder="搜索城市、年份或一句话记忆"
             autoComplete="off"
             spellCheck={false}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => { setQuery(event.target.value); setActive(0); }}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && matches[0]) onPick(matches[0]);
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setActive(index => (index + (event.key === 'ArrowDown' ? 1 : -1) + matches.length) % Math.max(1,matches.length)); }
+              if (event.key === 'Enter' && matches[Math.min(active,matches.length-1)]) onPick(matches[Math.min(active,matches.length-1)]!);
             }}
           />
           <kbd>Esc</kbd>
@@ -80,7 +82,7 @@ export function SearchPanel({ open, items, onClose, onPick }: SearchPanelProps) 
               <div key={kind}>
                 <p className="palette-group">{GROUP_LABELS[kind]}</p>
                 {groupItems.map((item) => (
-                  <button key={item.id} className="presult" type="button" onClick={() => onPick(item)}>
+                  <button key={item.id} className={`presult${matches.indexOf(item) === active ? ' is-active' : ''}`} type="button" onClick={() => onPick(item)}>
                     <span className={GROUP_ICONS[item.kind]} aria-hidden="true" />
                     <span>
                       <strong>{item.title}</strong>
@@ -93,7 +95,7 @@ export function SearchPanel({ open, items, onClose, onPick }: SearchPanelProps) 
             );
           })}
           <p className="palette-foot">
-            <span>↵ 跳转</span>
+            <span>↑↓ 选择 · ↵ 跳转</span>
             <span>Esc 关闭</span>
           </p>
         </div>
