@@ -14,6 +14,7 @@ import {
 } from "../../domain/home/perch";
 import { wishStatusLabel, type WishStatus } from "../../domain/wish/wish";
 import { FrogPerchFigure } from "./Frog";
+import { FROG_POSE_LABELS, PERCH_POSE, nextFrogPose, type FrogPose } from "./frog-poses";
 
 export interface HomePostcard {
   readonly id: string;
@@ -25,10 +26,6 @@ export interface HomeRoomProps {
   readonly home: HomeState;
   readonly furniture: FurnitureState;
   readonly luggage: LuggageTier;
-  readonly mapPhotos: readonly {
-    readonly id: string;
-    readonly image: string;
-  }[];
   readonly postcards: readonly HomePostcard[];
   readonly onFrog: () => void;
   readonly onPerch: (perch: FrogPerch) => void;
@@ -47,6 +44,7 @@ function souvenirIndex(name: string, slot: number): number {
   if (/黑石|石/.test(name)) return 4;
   if (/小铜佛|佛/.test(name)) return 5;
   if (/布|毯/.test(name)) return 6;
+  if (/瓷|碗/.test(name)) return 7;
   return [7, 4, 7, 6][slot % 4] ?? 7;
 }
 
@@ -55,7 +53,6 @@ export function HomeRoom({
   home,
   furniture,
   luggage,
-  mapPhotos,
   postcards,
   onFrog,
   onPerch,
@@ -68,6 +65,12 @@ export function HomeRoom({
   const [moving, setMoving] = useState(false);
   const [cityName, setCityName] = useState(home.city.name);
   const [luggageOpen, setLuggageOpen] = useState(false);
+  const [poseOverride, setPoseOverride] = useState<FrogPose | null>(null);
+  const pose = poseOverride ?? PERCH_POSE[home.perch];
+  const visitDisplay = (display: HomeDisplay) => {
+    setPoseOverride(null);
+    onDisplay(display);
+  };
   const pinned = postcards.filter(
     (card) => card.status !== "fulfilled" && card.status !== "declined",
   );
@@ -131,39 +134,37 @@ export function HomeRoom({
           className="room-hotspot room-hearth"
           type="button"
           aria-label="壁炉"
-          onClick={() => onDisplay("fireplace")}
+          onClick={() => visitDisplay("fireplace")}
         />
         <button
           className="room-hotspot room-chair"
           type="button"
           aria-label="扶手椅"
-          onClick={() => onPerch("armchair")}
+          onClick={() => { setPoseOverride(null); onPerch("armchair"); }}
         />
         <button
           className="room-hotspot room-lamp"
           type="button"
           aria-label="落地灯旁脚凳"
-          onClick={() => onDisplay("lamp")}
+          onClick={() => visitDisplay("lamp")}
+        />
+        <button
+          className="room-hotspot room-curio-frame"
+          type="button"
+          aria-label="多宝阁架"
+          onClick={() => visitDisplay("curio")}
         />
         <button
           className="room-map"
           type="button"
           aria-label="矮几上摊开的世界地图 · 展开地图"
           onClick={onMap}
-        >
-          {mapPhotos.slice(0, 4).map((photo, index) => (
-            <span
-              key={photo.id}
-              className={`room-map-photo p${index}`}
-              style={{ backgroundImage: `url("${photo.image}")` }}
-            />
-          ))}
-        </button>
+        />
         <div
           className="room-postcards"
           role="group"
           aria-label="明信片板"
-          onClick={() => onDisplay("postcard-wall")}
+          onClick={() => visitDisplay("postcard-wall")}
         >
           {pinned.slice(0, 8).map((card, index) => (
             <button
@@ -218,13 +219,14 @@ export function HomeRoom({
           className="room-curio"
           role="group"
           aria-label="多宝阁"
-          onClick={() => onDisplay("curio")}
+          onClick={() => visitDisplay("curio")}
         >
           {curioSlots(home.specialties).map((slot) =>
             slot.specialty ? (
               <button
                 className={`room-souvenir souvenir-${souvenirIndex(slot.specialty.name, slot.index)}`}
                 key={slot.index}
+                style={{ "--shelf-col": slot.index % 2, "--shelf-row": Math.floor(slot.index / 2) } as CSSProperties}
                 type="button"
                 aria-label={`${slot.specialty.name} · 来自${slot.specialty.cityKey}`}
                 title={slot.specialty.name}
@@ -249,7 +251,7 @@ export function HomeRoom({
           className={`room-luggage tier-${luggage}`}
           aria-label={`行李 · ${LUGGAGE_LABELS[luggage]}`}
           onClick={() => {
-            onDisplay("suitcase");
+            visitDisplay("suitcase");
             setLuggageOpen(true);
           }}
         >
@@ -257,11 +259,12 @@ export function HomeRoom({
         </button>
         <button
           className={`home-frog perch-${home.perch}`}
+          data-pose={pose}
           type="button"
-          aria-label={`青蛙在${PERCH_LABELS[home.perch]} · 点击换一个位置`}
-          onClick={onFrog}
+          aria-label={`青蛙在${PERCH_LABELS[home.perch]} · ${FROG_POSE_LABELS[pose]} · 点击换一个姿态和位置`}
+          onClick={() => { setPoseOverride(nextFrogPose(pose)); onFrog(); }}
         >
-          <FrogPerchFigure perch={home.perch} />
+          <FrogPerchFigure perch={home.perch} pose={pose} />
         </button>
       </div>
       {luggageOpen && (

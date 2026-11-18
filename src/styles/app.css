@@ -366,6 +366,9 @@ body[data-level="world"] .wish .wish-stamp { right: 4px; bottom: 4px; width: 14p
 
 /* ---------- frog ---------- */
 .frog {
+  border: 0;
+  padding: 0;
+  background: transparent;
   position: absolute;
   width: 56px;
   height: 54px;

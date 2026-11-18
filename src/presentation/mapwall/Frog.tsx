@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { FrogPerch } from '../../domain/home/perch';
 import { PERCH_LABELS } from '../../domain/home/perch';
 import type { BubblePlacement } from './layout';
+import { FROG_POSE_LABELS, PERCH_POSE, type FrogPose } from './frog-poses';
 
 export type FrogMode = 'rest' | 'postcard' | 'packing';
 
@@ -12,17 +13,19 @@ function FrogArt({ mode, charmCount }: { mode: FrogMode; charmCount: number }) {
   return (
     <svg viewBox="0 0 64 60">
       <ellipse cx="32" cy="52" rx="18" ry="3.6" fill="rgba(40,28,16,.28)" />
-      <path d="M13 44c-5 1-7 5-4 7 2 1.6 7-1 9-5z" fill="#3E7D4C" />
-      <path d="M51 44c5 1 7 5 4 7-2 1.6-7-1-9-5z" fill="#3E7D4C" />
-      <path d="M10 37c0-9.6 9.8-17 22-17s22 7.4 22 17-9.8 14-22 14-22-4.4-22-14z" fill="#5FA36B" />
-      <path d="M18 40c1-6 6.6-9.6 14-9.6S45 34 46 40c-1.6 4.4-7 6.4-14 6.4s-12.4-2-14-6.4z" fill="#79B986" opacity=".55" />
-      <circle cx="22" cy="19" r="7" fill="#5FA36B" />
-      <circle cx="42" cy="19" r="7" fill="#5FA36B" />
-      <circle cx="22" cy="19" r="3.1" fill="#1E2E1F" />
-      <circle cx="42" cy="19" r="3.1" fill="#1E2E1F" />
+      <path d="M13 44c-5 1-7 5-4 7 2 1.6 7-1 9-5z" fill="#9CA77C" />
+      <path d="M51 44c5 1 7 5 4 7-2 1.6-7-1-9-5z" fill="#9CA77C" />
+      <path d="M10 37c0-9.6 9.8-17 22-17s22 7.4 22 17-9.8 14-22 14-22-4.4-22-14z" fill="#B3BB97" />
+      <path d="M18 40c1-6 6.6-9.6 14-9.6S45 34 46 40c-1.6 4.4-7 6.4-14 6.4s-12.4-2-14-6.4z" fill="#F3E4C3" />
+      <circle cx="22" cy="19" r="7" fill="#B3BB97" />
+      <circle cx="42" cy="19" r="7" fill="#B3BB97" />
+      <circle cx="22" cy="19" r="4.2" fill="#182219" stroke="#F3E4C3" strokeWidth="1.2" />
+      <circle cx="42" cy="19" r="4.2" fill="#182219" stroke="#F3E4C3" strokeWidth="1.2" />
       <circle cx="23" cy="18" r="1" fill="#fff" />
       <circle cx="43" cy="18" r="1" fill="#fff" />
       <path d="M26 31c2.8 2.6 9.2 2.6 12 0" stroke="#2C4A2E" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      <path d="M15 35q17 8 34 0" stroke="#376445" strokeWidth="5" fill="none" strokeLinecap="round" />
+      <path d="M25 38l-1 8" stroke="#376445" strokeWidth="5" strokeLinecap="round" />
       <path d="M18 47l-3 6M46 47l3 6" stroke="#2C4A2E" strokeWidth="3" strokeLinecap="round" />
       {postcard ? (
         <g className="postcard-mini">
@@ -32,7 +35,7 @@ function FrogArt({ mode, charmCount }: { mode: FrogMode; charmCount: number }) {
       ) : null}
       {packing ? (
         <g className="bag">
-          <rect x="46" y="36" width="13" height="15" rx="3" fill="#B47712" />
+          <rect x="46" y="36" width="13" height="15" rx="3" fill="#8A5736" />
           <path d="M49 36c0-4 6-4 6 0" stroke="#6E460B" strokeWidth="1.5" fill="none" />
           <path d="M46 41h13" stroke="#8E5C0D" strokeWidth="1.2" />
         </g>
@@ -216,10 +219,6 @@ export function ReplayBar({
   );
 }
 
-const PERCH_POSE: Readonly<Record<FrogPerch, string>> = {
-  armchair: 'sit', 'fireplace-rug': 'stand', curio: 'look-up', bookshelf: 'read', suitcase: 'walk', footstool: 'doze',
-};
-
-export function FrogPerchFigure({ perch }: { readonly perch: FrogPerch }) {
-  return <span className={`frog-sprite pose-${PERCH_POSE[perch]}`} role="img" aria-label={`青蛙 · ${PERCH_LABELS[perch]}`}/>;
+export function FrogPerchFigure({ perch, pose = PERCH_POSE[perch] }: { readonly perch: FrogPerch; readonly pose?: FrogPose }) {
+  return <span className={`frog-sprite pose-${pose}`} role="img" aria-label={`青蛙 · ${PERCH_LABELS[perch]} · ${FROG_POSE_LABELS[pose]}`}/>;
 }

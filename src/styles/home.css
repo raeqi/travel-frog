@@ -128,6 +128,12 @@ body[data-scene="home"] .topbar {
   width: 14%;
   height: 70%;
 }
+.room-curio-frame {
+  left: 33.5%;
+  top: 20%;
+  width: 14%;
+  height: 51%;
+}
 .room-hotspot:focus-visible,
 .room-map:focus-visible,
 .room-luggage:focus-visible,
@@ -144,35 +150,6 @@ body[data-scene="home"] .topbar {
 }
 .room-map:hover {
   filter: drop-shadow(0 0 8px #ffd99944);
-}
-.room-map-photo {
-  position: absolute;
-  width: 13%;
-  height: 20%;
-  background-size: cover;
-  background-position: center;
-  border: 2px solid #e8deca;
-  box-shadow: 0 2px 4px #0008;
-  transform: rotate(-9deg);
-}
-.room-map-photo.p0 {
-  left: 10%;
-  top: 30%;
-}
-.room-map-photo.p1 {
-  left: 62%;
-  top: 19%;
-  transform: rotate(8deg);
-}
-.room-map-photo.p2 {
-  left: 40%;
-  top: 66%;
-  transform: rotate(4deg);
-}
-.room-map-photo.p3 {
-  left: 34%;
-  top: 13%;
-  transform: rotate(-3deg);
 }
 .room-postcards {
   position: absolute;
@@ -265,65 +242,42 @@ body[data-scene="home"] .topbar {
 }
 .room-curio {
   position: absolute;
-  left: 35.6%;
-  top: 25%;
-  width: 9.3%;
-  height: 42%;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: repeat(4, 1fr);
-  gap: 1% 8%;
+  inset: 0;
+  pointer-events: none;
 }
 .room-souvenir {
+  /* Four actual shelf surfaces on the 16:9 plate; count never redistributes them. */
+  position: absolute;
+  left: calc(38% + var(--shelf-col) * 4.5%);
+  top: calc(37% + var(--shelf-row) * 10.5%);
+  width: 4.6%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -100%);
   border: 0;
   background: transparent;
-  display: grid;
-  align-items: end;
-  justify-items: center;
-  padding: 8% 4%;
+  padding: 0;
+  pointer-events: auto;
+  isolation: isolate;
   cursor: pointer;
 }
-.room-souvenir span {
-  width: 62%;
-  height: 70%;
-  border-radius: 25% 25% 40% 40%;
-  background: radial-gradient(ellipse at 30% 20%, #b5a689, #584232 65%);
-  box-shadow:
-    1px 3px 4px #0009,
-    inset 1px 1px 1px #ffe3aa55;
-}
-.souvenir-1 span {
-  height: 45%;
+.room-souvenir::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 18%;
+  right: 18%;
+  bottom: -0.12cqw;
+  height: 0.35cqw;
   border-radius: 50%;
-  background: radial-gradient(
-    ellipse at 35% 25%,
-    #b5c8c8,
-    #385368 65%,
-    #283d42
-  );
-}
-.souvenir-2 span {
-  height: 78%;
-  width: 38%;
-  border-radius: 5% 5% 25% 25%;
-  background: linear-gradient(100deg, #ded0aeaa, #7f6c5099, #ded0ae99);
-  clip-path: polygon(8% 0, 92% 0, 69% 100%, 30% 100%);
-}
-.souvenir-3 span {
-  width: 72%;
-  height: 48%;
-  border-radius: 10%;
-  background: linear-gradient(110deg, #c0a47a, #72593b);
-  transform: rotate(-8deg);
+  background: #1d100be0;
+  filter: blur(0.11cqw);
 }
 .room-souvenir.is-empty {
-  cursor: default;
-  border: 1px dashed #c6ad7b27;
-  margin: 26% 14% 10%;
-  border-radius: 30%;
+  display: none;
 }
-.room-souvenir:hover {
-  filter: drop-shadow(0 0 4px #efd09588);
+.room-souvenir:focus-visible {
+  outline: 1px solid #d4bb8a;
+  outline-offset: 2px;
 }
 .room-luggage {
   left: 79%;
@@ -359,58 +313,91 @@ body[data-scene="home"] .topbar {
 }
 .home-frog {
   z-index: 20;
-  width: 9%;
+  /* Visible standing body is ~85% of the cell: 34vw × 16/9 × .85 ≈ 51% room height,
+     matching the armchair's full height in the user's annotated scale comparison. */
+  width: 34%;
   aspect-ratio: 1;
   transform: translate(-50%, 0);
-  filter: drop-shadow(1px 5px 4px #0008) brightness(0.82);
+  filter: drop-shadow(1px 5px 4px #0008) brightness(0.88);
   transition:
     left 0.55s ease,
     bottom 0.55s ease;
+  /* Transparent atlas margins must not cover nearby map and furniture controls. */
+  clip-path: inset(9% 13% 1% 19%);
 }
+.home-frog[data-pose="profile"] { clip-path: inset(9% 19% 1% 11%); }
+.home-frog[data-pose="back"] { clip-path: inset(12% 13% 1% 7%); }
+.home-frog[data-pose="mushroom"] { clip-path: inset(30% 12% 1% 14%); }
+.home-frog[data-pose="welcome"] { clip-path: inset(10% 5% 1% 3%); }
+.home-frog[data-pose="box"] { clip-path: inset(25% 8% 1% 6%); }
+.home-frog[data-pose="sleep"] { clip-path: inset(33% 13% 1% 16%); }
+.home-frog[data-pose="walk"] { clip-path: inset(21% 6% 1% 6%); }
+.home-frog[data-pose="placard"] { clip-path: inset(23% 18% 1% 15%); }
 .frog-sprite {
   display: block;
   width: 100%;
   aspect-ratio: 1;
-  background: url("/art/frog-poses.webp") 0 0/300% 200% no-repeat;
+  background: url("/art/frog-poses.webp") 0 0/300% 300% no-repeat;
+  /* The atlas preserves anatomical scale; seated poses are naturally shorter.
+     Align feet/props to the same floor baseline without stretching each pose. */
+  transform: translateY(var(--pose-baseline, 0%));
+  pointer-events: none;
 }
-.pose-sit {
+.pose-profile {
   background-position: 50% 0;
+  --pose-baseline: -1%;
 }
-.pose-look-up {
+.pose-back {
   background-position: 100% 0;
+  --pose-baseline: 1%;
 }
-.pose-read {
+.pose-mushroom {
+  background-position: 0 50%;
+  --pose-baseline: 10%;
+}
+.pose-welcome {
+  background-position: 50% 50%;
+  --pose-baseline: 8%;
+}
+.pose-box {
+  background-position: 100% 50%;
+  --pose-baseline: 9%;
+}
+.pose-sleep {
   background-position: 0 100%;
+  --pose-baseline: 16.5%;
 }
 .pose-walk {
   background-position: 50% 100%;
+  --pose-baseline: 16%;
 }
-.pose-doze {
+.pose-placard {
   background-position: 100% 100%;
+  --pose-baseline: 16.5%;
 }
 .home-frog.perch-armchair {
   left: 63.7%;
-  bottom: 29%;
+  bottom: 25%;
 }
 .home-frog.perch-fireplace-rug {
-  left: 21%;
-  bottom: 9%;
+  left: 17%;
+  bottom: 4%;
 }
 .home-frog.perch-curio {
-  left: 46%;
-  bottom: 25%;
+  left: 42%;
+  bottom: 3%;
 }
 .home-frog.perch-bookshelf {
   left: 55%;
-  bottom: 31%;
+  bottom: 3%;
 }
 .home-frog.perch-suitcase {
-  left: 78%;
-  bottom: 9%;
+  left: 79%;
+  bottom: 3%;
 }
 .home-frog.perch-footstool {
-  left: 88%;
-  bottom: 17%;
+  left: 83%;
+  bottom: 8%;
 }
 .home-frog:hover {
   filter: brightness(1) drop-shadow(0 2px 5px #e9ca8144);
@@ -466,7 +453,8 @@ body[data-scene="home"] .topbar {
 /* 地图上的小房子：不参与照片聚合 */
 .house-marker {
   position: absolute;
-  z-index: 7;
+  z-index: 12;
+  pointer-events: auto;
   width: 22px;
   height: 22px;
   padding: 0;
@@ -654,6 +642,7 @@ body[data-scene="home"] .topbar {
 
 /* Photographic object atlas; award identity and provenance stay in the domain model. */
 .room-souvenir span {
+  display: block;
   width: 100%;
   height: auto;
   aspect-ratio: 1;
@@ -661,30 +650,41 @@ body[data-scene="home"] .topbar {
   background: url("/art/souvenirs.webp") 0 0/400% 200% no-repeat;
   box-shadow: none;
   clip-path: none;
-  transform: none;
-  filter: brightness(0.8) drop-shadow(1px 3px 2px #0009);
+  /* Atlas images have different transparent foot margins. Align the visible
+     object, not the square cell, to the wooden surface. */
+  transform: translateY(var(--souvenir-floor));
+  transform-origin: center bottom;
+  filter: brightness(0.76) sepia(0.12) saturate(0.82) drop-shadow(0.07cqw 0.1cqw 0.08cqw #21140999);
 }
 .souvenir-0 span {
   background-position: 0 0;
+  --souvenir-floor: 6.2%;
 }
 .souvenir-1 span {
   background-position: 33.333% 0;
+  --souvenir-floor: 17.7%;
 }
 .souvenir-2 span {
   background-position: 66.667% 0;
+  --souvenir-floor: 17.7%;
 }
 .souvenir-3 span {
   background-position: 100% 0;
+  --souvenir-floor: 13.9%;
 }
 .souvenir-4 span {
   background-position: 0 100%;
+  --souvenir-floor: 20.9%;
 }
 .souvenir-5 span {
   background-position: 33.333% 100%;
+  --souvenir-floor: 7.8%;
 }
 .souvenir-6 span {
   background-position: 66.667% 100%;
+  --souvenir-floor: 16.6%;
 }
 .souvenir-7 span {
   background-position: 100% 100%;
+  --souvenir-floor: 21.3%;
 }
