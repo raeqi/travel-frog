@@ -6,6 +6,7 @@ import type { ManualVisit } from '../wish/manual-visit';
 import type { Photo } from '../photo/photo';
 import type { Trip } from '../trip/trip';
 import type { Visit } from '../visit/visit';
+import type { WishStatus } from '../wish/wish';
 
 export interface CityStat {
   readonly cityKey: string;
@@ -145,7 +146,7 @@ export function computeGaps(input: {
   trips: readonly Trip[];
   visits: readonly Visit[];
   photos: readonly Photo[];
-  wishes: readonly { status: 'wish' | 'next' | 'visited' }[];
+  wishes: readonly { status: WishStatus }[];
   memories: readonly { tripId: string }[];
 }): GapReport {
   const memoryTrips = new Set(input.memories.map((memory) => memory.tripId));
@@ -155,8 +156,8 @@ export function computeGaps(input: {
     missingTime: input.photos.filter((photo) => photo.capturedAtSource === 'missing').length,
     tripsWithoutMemory: input.trips.filter((trip) => !memoryTrips.has(trip.id)),
     tripsWithoutVisits: input.trips.filter((trip) => !visitsByTrip.has(trip.id)),
-    wishesOpen: input.wishes.filter((wish) => wish.status === 'wish').length,
-    wishesNext: input.wishes.filter((wish) => wish.status === 'next').length,
+    wishesOpen: input.wishes.filter((wish) => wish.status === 'wished').length,
+    wishesNext: input.wishes.filter((wish) => wish.status === 'received').length,
     citiesWithoutPhotos: 0,
   };
 }

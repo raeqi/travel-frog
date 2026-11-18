@@ -7,7 +7,7 @@ import { makeGeoPoint } from './geo/geo-point';
 import { createMemory, MEMORY_MAX_CODE_POINTS } from './memory/memory';
 import { createPhoto } from './photo/photo';
 import { createTrip, findOverlappingTrip, validateTripSet, validateTripPhotos } from './trip/trip';
-import { changeWishStatus, createWish, validateWish } from './wish/wish';
+import { changeWishStatus, createWish, migrateLegacyWishStatus, validateWish } from './wish/wish';
 
 const NOW = Date.UTC(2026, 0, 10, 12, 0);
 const HOUR = 3_600_000;
@@ -176,34 +176,82 @@ describe('candidate state machine', () => {
   });
 });
 
-describe('wish invariants', () => {
+describe('wish invariants (five postcard states)', () => {
   const buildWish = () => {
     const made = createWish({
       id: 'w1',
       cityRef: city('札幌'),
       region: '北海道',
-      notes: null,
+      note: null,
+      status: 'pending',
+      source: 'user',
+      from: null,
       origin: 'user',
-      source: 'manual',
       now: NOW,
     });
     if (!made.ok) throw new Error(made.error.message);
     return made.value;
   };
 
-  it('marks visited as terminal and stamps visitedAt', () => {
+  it('walks pending -> received -> wished -> fulfilled', () => {
     const wish = buildWish();
-    const visited = changeWishStatus(wish, 'visited', NOW + HOUR);
-    if (!visited.ok) throw new Error(visited.error.message);
-    expect(visited.value.visitedAt).toBe(NOW + HOUR);
-    expect(changeWishStatus(visited.value, 'wish', NOW + 2 * HOUR).ok).toBe(false);
+    const received = changeWishStatus(wish, 'received', NOW + HOUR, { note: '替你看了一眼雪。', from: '京都' });
+    if (!received.ok) throw new Error(received.error.message);
+    expect(received.value.status).toBe('received');
+    expect(received.value.note).toBe('替你看了一眼雪。');
+    const wished = changeWishStatus(received.value, 'wished', NOW + 2 * HOUR);
+    if (!wished.ok) throw new Error(wished.error.message);
+    const fulfilled = changeWishStatus(wished.value, 'fulfilled', NOW + 3 * HOUR);
+    expect(fulfilled.ok).toBe(true);
   });
 
-  it('keeps visitedAt consistent with the status', () => {
+  it('rejects illegal transitions instead of passing silently', () => {
     const wish = buildWish();
-    expect(validateWish(wish).ok).toBe(true);
-    expect(validateWish({ ...wish, status: 'visited' }).ok).toBe(false);
-    expect(validateWish({ ...wish, visitedAt: NOW }).ok).toBe(false);
+    expect(changeWishStatus(wish, 'wished', NOW + HOUR).ok).toBe(false);
+    expect(changeWishStatus(wish, 'fulfilled', NOW + HOUR).ok).toBe(false);
+    expect(changeWishStatus(wish, 'pending', NOW + HOUR).ok).toBe(false);
+
+    const received = changeWishStatus(wish, 'received', NOW + HOUR, { note: '到了。' });
+    if (!received.ok) throw new Error(received.error.message);
+    expect(changeWishStatus(received.value, 'pending', NOW + 2 * HOUR).ok).toBe(false);
+
+    const wished = changeWishStatus(received.value, 'wished', NOW + 2 * HOUR);
+    if (!wished.ok) throw new Error(wished.error.message);
+    expect(changeWishStatus(wished.value, 'declined', NOW + 3 * HOUR).ok).toBe(false);
+    const fulfilled = changeWishStatus(wished.value, 'fulfilled', NOW + 3 * HOUR);
+    if (!fulfilled.ok) throw new Error(fulfilled.error.message);
+    expect(changeWishStatus(fulfilled.value, 'received', NOW + 4 * HOUR).ok).toBe(false);
+    expect(changeWishStatus(fulfilled.value, 'fulfilled', NOW + 4 * HOUR).ok).toBe(false);
+
+    const declined = changeWishStatus(received.value, 'declined', NOW + 2 * HOUR);
+    if (!declined.ok) throw new Error(declined.error.message);
+    expect(changeWishStatus(declined.value, 'wished', NOW + 3 * HOUR).ok).toBe(false);
+  });
+
+  it('requires a sentence once the postcard has been written', () => {
+    const wish = buildWish();
+    expect(changeWishStatus(wish, 'received', NOW + HOUR).ok).toBe(false);
+    expect(changeWishStatus(wish, 'received', NOW + HOUR, { note: '   ' }).ok).toBe(false);
+    expect(validateWish({ ...wish, status: 'received' }).ok).toBe(false);
+    expect(validateWish({ ...wish, note: '不该有留言' }).ok).toBe(false);
+    expect(createWish({
+      id: 'w2',
+      cityRef: city('金泽'),
+      region: '北陆',
+      note: null,
+      status: 'received',
+      source: 'frog',
+      origin: 'user',
+      now: NOW,
+    }).ok).toBe(false);
+  });
+
+  it('bridges legacy statuses to the five-state model', () => {
+    expect(migrateLegacyWishStatus('wish')).toEqual({ ok: true, value: 'wished' });
+    expect(migrateLegacyWishStatus('next')).toEqual({ ok: true, value: 'wished' });
+    expect(migrateLegacyWishStatus('visited')).toEqual({ ok: true, value: 'fulfilled' });
+    expect(migrateLegacyWishStatus('received')).toEqual({ ok: true, value: 'received' });
+    expect(migrateLegacyWishStatus('unknown').ok).toBe(false);
   });
 });
 

@@ -9,6 +9,8 @@ export interface Settings {
   readonly telemetryOptIn: boolean;
   readonly reducedMotion: ReducedMotionPreference;
   readonly theme: ThemePreference;
+  /** Whether the frog shows the tidy-up hint bubble. */
+  readonly frogHints: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -18,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   telemetryOptIn: false,
   reducedMotion: 'system',
   theme: 'system',
+  frogHints: true,
 };
 
 export function normalizeSettings(input: Partial<Settings> | null | undefined): Settings {
@@ -29,5 +32,6 @@ export function normalizeSettings(input: Partial<Settings> | null | undefined): 
     telemetryOptIn: false,
     reducedMotion: merged.reducedMotion === 'reduce' ? 'reduce' : 'system',
     theme: merged.theme === 'dark' || merged.theme === 'light' ? merged.theme : 'system',
+    frogHints: merged.frogHints === undefined ? true : Boolean(merged.frogHints),
   };
 }

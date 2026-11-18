@@ -35,6 +35,7 @@ export const EMPTY_SETTINGS: Settings = {
   telemetryOptIn: false,
   reducedMotion: 'system',
   theme: 'system',
+  frogHints: true,
 };
 
 export const INITIAL_SNAPSHOT: ArchiveSnapshot = {
