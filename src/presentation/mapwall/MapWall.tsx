@@ -35,7 +35,7 @@ import { WishFocus, type WishBackPhoto } from './Postcard';
 import { HomeRoom, SpecialtyFocus, type SpecialtyProvenance } from './HomeRoom';
 import { ReplayBar, type FrogAction, type FrogMode } from './Frog';
 import { furnitureFor, luggageTier, type SpecialtyAward } from '../../domain/home/collection';
-import { nextPerch, perchForDisplay, perchFromRandom, type FrogPerch, type HomeDisplay } from '../../domain/home/perch';
+import type { FrogPerch } from '../../domain/home/perch';
 import type { MapViewState } from '../../domain/home/map-view';
 import { SettingsPanel, type ThemeChoice } from './SettingsPanel';
 import { SearchPanel, type SearchItem } from './SearchPanel';
@@ -1111,7 +1111,6 @@ export function MapWall() {
     setEntrusting(false);
     setMemoryTripId(null);
     setScene('home');
-    void service.setFrogPerch(perchFromRandom(Math.random())).catch(() => undefined);
   }, [camera, mode, level, cityKey, activeTripId, service]);
 
   const returnToMap = useCallback(() => {
@@ -1134,17 +1133,6 @@ export function MapWall() {
       void guard(() => service.setFrogPerch(perch));
     },
     [guard, service],
-  );
-
-  const handleHomeDisplay = useCallback(
-    (display: HomeDisplay) => {
-      if (display === 'map') {
-        returnToMap();
-        return;
-      }
-      moveFrogTo(perchForDisplay(display));
-    },
-    [moveFrogTo, returnToMap],
   );
 
   const moveHomeCity = useCallback(
@@ -1259,9 +1247,7 @@ export function MapWall() {
           furniture={homeFurniture}
           luggage={homeLuggage}
           postcards={homePostcards}
-          onFrog={() => moveFrogTo(nextPerch(snapshot.home.perch))}
           onPerch={moveFrogTo}
-          onDisplay={handleHomeDisplay}
           onMap={returnToMap}
           onSpecialty={setSpecialtyFocus}
           onPostcard={(wishId) => {

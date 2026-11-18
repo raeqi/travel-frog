@@ -9,12 +9,15 @@ import {
 } from "../../domain/home/collection";
 import {
   PERCH_LABELS,
+  perchForDisplay,
   type FrogPerch,
   type HomeDisplay,
 } from "../../domain/home/perch";
 import { wishStatusLabel, type WishStatus } from "../../domain/wish/wish";
 import { FrogPerchFigure } from "./Frog";
-import { FROG_POSE_LABELS, PERCH_POSE, nextFrogPose, type FrogPose } from "./frog-poses";
+import { FROG_POSE_LABELS } from "./frog-poses";
+import { ROOM_FLOOR } from "./room-navigation";
+import { useRoomFrog } from "./useRoomFrog";
 
 export interface HomePostcard {
   readonly id: string;
@@ -27,9 +30,7 @@ export interface HomeRoomProps {
   readonly furniture: FurnitureState;
   readonly luggage: LuggageTier;
   readonly postcards: readonly HomePostcard[];
-  readonly onFrog: () => void;
   readonly onPerch: (perch: FrogPerch) => void;
-  readonly onDisplay: (display: HomeDisplay) => void;
   readonly onMap: () => void;
   readonly onSpecialty: (award: SpecialtyAward) => void;
   readonly onPostcard: (wishId: string) => void;
@@ -48,15 +49,19 @@ function souvenirIndex(name: string, slot: number): number {
   return [7, 4, 7, 6][slot % 4] ?? 7;
 }
 
+const MOVEMENT_HINTS = {
+  idle: '点空地走走 · 点椅子坐下', seated: '点空地走走 · 点椅子坐下',
+  rise: '先从椅子上起来…', 'jump-down': '从椅子上跳下来…',
+  walk: '蛙蛙走过去…', 'jump-up': '跳回椅子上…', sit: '在椅子上坐好…',
+};
+
 /** The painted room is scenery; every card, photo and frog is a live archive object. */
 export function HomeRoom({
   home,
   furniture,
   luggage,
   postcards,
-  onFrog,
   onPerch,
-  onDisplay,
   onMap,
   onSpecialty,
   onPostcard,
@@ -65,12 +70,21 @@ export function HomeRoom({
   const [moving, setMoving] = useState(false);
   const [cityName, setCityName] = useState(home.city.name);
   const [luggageOpen, setLuggageOpen] = useState(false);
-  const [poseOverride, setPoseOverride] = useState<FrogPose | null>(null);
-  const pose = poseOverride ?? PERCH_POSE[home.perch];
+  const { actor, target, move, changePose } = useRoomFrog(home.perch, luggage, onPerch);
+  const busy = actor.phase !== 'idle' && actor.phase !== 'seated';
+  const pose = actor.pose;
   const visitDisplay = (display: HomeDisplay) => {
-    setPoseOverride(null);
-    onDisplay(display);
+    move({ kind: 'perch', perch: perchForDisplay(display) });
   };
+  const depth = 0.86 + 0.2 * Math.max(0, Math.min(1, (actor.position.y - 70) / 28));
+  const jumping = actor.phase === 'jump-down' || actor.phase === 'jump-up';
+  const luggageFront = { small: 93.2, standard: 93.2, wardrobe: 95.5 }[luggage];
+  const onChair = actor.phase === 'seated' || actor.phase === 'rise' || actor.phase === 'sit';
+  let layer = 20;
+  if (!jumping) {
+    if (onChair || actor.position.y < 89) layer = 10;
+    else if (actor.position.x > 77 && actor.position.y < luggageFront) layer = 16;
+  }
   const pinned = postcards.filter(
     (card) => card.status !== "fulfilled" && card.status !== "declined",
   );
@@ -95,6 +109,27 @@ export function HomeRoom({
       <div className="home-stage">
         <div className="home-scene" aria-hidden="true" />
         <div className="home-vignette" aria-hidden="true" />
+        <button
+          className="room-floor"
+          type="button"
+          aria-label="房间地板 · 点击走动，方向键移动"
+          style={{ clipPath: `polygon(${ROOM_FLOOR.map(point => `${point.x}% ${point.y}%`).join(',')})` }}
+          onClick={(event) => {
+            if (!event.detail) { move({ kind: 'floor', point: { x: 50, y: 97 } }); return; }
+            const rect = event.currentTarget.getBoundingClientRect();
+            move({ kind: 'floor', point: { x: (event.clientX - rect.left) / rect.width * 100, y: (event.clientY - rect.top) / rect.height * 100 } });
+          }}
+          onKeyDown={(event) => {
+            const directions: Record<string, readonly [number, number]> = { ArrowLeft: [-6, 0], ArrowRight: [6, 0], ArrowUp: [0, -6], ArrowDown: [0, 6] };
+            const delta = directions[event.key]; if (!delta) return;
+            event.preventDefault();
+            move({ kind: 'floor', point: { x: actor.position.x + delta[0], y: actor.position.y + delta[1] } });
+          }}
+        />
+        <div className="home-scene room-occluder room-table-occluder" aria-hidden="true" />
+        <div className="home-scene room-occluder room-chair-arm-occluder" aria-hidden="true" />
+        <div className="home-scene room-occluder room-table-legs-occluder" aria-hidden="true" />
+        {target && <span className="frog-destination" style={{ left: `${target.x}%`, top: `${target.y}%` }} aria-hidden="true" />}
         <header className="home-bar">
           <button type="button" className="home-back" onClick={onMap}>
             ← 回到地图
@@ -140,12 +175,12 @@ export function HomeRoom({
           className="room-hotspot room-chair"
           type="button"
           aria-label="扶手椅"
-          onClick={() => { setPoseOverride(null); onPerch("armchair"); }}
+          onClick={() => move({ kind: 'perch', perch: 'armchair' })}
         />
         <button
           className="room-hotspot room-lamp"
           type="button"
-          aria-label="落地灯旁脚凳"
+          aria-label="到落地灯旁"
           onClick={() => visitDisplay("lamp")}
         />
         <button
@@ -251,21 +286,30 @@ export function HomeRoom({
           className={`room-luggage tier-${luggage}`}
           aria-label={`行李 · ${LUGGAGE_LABELS[luggage]}`}
           onClick={() => {
-            visitDisplay("suitcase");
             setLuggageOpen(true);
           }}
         >
           <span className="luggage-art" />
         </button>
         <button
-          className={`home-frog perch-${home.perch}`}
+          className="home-frog room-actor"
           data-pose={pose}
+          data-phase={actor.phase}
+          data-facing={actor.facing}
+          style={{
+            left: `${actor.position.x}%`, top: `${actor.position.y}%`, width: `${14.5 * depth}%`, zIndex: layer,
+            '--jump-height': `${actor.jump * 9 / 16}cqw`, '--frog-facing': actor.facing === 'left' ? -1 : 1,
+            '--shadow-scale': 1 - actor.jump / 5.5 * 0.55,
+            '--squash-y': actor.phase === 'rise' || actor.phase === 'sit' ? 0.9 + actor.progress * 0.1 : 1,
+          } as CSSProperties}
           type="button"
-          aria-label={`青蛙在${PERCH_LABELS[home.perch]} · ${FROG_POSE_LABELS[pose]} · 点击换一个姿态和位置`}
-          onClick={() => { setPoseOverride(nextFrogPose(pose)); onFrog(); }}
+          aria-label={busy ? '青蛙正在移动' : `青蛙在${actor.perch ? PERCH_LABELS[actor.perch] : '房间里'} · ${FROG_POSE_LABELS[pose]} · 点击换姿态`}
+          aria-busy={busy}
+          onClick={changePose}
         >
-          <FrogPerchFigure perch={home.perch} pose={pose} />
+          <span className="frog-elevation"><span className="frog-gait"><FrogPerchFigure perch={actor.perch ?? 'fireplace-rug'} pose={pose} locationLabel={actor.perch ? PERCH_LABELS[actor.perch] : '房间里'} /></span></span>
         </button>
+        <p className="room-walk-hint" role="status" aria-live="polite">{MOVEMENT_HINTS[actor.phase]}</p>
       </div>
       {luggageOpen && (
         <div

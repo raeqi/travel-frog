@@ -7,48 +7,12 @@ import { FROG_POSE_LABELS, PERCH_POSE, type FrogPose } from './frog-poses';
 export type FrogMode = 'rest' | 'postcard' | 'packing';
 
 function FrogArt({ mode, charmCount }: { mode: FrogMode; charmCount: number }) {
-  const postcard = mode === 'postcard';
-  const packing = mode === 'packing';
-  const charm = charmCount > 0;
+  const pose: FrogPose = mode === 'postcard' ? 'placard' : mode === 'packing' ? 'box' : 'front';
   return (
-    <svg viewBox="0 0 64 60">
-      <ellipse cx="32" cy="52" rx="18" ry="3.6" fill="rgba(40,28,16,.28)" />
-      <path d="M13 44c-5 1-7 5-4 7 2 1.6 7-1 9-5z" fill="#9CA77C" />
-      <path d="M51 44c5 1 7 5 4 7-2 1.6-7-1-9-5z" fill="#9CA77C" />
-      <path d="M10 37c0-9.6 9.8-17 22-17s22 7.4 22 17-9.8 14-22 14-22-4.4-22-14z" fill="#B3BB97" />
-      <path d="M18 40c1-6 6.6-9.6 14-9.6S45 34 46 40c-1.6 4.4-7 6.4-14 6.4s-12.4-2-14-6.4z" fill="#F3E4C3" />
-      <circle cx="22" cy="19" r="7" fill="#B3BB97" />
-      <circle cx="42" cy="19" r="7" fill="#B3BB97" />
-      <circle cx="22" cy="19" r="4.2" fill="#182219" stroke="#F3E4C3" strokeWidth="1.2" />
-      <circle cx="42" cy="19" r="4.2" fill="#182219" stroke="#F3E4C3" strokeWidth="1.2" />
-      <circle cx="23" cy="18" r="1" fill="#fff" />
-      <circle cx="43" cy="18" r="1" fill="#fff" />
-      <path d="M26 31c2.8 2.6 9.2 2.6 12 0" stroke="#2C4A2E" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-      <path d="M15 35q17 8 34 0" stroke="#376445" strokeWidth="5" fill="none" strokeLinecap="round" />
-      <path d="M25 38l-1 8" stroke="#376445" strokeWidth="5" strokeLinecap="round" />
-      <path d="M18 47l-3 6M46 47l3 6" stroke="#2C4A2E" strokeWidth="3" strokeLinecap="round" />
-      {postcard ? (
-        <g className="postcard-mini">
-          <rect x="40" y="24" width="17" height="12" rx="1" fill="#FAF3E4" stroke="#8A7355" strokeWidth=".8" transform="rotate(-8 48 30)" />
-          <path d="M42 27l7 4 6-5" stroke="#A8573F" strokeWidth=".8" fill="none" transform="rotate(-8 48 30)" />
-        </g>
-      ) : null}
-      {packing ? (
-        <g className="bag">
-          <rect x="46" y="36" width="13" height="15" rx="3" fill="#8A5736" />
-          <path d="M49 36c0-4 6-4 6 0" stroke="#6E460B" strokeWidth="1.5" fill="none" />
-          <path d="M46 41h13" stroke="#8E5C0D" strokeWidth="1.2" />
-        </g>
-      ) : null}
-      {charm ? (
-        <g className="frog-charm">
-          <path d="M53 35c3.4 2.6 4 5.2 4 7.4" stroke="#7A5B36" strokeWidth="1.1" fill="none" strokeLinecap="round" />
-          <circle cx="57" cy="45.2" r="3.1" fill="#C08A2E" stroke="#7A5B36" strokeWidth=".7" />
-          <path d="M55.2 46.6h3.6" stroke="#7A5B36" strokeWidth=".6" />
-          <circle cx="57" cy="48.4" r=".8" fill="#7A5B36" />
-        </g>
-      ) : null}
-    </svg>
+    <span className="frog-map-art" aria-hidden="true">
+      <span className={`frog-sprite pose-${pose}`} />
+      {charmCount > 0 ? <span className="frog-map-charm" /> : null}
+    </span>
   );
 }
 
@@ -219,6 +183,6 @@ export function ReplayBar({
   );
 }
 
-export function FrogPerchFigure({ perch, pose = PERCH_POSE[perch] }: { readonly perch: FrogPerch; readonly pose?: FrogPose }) {
-  return <span className={`frog-sprite pose-${pose}`} role="img" aria-label={`青蛙 · ${PERCH_LABELS[perch]} · ${FROG_POSE_LABELS[pose]}`}/>;
+export function FrogPerchFigure({ perch, pose = PERCH_POSE[perch], locationLabel = PERCH_LABELS[perch] }: { readonly perch: FrogPerch; readonly pose?: FrogPose; readonly locationLabel?: string }) {
+  return <span className={`frog-sprite pose-${pose}`} role="img" aria-label={`青蛙 · ${locationLabel} · ${FROG_POSE_LABELS[pose]}`}/>;
 }

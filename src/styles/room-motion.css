@@ -1,0 +1,32 @@
+/* Motion coordinates share the room plate, without replacing its visual skin. */
+.frog-map-art { position: relative; display: block; width: 100%; aspect-ratio: 1; }
+.frog-map-charm { position: absolute; right: 12%; bottom: 7%; width: 12%; aspect-ratio: 1; border: 1px solid #735c3b; border-radius: 50%; background: #b39451; }
+.room-floor { position: absolute; inset: 0; z-index: 2; border: 0; padding: 0; background: transparent; cursor: crosshair; }
+.room-floor:focus-visible { box-shadow: inset 0 -3px #d4c49a; outline: 0; }
+.room-hotspot, .room-map { z-index: 6; }
+.room-map { z-index: 15; clip-path: ellipse(50% 48% at 50% 50%); }
+.room-chair { top: 34%; height: 54%; border-radius: 0; clip-path: polygon(25% 0,68% 0,96% 10%,100% 37%,100% 73%,93% 89%,75% 100%,61% 96%,54% 78%,11% 76%,0 63%,0 43%,14% 35%,21% 13%); }
+.room-postcards { z-index: 8; }
+.room-souvenir { z-index: 8; }
+.room-luggage { z-index: 18; }
+.room-luggage.tier-small { clip-path: inset(27% 18% 9% 24%); }
+.room-luggage.tier-standard { clip-path: inset(18% 13% 7% 14%); }
+.room-luggage.tier-wardrobe { clip-path: inset(1% 18% 3% 19%); }
+.room-occluder { pointer-events: none; }
+.room-occluder::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 57% 52%, transparent 45%, rgba(5, 4, 3, .25)); }
+.room-table-occluder { z-index: 14; clip-path: polygon(18.4% 79%,20.7% 75%,29% 71%,38% 70%,51% 71%,61% 74%,66.8% 78%,64.2% 84%,61% 88%,51.6% 94%,49% 94%,47% 92%,32% 90%,22% 86%); }
+.room-chair-arm-occluder { z-index: 13; clip-path: polygon(68.5% 56%,70% 54%,75% 58%,77% 69%,76% 83%,70% 87%,68% 76%); }
+.room-table-legs-occluder { z-index: 22; clip-path: polygon(47.4% 92.2%,50.3% 92.8%,49.5% 100%,47.6% 100%); }
+.home-frog.room-actor { transform: translate(-50%, -97%); transition: none; filter: none; }
+.room-actor[aria-busy="true"] { pointer-events: none; }
+.home-frog.room-actor[data-phase="jump-up"], .home-frog.room-actor[data-phase="jump-down"] { clip-path: none; }
+.room-actor::before { content: ''; position: absolute; left: 27%; right: 27%; bottom: 2%; height: 4%; border-radius: 50%; background: #100d09aa; filter: blur(.15cqw); transform: scale(var(--shadow-scale)); pointer-events: none; }
+.frog-elevation, .frog-gait { display: block; width: 100%; aspect-ratio: 1; pointer-events: none; }
+.frog-elevation { transform: translateY(calc(-1 * var(--jump-height))) scaleX(var(--frog-facing)); filter: brightness(.87) drop-shadow(.05cqw .1cqw .1cqw #0005); }
+.frog-gait { transform-origin: center 97%; transform: scaleY(var(--squash-y)); }
+.room-actor[data-phase="walk"] .frog-gait { animation: room-frog-step .32s ease-in-out infinite alternate; }
+.room-actor[data-phase="jump-up"] .frog-gait, .room-actor[data-phase="jump-down"] .frog-gait { transform: scale(.97,1.04); }
+@keyframes room-frog-step { from { transform: translateY(0) rotate(-1.5deg) scaleY(.97); } to { transform: translateY(-.28cqw) rotate(1.5deg) scaleY(1.02); } }
+.frog-destination { position: absolute; z-index: 5; width: 2.2%; aspect-ratio: 2.5; border: 1px solid #ead7a899; border-radius: 50%; transform: translate(-50%,-50%); box-shadow: 0 0 .5cqw #e9cd7d33; pointer-events: none; }
+.room-walk-hint { position: absolute; z-index: 30; bottom: 2%; right: 3%; margin: 0; color: #e8d8b7; background: #100d0977; border-radius: 3px; padding: 4px 7px; font-size: clamp(9px,.9cqw,13px); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .room-actor .frog-gait { animation: none; } }
