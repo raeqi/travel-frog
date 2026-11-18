@@ -45,7 +45,7 @@ export function SettingsPanel({
         <header className="settings-head">
           <div>
             <h2>设置与隐私</h2>
-            <p>数据在这台设备上，没有账号，也没有云端。</p>
+            <p>档案保存在这台设备上，无账号与云同步。真实地点查询可按需联网。</p>
           </div>
           <button className="icon-btn" type="button" aria-label="关闭设置" onClick={onClose}>
             ×
@@ -80,6 +80,12 @@ export function SettingsPanel({
               </button>
               <span className="hint">导出文件包含精确坐标，请妥善保管。</span>
             </div>
+          </section>
+
+          <section className="set-block">
+            <h3>真实地点查询</h3>
+            <p className="set-copy">仅在地图的“真实地点”面板点击查询时联网。当前地图中心会舍入至约100米精度，与查询半径一起发送给 overpass.private.coffee；服务也会接收IP。照片、旅行档案与设备定位不发送，地图拖动不会自动查询。</p>
+            <a href="https://overpass.private.coffee/" target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">查询服务与隐私说明 ↗</a>
           </section>
 
           <section className="set-block">
