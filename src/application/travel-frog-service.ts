@@ -23,7 +23,7 @@ import { createTrip, findOverlappingTrip, tripTitleFrom, validateTripPhotos } fr
 import type { Trip } from '../domain/trip/trip';
 import type { Visit } from '../domain/visit/visit';
 import { changeWishStatus, createWish, type Wish, type WishStatus } from '../domain/wish/wish';
-import { createManualVisit, findManualVisit } from '../domain/wish/manual-visit';
+import { makeGeoPoint } from '../domain/geo/geo-point';
 import type { Clock, CityResolver, ExifReader, FingerprintReader, IdGenerator, Logger, Repositories, ThumbnailGenerator } from '../domain/ports';
 import { ArchiveStore } from './archive-store';
 import { importPhotos, type ImportProgress, type ImportSummary } from './import-photos';
@@ -235,6 +235,13 @@ export class TravelFrogService {
         await repos.visits.saveMany(visits.value.visits);
         await repos.photos.saveMany(withVisits);
         await repos.candidates.save(markConfirmed(candidate, tripId, now));
+        const wished = await repos.wishes.list();
+        for (const wish of wished) {
+          if (wish.status !== 'wished') continue;
+          if (!candidate.cityRefs.some((ref) => ref.key === wish.cityRef.key)) continue;
+          const fulfilled = changeWishStatus(wish, 'fulfilled', now);
+          if (fulfilled.ok) await repos.wishes.save(fulfilled.value);
+        }
       });
     } catch (error) {
       this.deps.logger.error('candidate.confirm-failed', error, { candidateId });
@@ -495,28 +502,47 @@ export class TravelFrogService {
     return suggestions.length;
   }
 
-  async addWish(input: { name: string; region: string; notes: string }): Promise<void> {
+  async addWish(input: {
+    name: string;
+    region: string;
+    countryCode?: string;
+    lat?: number;
+    lng?: number;
+    notes?: string;
+  }): Promise<string> {
     const now = this.deps.clock.now();
     const name = input.name.trim();
     if (name.length === 0) throw new AppError('INVALID_INPUT', '请填写想去的地方');
-    const resolved = this.deps.cityResolver.resolveByName(name);
-    const cityRef: CityRef =
-      resolved ??
-      makeCityRef({
+    const resolved = this.deps.cityResolver.resolveByName(name, input.countryCode);
+    let cityRef: CityRef;
+    if (resolved) {
+      cityRef = resolved;
+    } else {
+      let centroid: CityRef['centroid'] = null;
+      if (input.lat !== undefined && input.lng !== undefined) {
+        const geo = makeGeoPoint({ lat: input.lat, lng: input.lng, source: 'manual', approximate: true });
+        if (!geo.ok) throw new DomainViolation(geo.error);
+        centroid = geo.value;
+      }
+      cityRef = makeCityRef({
         name,
-        countryCode: 'XXX',
+        countryCode: input.countryCode?.trim().toUpperCase() || 'XXX',
         countryName: input.region.trim() || '未知',
-        centroid: null,
+        centroid,
         source: 'manual',
         confidence: 'low',
       });
+    }
+    const id = this.deps.ids.newWishId();
     const wish = createWish({
-      id: this.deps.ids.newWishId(),
+      id,
       cityRef,
       region: input.region.trim() || null,
-      notes: input.notes.trim() || null,
+      note: input.notes?.trim() || null,
+      status: 'pending',
+      source: 'user',
+      from: null,
       origin: 'user',
-      source: 'manual',
       now,
     });
     if (!wish.ok) throw new DomainViolation(wish.error);
@@ -524,33 +550,30 @@ export class TravelFrogService {
       await repos.wishes.save(wish.value);
     });
     await this.refresh();
+    return id;
+  }
+
+  /** pending -> received when the frog comes back with a written postcard. */
+  async deliverWish(wishId: string, input: { note: string; from?: string | null }): Promise<void> {
+    const now = this.deps.clock.now();
+    await this.deps.gateway.run(async (repos) => {
+      const wish = await repos.wishes.get(asWishId(wishId));
+      if (!wish) fail('WISH_STATE_INVALID', '明信片不存在');
+      const next = changeWishStatus(wish, 'received', now, { note: input.note, from: input.from ?? wish.from });
+      if (!next.ok) throw new DomainViolation(next.error);
+      await repos.wishes.save(next.value);
+    });
+    await this.refresh();
   }
 
   async setWishStatus(wishId: string, status: WishStatus): Promise<void> {
     const now = this.deps.clock.now();
-    const currentYear = localYear(now, this.offset());
     await this.deps.gateway.run(async (repos) => {
       const wish = await repos.wishes.get(asWishId(wishId));
-      if (!wish) fail('WISH_STATE_INVALID', '愿望不存在');
+      if (!wish) fail('WISH_STATE_INVALID', '明信片不存在');
       const next = changeWishStatus(wish, status, now);
       if (!next.ok) throw new DomainViolation(next.error);
       await repos.wishes.save(next.value);
-      if (status === 'visited') {
-        const visits = await repos.manualVisits.list();
-        if (!findManualVisit(visits, wish.cityRef.key, currentYear)) {
-          const visit = createManualVisit({
-            id: this.deps.ids.newManualVisitId(),
-            cityRef: wish.cityRef,
-            year: currentYear,
-            source: 'wish',
-            sourceWishId: wish.id,
-            createdAt: now,
-            currentYear,
-          });
-          if (!visit.ok) throw new DomainViolation(visit.error);
-          await repos.manualVisits.saveMany([visit.value]);
-        }
-      }
     });
     await this.refresh();
   }
@@ -574,7 +597,7 @@ export class TravelFrogService {
   async exportArchive(includeCoordinates: boolean): Promise<ArchiveExport> {
     const data = await this.readAll();
     return {
-      version: 2,
+      version: 3,
       exportedAt: this.deps.clock.now(),
       includeCoordinates,
       trips: data.trips,
