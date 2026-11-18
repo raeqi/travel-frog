@@ -1,5 +1,7 @@
 # travel-frog 产品需求文档（v1）
 
+> 最新版本见 [docs/PRD-v3-map-first.md](PRD-v3-map-first.md)
+>
 > 一句话：**我的旅行档案，有只青蛙替我守着。**
 >
 > 文档状态：v1 已实现基线 · 最后更新 2026-11-17
