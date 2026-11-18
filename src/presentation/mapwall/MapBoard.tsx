@@ -327,7 +327,9 @@ export function MapBoard(props: MapBoardProps) {
               <span className="city" title={label.name}>
                 {label.name}
               </span>
-              {label.year ? <span className="year">{label.year}</span> : null}
+              <span className="year">
+                {label.year} · {label.count} 张
+              </span>
             </div>
           ))}
           {destTags.map((tag) => (

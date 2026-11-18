@@ -40,13 +40,13 @@ export const DEST_CANDIDATES: readonly DestinationCandidate[] = [
 export interface DestinationFilter {
   /** City keys that already have a confirmed trip. */
   readonly visitedCityKeys: Iterable<string>;
-  /** City keys of postcards that are not declined. */
+  /** City keys of postcards whose journey is still open (not yet fulfilled). */
   readonly activeWishCityKeys: Iterable<string>;
 }
 
 /**
  * Pending-entrust candidates must be both unvisited and free of an active postcard.
- * Declined postcards do not block a place from being offered again.
+ * Fulfilled postcards already count as visits, so they do not block the list twice.
  */
 export function availableDestinations(filter: DestinationFilter): DestinationCandidate[] {
   const blocked = new Set<string>([...filter.visitedCityKeys, ...filter.activeWishCityKeys]);

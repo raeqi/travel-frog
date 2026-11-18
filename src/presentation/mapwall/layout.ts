@@ -30,6 +30,7 @@ export interface LabelPlacement {
   readonly y: number;
   readonly w: number;
   readonly h: number;
+  readonly count: number;
   readonly twoLine: boolean;
 }
 
@@ -89,9 +90,9 @@ export function placeLabels(input: LabelInput): LabelPlacement[] {
   for (const pile of items) {
     if (out.length >= max) break;
     if (dense && pile.photoIds.length < 8) continue;
-    const width = Math.min(154, pile.title.length * 13 + 8);
+    const width = Math.min(184, pile.title.length * 13 + 48);
     const twoLine = pile.long || pile.title.length > 9;
-    const height = twoLine ? 40 : 30;
+    const height = twoLine ? 48 : 36;
     const candidates: Point[] = [
       { x: pile.sx + 42, y: pile.sy - height / 2 },
       { x: pile.sx - 42 - width, y: pile.sy - height / 2 },
@@ -135,6 +136,7 @@ export function placeLabels(input: LabelInput): LabelPlacement[] {
       y: spot.point.y,
       w: width,
       h: height,
+      count: pile.photoIds.length,
       twoLine,
     });
   }

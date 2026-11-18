@@ -210,6 +210,7 @@ const ARRIVAL_MS = 1200;
 const HIGHLIGHT_MS = 1500;
 const DELIVERY_MS = 6000;
 const NOTE_TAILS = ['路口的面包店还亮着灯。', '风从河面吹过来，像刚洗过的布。', '傍晚的云压得很低，替你多站了一会儿。'];
+const WISH_STEP_LABELS = { opened: '已掀开', stamped: '已盖戳', fulfilled: '已兑现' } as const;
 
 export function MapWall() {
   const service = useService();
@@ -252,7 +253,6 @@ export function MapWall() {
   const [cityKey, setCityKey] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [flew, setFlew] = useState<ReadonlySet<string>>(() => new Set());
-  const [leaving, setLeaving] = useState<ReadonlySet<string>>(() => new Set());
   const [dropping, setDropping] = useState<ReadonlySet<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
   const [specialtyFocus, setSpecialtyFocus] = useState<SpecialtyAward | null>(null);
@@ -266,6 +266,7 @@ export function MapWall() {
   const savedView = useRef<MapViewState | null>(null);
   const pendingScroll = useRef<number | null>(null);
   const restoredView = useRef(false);
+  const viewSaveTimer = useRef<number | null>(null);
 
   const notify = useCallback((message: string) => {
     setToastMessage(message);
@@ -331,25 +332,24 @@ export function MapWall() {
   }, [camera]);
 
   useLayoutEffect(() => {
-    if (snapshot.status !== 'ready') return;
-    if (!restoredView.current) {
-      restoredView.current = true;
-      const saved = snapshot.mapView;
-      if (saved) {
-        savedView.current = saved;
-        setMode(saved.mode);
-        setLevel(saved.level);
-        setCamera(saved.camera);
-        pendingScroll.current = saved.poiScrollTop;
-      }
-      return;
-    }
+    if (snapshot.status !== 'ready' || restoredView.current) return;
+    restoredView.current = true;
+    const saved = snapshot.mapView;
+    if (!saved) return;
+    savedView.current = saved;
+    setMode(saved.mode);
+    setLevel(saved.level);
+    setCamera(saved.camera);
+    pendingScroll.current = saved.poiScrollTop;
+  }, [snapshot.status, snapshot.mapView]);
+
+  useLayoutEffect(() => {
     if (scene !== 'wall' || pendingScroll.current === null) return;
     const element = poiScrollRef.current;
-    const value = pendingScroll.current;
+    if (!element) return;
+    element.scrollTop = pendingScroll.current;
     pendingScroll.current = null;
-    if (element) element.scrollTop = value;
-  }, [snapshot.status, snapshot.mapView, scene]);
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -571,7 +571,6 @@ export function MapWall() {
       : null;
     const seen = new Set<string>();
     for (const wish of model.wishes) {
-      if (wish.status === 'declined') continue;
       if (seen.has(wish.cityKey)) continue;
       const anchor = toScreen(projectAt(mode, wish.lat, wish.lng), camera, metrics);
       if (!inBoard(anchor.x, anchor.y, metrics, 40)) continue;
@@ -590,7 +589,7 @@ export function MapWall() {
       cards.push({ wish, cx: placement.cx, cy: placement.cy, width, height });
       rects.push(placement.rect);
       centers.set(wish.id, { cx: placement.cx, cy: placement.cy });
-      if (wish.status === 'wished') {
+      if (wish.status !== 'fulfilled') {
         const near = nearestCityScreen(model, placement.cx, placement.cy, camera, metrics, mode);
         if (near) {
           const mx = (placement.cx + near.x) / 2;
@@ -618,7 +617,7 @@ export function MapWall() {
   );
 
   const activeWishCityKeys = useMemo(
-    () => model.wishes.filter((wish) => wish.status !== 'declined').map((wish) => wish.cityKey),
+    () => model.wishes.filter((wish) => wish.status !== 'fulfilled').map((wish) => wish.cityKey),
     [model],
   );
   const visitedKeys = useMemo(() => model.cities.map((city) => city.key), [model]);
@@ -673,13 +672,12 @@ export function MapWall() {
         height: card.height,
         arriving,
         dropping: dropping.has(card.wish.id),
-        leaving: leaving.has(card.wish.id),
         flipping: wishFocus?.wishId === card.wish.id,
         flyX: from.x - card.cx,
         flyY: from.y - card.cy,
       };
     });
-  }, [wishPlacement.cards, frogPos, metrics, now, flew, dropping, leaving, wishFocus]);
+  }, [wishPlacement.cards, frogPos, metrics, now, flew, dropping, wishFocus]);
 
   const arrivingKey = postcards
     .filter((card) => card.arriving)
@@ -711,7 +709,6 @@ export function MapWall() {
   const homePostcards = useMemo(
     () =>
       model.wishes
-        .filter((wish) => wish.status !== 'declined')
         .map((wish) => ({
           id: wish.id,
           name: wish.name,
@@ -755,7 +752,6 @@ export function MapWall() {
       });
     }
     for (const wish of model.wishes) {
-      if (wish.status === 'declined') continue;
       items.push({
         id: `wish:${wish.id}`,
         kind: 'wish',
@@ -864,8 +860,8 @@ export function MapWall() {
     [wishPlacement.centers],
   );
 
-  const keepWish = useCallback(
-    (wishId: string) => {
+  const advanceWish = useCallback(
+    (wishId: string, status: 'opened' | 'stamped' | 'fulfilled') => {
       const wish = model.wishById.get(wishId);
       setWishFocus(null);
       setDropping((previous) => new Set(previous).add(wishId));
@@ -877,32 +873,12 @@ export function MapWall() {
         });
       }, 700);
       void guard(async () => {
-        await service.setWishStatus(wishId, 'wished');
+        await service.setWishStatus(wishId, status);
         setHighlightWish(wishId);
         if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current);
         highlightTimer.current = window.setTimeout(() => setHighlightWish(null), HIGHLIGHT_MS);
-        notify(`已留着 · ${wish?.name ?? '这张明信片'}`);
+        notify(`${WISH_STEP_LABELS[status]} · ${wish?.name ?? '这张明信片'}`);
       });
-    },
-    [guard, model, notify, service],
-  );
-
-  const declineWish = useCallback(
-    (wishId: string) => {
-      const wish = model.wishById.get(wishId);
-      setWishFocus(null);
-      setLeaving((previous) => new Set(previous).add(wishId));
-      window.setTimeout(() => {
-        void guard(async () => {
-          await service.setWishStatus(wishId, 'declined');
-          setLeaving((previous) => {
-            const next = new Set(previous);
-            next.delete(wishId);
-            return next;
-          });
-          notify(`这次不去 · ${wish?.name ?? '这张明信片'}`);
-        });
-      }, 300);
     },
     [guard, model, notify, service],
   );
@@ -916,18 +892,6 @@ export function MapWall() {
       openWishFocus(wish);
     },
     [openWishFocus, wishFocus],
-  );
-
-  const cancelWished = useCallback(
-    (wishId: string) => {
-      const wish = model.wishById.get(wishId);
-      setWishFocus(null);
-      void guard(async () => {
-        await service.setWishStatus(wishId, 'received');
-        notify(`已取消想去 · ${wish?.name ?? '这张明信片'}`);
-      });
-    },
-    [guard, model, notify, service],
   );
 
   const startEntrust = useCallback(() => {
@@ -1116,6 +1080,34 @@ export function MapWall() {
     setSearchOpen(false);
     setMemoryTripId(null);
   }, []);
+
+  const scheduleViewSave = useCallback(() => {
+    if (snapshot.status !== 'ready' || scene !== 'wall') return;
+    if (viewSaveTimer.current !== null) window.clearTimeout(viewSaveTimer.current);
+    viewSaveTimer.current = window.setTimeout(() => {
+      viewSaveTimer.current = null;
+      const view: MapViewState = {
+        camera: cameraRef.current,
+        mode,
+        level,
+        poiScrollTop: poiScrollRef.current?.scrollTop ?? 0,
+        savedAt: Date.now(),
+      };
+      void service.saveMapView(view).catch(() => undefined);
+    }, 500);
+  }, [scene, mode, level, service, snapshot.status]);
+
+  useEffect(() => {
+    if (!restoredView.current || snapshot.status !== 'ready') return;
+    scheduleViewSave();
+  }, [camera, mode, level, scheduleViewSave, snapshot.status]);
+
+  useEffect(
+    () => () => {
+      if (viewSaveTimer.current !== null) window.clearTimeout(viewSaveTimer.current);
+    },
+    [],
+  );
 
   // ---------------------------------------------------------------- home
 
@@ -1375,6 +1367,7 @@ export function MapWall() {
             onCity={focusCityFromList}
             onWish={focusWishRow}
             onHome={openHome}
+            onScroll={scheduleViewSave}
           />
           <Crumb
             level={level}
@@ -1495,9 +1488,7 @@ export function MapWall() {
             const photo = model.photoById.get(photoId);
             return photo ? imageFor(photo) : null;
           }}
-          onKeep={() => keepWish(focusWishValue.id)}
-          onDecline={() => declineWish(focusWishValue.id)}
-          onCancelWished={() => cancelWished(focusWishValue.id)}
+          onAdvance={(status) => advanceWish(focusWishValue.id, status)}
           onClose={() => setWishFocus(null)}
         />
       ) : null}

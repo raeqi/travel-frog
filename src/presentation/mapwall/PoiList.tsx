@@ -15,6 +15,7 @@ export interface PoiListProps {
   readonly onCity: (cityKey: string) => void;
   readonly onWish: (wishId: string) => void;
   readonly onHome: () => void;
+  readonly onScroll: () => void;
 }
 
 const MENU_ICON = (
@@ -40,6 +41,7 @@ export function PoiList({
   onCity,
   onWish,
   onHome,
+  onScroll,
 }: PoiListProps) {
   return (
     <>
@@ -58,12 +60,12 @@ export function PoiList({
         >
           {MENU_ICON}
         </button>
-        <div className="poi-body">
+        <div className="poi-body" inert={!open} aria-hidden={!open}>
           <header className="poi-head">
             <span>足迹</span>
             <em>{total} 处</em>
           </header>
-          <div className="poi-scroll" id="poiScroll" ref={scrollRef}>
+          <div className="poi-scroll" id="poiScroll" ref={scrollRef} onScroll={onScroll}>
             {groups.years.map((group) => (
               <div key={group.year}>
                 <div className="poi-year">{group.year}</div>

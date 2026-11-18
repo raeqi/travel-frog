@@ -37,8 +37,8 @@ export interface PoiGroupInput {
 
 /**
  * Groups the wall's photos by trip year and then by city. A city visited in two
- * different years deliberately appears once in each year. Wishes that the user kept
- * ("想去") live in their own group, separate from the travel footprints.
+ * different years deliberately appears once in each year. Open postcards live in
+ * their own "还想去" group, separate from the travel footprints.
  */
 export function groupPoiData(input: PoiGroupInput): PoiGroups {
   const yearById = new Map(input.trips.map((trip) => [trip.id, trip.year] as const));
@@ -76,7 +76,7 @@ export function groupPoiData(input: PoiGroupInput): PoiGroups {
 
   return {
     years,
-    wished: input.wishes.filter((wish) => wish.status === 'wished'),
+    wished: input.wishes.filter((wish) => wish.status !== 'fulfilled'),
   };
 }
 

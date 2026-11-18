@@ -39,7 +39,7 @@ function input(overrides: Partial<PoiGroupInput> = {}): PoiGroupInput {
       { id: 't2024', year: 2024 },
     ],
     cityName: (key) => NAMES[key] ?? key,
-    wishes: [wish('w1', 'wished'), wish('w2', 'received', 'JPN:大阪'), wish('w3', 'wished', 'ISL:雷克雅未克')],
+    wishes: [wish('w1', 'opened'), wish('w2', 'received', 'JPN:大阪'), wish('w3', 'opened', 'ISL:雷克雅未克')],
     ...overrides,
   };
 }
@@ -72,9 +72,9 @@ describe('groupPoiData', () => {
     ]);
   });
 
-  it('lists only "想去" postcards in the separate wished group', () => {
+  it('lists every postcard that is not fulfilled in the "还想去" group', () => {
     const groups = groupPoiData(input());
-    expect(groups.wished.map((item) => item.id)).toEqual(['w1', 'w3']);
+    expect(groups.wished.map((item) => item.id)).toEqual(['w1', 'w2', 'w3']);
   });
 
   it('skips photos whose trip is unknown', () => {
