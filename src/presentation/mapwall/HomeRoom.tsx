@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from 'react';
 import type { HomeState } from '../../domain/home/home';
 import {
+  LUGGAGE_LABELS,
   curioSlots,
   type FurnitureState,
   type LuggageTier,
@@ -69,7 +70,11 @@ export function HomeRoom({
 
   return (
     <div className="home-room" data-furniture={furniture.stage} data-luggage={luggage}>
-      <div className="home-vignette" aria-hidden="true" />
+      <div className="home-stage">
+      <div className="home-plate" aria-hidden="true" />
+      <div className="home-fire-cover" aria-hidden="true" />
+      <div className="home-lamp-cover" aria-hidden="true" />
+      <div className="home-case-mask" aria-hidden="true" />
 
       <header className="home-bar">
         <button type="button" className="home-back" onClick={onMap}>
@@ -107,22 +112,18 @@ export function HomeRoom({
         </div>
       </header>
 
-      <div className="home-wall" aria-hidden="true" />
-
       <button
         type="button"
-        className="home-fireplace"
+        className="home-hit home-fireplace"
         data-lit={furniture.fireplaceLit}
         aria-label="壁炉"
         title="壁炉"
         onClick={() => onDisplay('fireplace')}
       />
 
-      <div className="home-rug" aria-hidden="true" />
-
       <button
         type="button"
-        className="home-armchair"
+        className="home-hit home-armchair"
         aria-label="扶手椅"
         title="扶手椅"
         onClick={() => onPerch('armchair')}
@@ -130,16 +131,16 @@ export function HomeRoom({
 
       <button
         type="button"
-        className={`home-lamp${furniture.floorLampLit ? ' is-lit' : ''}`}
+        className={`home-hit home-lamp${furniture.floorLampLit ? ' is-lit' : ''}`}
         aria-label="落地灯"
         title="落地灯"
         onClick={() => onDisplay('lamp')}
       />
-      <button type="button" className="home-footstool" aria-label="脚凳" title="脚凳" onClick={() => onDisplay('lamp')} />
+      <button type="button" className="home-hit home-footstool" aria-label="脚凳" title="脚凳" onClick={() => onDisplay('lamp')} />
 
       <button
         type="button"
-        className="home-map-table"
+        className="home-hit home-map-table"
         aria-label="矮几上摊开的世界地图 · 展开地图"
         title="展开地图"
         onClick={onMap}
@@ -237,7 +238,7 @@ export function HomeRoom({
       {furniture.sideboard ? (
         <button
           type="button"
-          className="home-sideboard"
+          className="home-hit home-sideboard"
           aria-label="边柜"
           title="边柜"
           onClick={() => onDisplay('bookshelf')}
@@ -249,7 +250,7 @@ export function HomeRoom({
       {furniture.bookshelf ? (
         <button
           type="button"
-          className="home-bookshelf"
+          className="home-hit home-bookshelf"
           aria-label="矮书架"
           title="矮书架"
           onClick={() => onDisplay('bookshelf')}
@@ -260,13 +261,11 @@ export function HomeRoom({
 
       <button
         type="button"
-        className={`home-suitcase is-${luggage}${furniture.suitcaseFilled ? ' is-filled' : ''}`}
-        aria-label="敞开的行李箱"
-        title="敞开的行李箱"
+        className={`home-luggage is-${luggage}${furniture.suitcaseFilled ? ' is-filled' : ''}`}
+        aria-label={`敞开的行李箱 · ${LUGGAGE_LABELS[luggage]}`}
+        title={LUGGAGE_LABELS[luggage]}
         onClick={() => onDisplay('suitcase')}
       >
-        <span className="home-suitcase-strap" aria-hidden="true" />
-        <span className="home-suitcase-sticker" aria-hidden="true" />
       </button>
 
       <button
@@ -281,6 +280,7 @@ export function HomeRoom({
       >
         <FrogPerchFigure perch={home.perch} />
       </button>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { fnv1a, postcardTilt } from './geometry';
 import type { WishStatus } from '../../domain/wish/wish';
 import { formattedDay, isNewWish, type WallWish } from './model';
-import { scene, type PaletteName } from './photoArt';
+import { paletteFor, scene, type PaletteName } from './photoArt';
 
 const STACK_PALETTES: readonly PaletteName[] = ['temple', 'city', 'sea', 'forest'];
 
@@ -67,6 +67,7 @@ export interface PlacedPostcard {
   readonly arriving: boolean;
   readonly dropping: boolean;
   readonly flipping: boolean;
+  readonly fresh: boolean;
   readonly flyX: number;
   readonly flyY: number;
 }
@@ -91,6 +92,7 @@ export function PostcardNode({ card, now, highlighted, onClick }: PostcardNodePr
     'wish',
     `st-${wish.status}`,
     card.arriving ? 'is-arriving' : '',
+    card.fresh ? 'is-fresh' : '',
     card.dropping ? 'is-dropping' : '',
     card.flipping ? 'is-flipping' : '',
     highlighted ? 'is-hl' : '',
@@ -150,42 +152,37 @@ export function WishFocus({
   onClose,
 }: WishFocusProps) {
   const step = NEXT_STEP[wish.status];
+  const first = photos[0];
+  const firstImage = first ? photoImage(first.id) : null;
+  const portrait = firstImage ?? (wish.status === 'pending' ? null : scene(fnv1a(`${wish.id}:open`), paletteFor(fnv1a(wish.id))));
   return (
     <div className="wish-focus" role="dialog" aria-label={`${wish.name} 的明信片背面`} onClick={onClose}>
       <div
         className="wish-focus-card"
-        style={{ left: `${left}px`, top: `${top}px`, '--tilt': postcardTilt(wish.id) } as CSSProperties}
+        style={{ '--from-x': `${left}px`, '--from-y': `${top}px`, '--tilt': postcardTilt(wish.id) } as CSSProperties}
         onClick={onClose}
       >
-        <span className="wf-place">{wish.name}</span>
-        {photos.length > 0 ? (
-          <span className="wf-photos">
-            {photos.map((photo) => {
-              const image = photoImage(photo.id);
-              return (
-                <span
-                  key={photo.id}
-                  className="wf-photo"
-                  style={image ? { backgroundImage: `url("${image}")` } : undefined}
-                />
-              );
-            })}
+        <span
+          className="wf-portrait"
+          style={portrait ? { backgroundImage: `url("${portrait}")` } : undefined}
+          aria-hidden="true"
+        />
+        <span className="wf-copy">
+          <span className="wf-place">{wish.name}</span>
+          <span className="wf-note">{wish.note ?? ''}</span>
+          <span className="wf-date">青蛙寄于 {formattedDay(wish.createdAt)}</span>
+          <span className="wf-coords">
+            {wish.lat.toFixed(4)}, {wish.lng.toFixed(4)}
           </span>
-        ) : null}
-        <span className="wf-note">{wish.note ?? ''}</span>
-        <span className="wf-date">青蛙寄于 {formattedDay(wish.createdAt)}</span>
-        <span className="wf-coords">
-          {wish.lat.toFixed(4)}, {wish.lng.toFixed(4)}
+          {step ? (
+            <span className="wf-actions" onClick={(event) => event.stopPropagation()}>
+              <button type="button" className="primary" onClick={() => onAdvance(step.status)}>
+                {step.label}
+              </button>
+            </span>
+          ) : null}
         </span>
-        <span className="pc-ring" />
-        {wish.status === 'stamped' || wish.status === 'fulfilled' ? <span className="pc-stamp" /> : null}
-        {step ? (
-          <div className="wf-actions" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="primary" onClick={() => onAdvance(step.status)}>
-              {step.label}
-            </button>
-          </div>
-        ) : null}
+        {wish.status === 'stamped' || wish.status === 'fulfilled' ? <span className="pc-stamp" aria-hidden="true" /> : null}
       </div>
     </div>
   );

@@ -202,6 +202,13 @@
   --postcard-paper: #FAF3E4;
   --postcard-ink: #4A3B2A;
   --postcard-stamp: #A8573F;
+  /* 青蛙形象规范：身体 / 腹部 / 围巾 / 眼线 */
+  --frog-body: #B3BB97;
+  --frog-belly: #F3E4C3;
+  --frog-scarf: #376445;
+  --frog-scarf-deep: #2A5236;
+  --frog-eye: #706537;
+  --frog-pupil: #24301C;
   --wall-veil: rgba(24, 18, 12, .28);
   --wall-drawer: #FBF8F2;
   --wall-drawer-border: rgba(92, 70, 48, .18);

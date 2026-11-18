@@ -1,10 +1,14 @@
+import { FrogGlyph } from './frogSkin';
+
 export function TopBar({
+  pending = false,
   onImport,
   onDrawer,
   onSearch,
   onTheme,
   onSettings,
 }: {
+  readonly pending?: boolean;
   readonly onImport: () => void;
   readonly onDrawer: () => void;
   readonly onSearch: () => void;
@@ -43,7 +47,7 @@ export function TopBar({
             <path d="M3 8h14M8 8v8" />
           </svg>
           <span>整理</span>
-          <i className="dot" aria-label="有待处理" />
+          {pending ? <i className="dot" aria-label="有待处理" /> : null}
         </button>
         <button className="tbtn" type="button" onClick={onSearch}>
           <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
@@ -149,17 +153,7 @@ export function EmptyCard({ onImport, onDemo }: { readonly onImport: () => void;
       <span className="tape tape-l" aria-hidden="true" />
       <span className="tape tape-r" aria-hidden="true" />
       <div className="empty-frog" aria-hidden="true">
-        <svg viewBox="0 0 64 56" width="78" height="68">
-          <ellipse cx="32" cy="49" rx="19" ry="4" fill="rgba(60,40,20,.18)" />
-          <path d="M9 36c0-9.4 10.3-17 23-17s23 7.6 23 17-10.3 14-23 14S9 45.4 9 36z" fill="#6FA977" />
-          <circle cx="22" cy="19" r="6.4" fill="#6FA977" />
-          <circle cx="42" cy="19" r="6.4" fill="#6FA977" />
-          <circle cx="22" cy="19" r="2.6" fill="#20301F" />
-          <circle cx="42" cy="19" r="2.6" fill="#20301F" />
-          <path d="M24 33c2.6 2.4 13.4 2.4 16 0" stroke="#2C4A2E" strokeWidth="2" fill="none" strokeLinecap="round" />
-          <path d="M14 47 10 52M50 47l4 5" stroke="#2C4A2E" strokeWidth="3" strokeLinecap="round" />
-          <path d="M45 8c4-1 7 1 7 1s-2 5-6 5" fill="#D9902A" opacity=".9" />
-        </svg>
+        <FrogGlyph pose="front" />
       </div>
       <h1>从照片开始</h1>
       <p>把手机里的一叠旅行照片拖进来。照片只在本机解析，位置和一句话记忆都留在这面墙上。</p>

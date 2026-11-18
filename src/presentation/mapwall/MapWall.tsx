@@ -40,6 +40,7 @@ import type { MapViewState } from '../../domain/home/map-view';
 import { SettingsPanel, type ThemeChoice } from './SettingsPanel';
 import { SearchPanel, type SearchItem } from './SearchPanel';
 import type { PlacedPostcard } from './Postcard';
+import { COURIER_MS, courierCurve, prefersReducedMotion } from './courier';
 
 type Mode = 'world' | 'city' | 'region';
 type Level = 'world' | 'country' | 'city' | 'region';
@@ -256,11 +257,19 @@ export function MapWall() {
   const [dropping, setDropping] = useState<ReadonlySet<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
   const [specialtyFocus, setSpecialtyFocus] = useState<SpecialtyAward | null>(null);
+  const [courier, setCourier] = useState<{ id: string; d: string } | null>(null);
+  const [frogHop, setFrogHop] = useState(false);
+  const [sendWishId, setSendWishId] = useState<string | null>(null);
+  const [freshWishes, setFreshWishes] = useState<ReadonlySet<string>>(() => new Set());
 
   const toastTimer = useRef<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
   const linkedTimer = useRef<number | null>(null);
   const deliveryTimers = useRef<number[]>([]);
+  const courierTimer = useRef<number | null>(null);
+  const hopTimer = useRef<number | null>(null);
+  const sendStarted = useRef<string | null>(null);
+  const frogPosRef = useRef<{ x: number; y: number } | null>(null);
   const entrustBusy = useRef<Set<string>>(new Set());
   const poiScrollRef = useRef<HTMLDivElement>(null);
   const savedView = useRef<MapViewState | null>(null);
@@ -272,6 +281,14 @@ export function MapWall() {
     setToastMessage(message);
     if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToastMessage(null), 2600);
+  }, []);
+
+  const dismissToast = useCallback(() => {
+    setToastMessage(null);
+    if (toastTimer.current !== null) {
+      window.clearTimeout(toastTimer.current);
+      toastTimer.current = null;
+    }
   }, []);
 
   const guard = useCallback(
@@ -395,6 +412,8 @@ export function MapWall() {
       if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current);
       if (linkedTimer.current !== null) window.clearTimeout(linkedTimer.current);
       for (const timer of deliveryTimers.current) window.clearTimeout(timer);
+      if (courierTimer.current !== null) window.clearTimeout(courierTimer.current);
+      if (hopTimer.current !== null) window.clearTimeout(hopTimer.current);
     },
     [],
   );
@@ -559,6 +578,37 @@ export function MapWall() {
     return placeFrog({ anchor, piles, photoPoints, level, mode, metrics });
   }, [model, replayPoints, replay, mode, effectiveCityKey, activeTrip, camera, metrics, piles, photoPoints, level]);
 
+  useEffect(() => {
+    frogPosRef.current = frogPos;
+  }, [frogPos]);
+
+  const finishCourier = useCallback(() => {
+    if (courierTimer.current !== null) {
+      window.clearTimeout(courierTimer.current);
+      courierTimer.current = null;
+    }
+    setCourier(null);
+    setSendWishId(null);
+    setFrogMode('rest');
+    if (prefersReducedMotion()) return;
+    setFrogHop(true);
+    if (hopTimer.current !== null) window.clearTimeout(hopTimer.current);
+    hopTimer.current = window.setTimeout(() => setFrogHop(false), 520);
+  }, []);
+
+  const playCourier = useCallback(
+    (id: string, d: string) => {
+      if (prefersReducedMotion()) {
+        setFrogMode('rest');
+        return;
+      }
+      if (courierTimer.current !== null) window.clearTimeout(courierTimer.current);
+      setCourier({ id, d });
+      courierTimer.current = window.setTimeout(() => finishCourier(), COURIER_MS);
+    },
+    [finishCourier],
+  );
+
   const wishPlacement = useMemo(() => {
     const cards: Array<{ wish: WallWish; cx: number; cy: number; width: number; height: number }> = [];
     const rects: Rect[] = [];
@@ -673,11 +723,12 @@ export function MapWall() {
         arriving,
         dropping: dropping.has(card.wish.id),
         flipping: wishFocus?.wishId === card.wish.id,
+        fresh: freshWishes.has(card.wish.id),
         flyX: from.x - card.cx,
         flyY: from.y - card.cy,
       };
     });
-  }, [wishPlacement.cards, frogPos, metrics, now, flew, dropping, wishFocus]);
+  }, [wishPlacement.cards, frogPos, metrics, now, flew, dropping, wishFocus, freshWishes]);
 
   const arrivingKey = postcards
     .filter((card) => card.arriving)
@@ -696,6 +747,14 @@ export function MapWall() {
     }, ARRIVAL_MS);
     return () => window.clearTimeout(timer);
   }, [arrivingKey]);
+
+  useEffect(() => {
+    if (!sendWishId || sendStarted.current === sendWishId) return;
+    const card = postcards.find((item) => item.wish.id === sendWishId);
+    if (!card || !frogPos) return;
+    sendStarted.current = sendWishId;
+    playCourier(`send-${sendWishId}`, courierCurve(frogPos, { x: card.cx, y: card.cy }));
+  }, [sendWishId, postcards, frogPos, playCourier]);
 
   const groups = useMemo(() => groupPoiRows(model), [model]);
   const totalPoi = poiTotal(groups);
@@ -784,11 +843,12 @@ export function MapWall() {
   }, []);
 
   const openMemory = useCallback((tripId: string) => {
+    dismissToast();
     setMemoryTripId(tripId);
     setWishFocus(null);
     setSettingsOpen(false);
     setSearchOpen(false);
-  }, []);
+  }, [dismissToast]);
 
   const toggleFan = useCallback(
     (pile: PilePlacement) => {
@@ -872,6 +932,11 @@ export function MapWall() {
           return next;
         });
       }, 700);
+      if (status === 'stamped') {
+        const center = wishPlacement.centers.get(wishId);
+        const frog = frogPosRef.current;
+        if (center && frog) playCourier(`stamp-${wishId}`, courierCurve({ x: center.cx, y: center.cy }, frog));
+      }
       void guard(async () => {
         await service.setWishStatus(wishId, status);
         setHighlightWish(wishId);
@@ -880,7 +945,7 @@ export function MapWall() {
         notify(`${WISH_STEP_LABELS[status]} · ${wish?.name ?? '这张明信片'}`);
       });
     },
-    [guard, model, notify, service],
+    [guard, model, notify, playCourier, service, wishPlacement.centers],
   );
 
   const handleWishClick = useCallback(
@@ -912,7 +977,11 @@ export function MapWall() {
         const tail = NOTE_TAILS[Math.floor(Math.random() * NOTE_TAILS.length)] ?? NOTE_TAILS[0];
         void guard(async () => {
           await service.deliverWish(wishId, { note: `替你在${destination.name}走了一圈，${tail}`, from: origin });
-          setFrogMode('rest');
+          if (prefersReducedMotion()) setFrogMode('rest');
+          else {
+            setFrogMode('postcard');
+            setSendWishId(wishId);
+          }
           if (hints) setBubbleText(`明信片寄到了 · ${destination.name}`);
           setHighlightWish(wishId);
           if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current);
@@ -941,6 +1010,14 @@ export function MapWall() {
         setFrogMode('postcard');
         if (hints) setBubbleText(`去 ${destination.name} 的路上 · 等它寄回来`);
         notify(`已托付 · ${destination.name} · 等青蛙路过`);
+        setFreshWishes((previous) => new Set(previous).add(wishId));
+        window.setTimeout(() => {
+          setFreshWishes((previous) => {
+            const next = new Set(previous);
+            next.delete(wishId);
+            return next;
+          });
+        }, 700);
         deliver(wishId, destination);
       }).finally(() => {
         entrustBusy.current.delete(destination.key);
@@ -1208,6 +1285,10 @@ export function MapWall() {
         return;
       }
       if (event.key === 'Escape') {
+        if (courier) {
+          finishCourier();
+          return;
+        }
         if (wishFocus) setWishFocus(null);
         else if (specialtyFocus) setSpecialtyFocus(null);
         else if (scene === 'home') returnToMap();
@@ -1232,6 +1313,8 @@ export function MapWall() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
+    courier,
+    finishCourier,
     wishFocus,
     specialtyFocus,
     scene,
@@ -1302,7 +1385,9 @@ export function MapWall() {
         labels={labels}
         postcards={postcards}
         wishLinks={wishPlacement.links}
-        frog={frogPos ? { x: frogPos.x, y: frogPos.y, mode: replay ? 'rest' : frogMode, charmCount } : null}
+        frog={frogPos ? { x: frogPos.x, y: frogPos.y, mode: replay ? 'rest' : frogMode, charmCount, hop: frogHop } : null}
+        courier={courier}
+        onSkipCourier={finishCourier}
         frogActions={frogActions}
         bubble={bubble}
         destTags={destinations}
@@ -1335,6 +1420,11 @@ export function MapWall() {
       )}
 
       <TopBar
+        pending={
+          snapshot.candidates.some((candidate) => candidate.status === 'pending') ||
+          snapshot.batches.some((batch) => batch.status === 'failed' || batch.status === 'importing') ||
+          snapshot.issues.some((issue) => issue.severity === 'error')
+        }
         onImport={() => {
           setDrawerTab('import');
           setDrawerOpen(true);

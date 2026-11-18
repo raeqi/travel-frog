@@ -3,6 +3,7 @@ import type { DestinationCandidate } from './candidates';
 import { CityLayer, RegionLayer, WorldLayer } from './layers';
 import type { LabelPlacement, PilePlacement, Rect } from './layout';
 import { FrogActions, FrogBubble, FrogNode, type FrogAction, type FrogMode } from './Frog';
+import { CourierFlight } from './CourierFlight';
 import { PostcardNode, type PlacedPostcard } from './Postcard';
 import type { WallPhoto, WallWish } from './model';
 import type { BubblePlacement } from './layout';
@@ -40,7 +41,9 @@ export interface MapBoardProps {
   readonly labels: readonly LabelPlacement[];
   readonly postcards: readonly PlacedPostcard[];
   readonly wishLinks: readonly string[];
-  readonly frog: { readonly x: number; readonly y: number; readonly mode: FrogMode; readonly charmCount: number } | null;
+  readonly frog: { readonly x: number; readonly y: number; readonly mode: FrogMode; readonly charmCount: number; readonly hop: boolean } | null;
+  readonly courier: { readonly id: string; readonly d: string } | null;
+  readonly onSkipCourier: () => void;
   readonly frogActions: { readonly x: number; readonly y: number; readonly below: boolean } | null;
   readonly bubble: { readonly placement: BubblePlacement; readonly text: string } | null;
   readonly destTags: readonly DestTagPlacement[];
@@ -240,12 +243,15 @@ export function MapBoard(props: MapBoardProps) {
     onDestTag,
     onHouseClick,
     onBackgroundClick,
+    courier,
+    onSkipCourier,
   } = props;
 
   return (
     <div className="frame">
       <div className="board" ref={boardRef} onClick={onBackgroundClick}>
         <div className="map-sheet" id="mapSheet" ref={sheetRef}>
+          {destHint ? <div className="entrust-veil" aria-hidden="true" /> : null}
           <WorldLayer viewBox={viewBox} visitedCountries={visitedCountries} />
           <CityLayer viewBox={viewBox} />
           <RegionLayer viewBox={viewBox} />
@@ -349,11 +355,16 @@ export function MapBoard(props: MapBoardProps) {
         </div>
 
         <div className="frog-layer" id="frogLayer">
-          {frog ? <FrogNode x={frog.x} y={frog.y} mode={frog.mode} charmCount={frog.charmCount} onClick={onFrogClick} /> : null}
+          {frog ? (
+            <FrogNode x={frog.x} y={frog.y} mode={frog.mode} charmCount={frog.charmCount} hop={frog.hop} onClick={onFrogClick} />
+          ) : null}
           {bubble ? <FrogBubble placement={bubble.placement} text={bubble.text} onDismiss={onBubbleDismiss} /> : null}
         </div>
 
         {frogActions ? <FrogActions x={frogActions.x} y={frogActions.y} below={frogActions.below} onAction={onFrogAction} /> : null}
+        {courier && viewWidth > 0 ? (
+          <CourierFlight id={courier.id} d={courier.d} boardWidth={viewWidth} boardHeight={viewHeight} onSkip={onSkipCourier} />
+        ) : null}
         {destHint ? <div className="entrust-hint">选一个没去过的地方 · 青蛙下次路过时替你寄一张</div> : null}
       </div>
     </div>
