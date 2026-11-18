@@ -6,8 +6,9 @@ import { FrogActions, FrogBubble, FrogNode, type FrogAction, type FrogMode } fro
 import { PostcardNode, type PlacedPostcard } from './Postcard';
 import type { WallPhoto, WallWish } from './model';
 import type { BubblePlacement } from './layout';
-import { tiltFor, type Camera, type Metrics } from './geometry';
+import { tiltFor, projectWorld, projectCity, projectRegion, type Camera, type Metrics } from './geometry';
 import { useMapGestures, maxMapZoom } from './map-gestures';
+import { RealPlaces } from './RealPlaces';
 
 export interface CityPhotoMarker {
   readonly photo: WallPhoto;
@@ -213,6 +214,7 @@ function FanCards({
 
 export function MapBoard(props: MapBoardProps) {
   useMapGestures(props.boardRef, props.camera, props.metrics, maxMapZoom(props.mode), props.onCamera);
+  const project = props.mode === 'city' ? projectCity : props.mode === 'region' ? projectRegion : projectWorld;
   const {
     boardRef,
     sheetRef,
@@ -359,6 +361,7 @@ export function MapBoard(props: MapBoardProps) {
         </div>
 
         {frogActions ? <FrogActions x={frogActions.x} y={frogActions.y} below={frogActions.below} onAction={onFrogAction} /> : null}
+        <RealPlaces camera={props.camera} metrics={props.metrics} mode={props.mode} project={project} />
         {props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
         {destHint ? <div className="entrust-hint">给下一趟留个方向 · 蛙蛙也会自己安排旅行</div> : null}
       </div>

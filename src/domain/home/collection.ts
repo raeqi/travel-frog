@@ -25,6 +25,16 @@ export interface CityVisitEvidence {
 }
 
 const CATALOG: Readonly<Record<string, readonly string[]>> = {
+  'CHN:哈尔滨': ['冰花玻璃杯'],
+  'CHN:青岛': ['海边贝壳'],
+  'CHN:成都': ['竹编茶垫'],
+  'CHN:重庆': ['山城旅行牌'],
+  'CHN:上海': ['城市线描书签'],
+  'CHN:杭州': ['湖畔折扇'],
+  'JPN:大阪': ['街巷旅行牌'],
+  'JPN:宇治': ['茶碗'],
+  'NOR:卑尔根': ['峡湾帆船'],
+  'GRC:圣托里尼': ['蓝顶陶屋'],
   'JPN:京都': ['折扇', '京菓子'],
   'PRT:里斯本': ['瓷砖片', '法朵唱片'],
   'TUR:伊斯坦布尔': ['香料袋', '邪眼挂饰'],
@@ -61,7 +71,7 @@ export function specialtiesForCity(city: CityRef): readonly Specialty[] {
       name,
     }));
   }
-  const fallback = `${city.name}小物`;
+  const fallback = `${city.name}旅行牌`;
   return [{ id: specialtyId(city.key, fallback, 0), cityKey: city.key, name: fallback }];
 }
 

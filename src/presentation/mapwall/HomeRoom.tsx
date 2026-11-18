@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { lazy, Suspense, useState, type CSSProperties } from "react";
 import type { HomeState } from "../../domain/home/home";
 import {
   curioSlots,
@@ -18,6 +18,8 @@ import { FrogPerchFigure } from "./Frog";
 import { FROG_POSE_LABELS } from "./frog-poses";
 import { ROOM_FLOOR } from "./room-navigation";
 import { useRoomFrog } from "./useRoomFrog";
+
+const SpatialRoom = lazy(() => import("./SpatialRoom"));
 
 export interface HomePostcard {
   readonly id: string;
@@ -48,13 +50,18 @@ function souvenirIndex(name: string, slot: number): number {
   if (/小铜佛|佛/.test(name)) return 5;
   if (/布|毯/.test(name)) return 6;
   if (/瓷|碗/.test(name)) return 7;
+  if (/旅行牌|票根|贝壳/.test(name)) return 8;
   return [7, 4, 7, 6][slot % 4] ?? 7;
 }
 
 const MOVEMENT_HINTS = {
-  idle: '点空地走走 · 点椅子坐下', seated: '点空地走走 · 点椅子坐下',
-  rise: '先从椅子上起来…', 'jump-down': '从椅子上跳下来…',
-  walk: '蛙蛙走过去…', 'jump-up': '跳回椅子上…', sit: '在椅子上坐好…',
+  idle: "点空地走走 · 点椅子坐下",
+  seated: "点空地走走 · 点椅子坐下",
+  rise: "先从椅子上起来…",
+  "jump-down": "从椅子上跳下来…",
+  walk: "蛙蛙走过去…",
+  "jump-up": "跳回椅子上…",
+  sit: "在椅子上坐好…",
 };
 
 /** The painted room is scenery; every card, photo and frog is a live archive object. */
@@ -71,27 +78,42 @@ export function HomeRoom({
   away = false,
   onTravel,
 }: HomeRoomProps) {
+  const [spatial, setSpatial] = useState(false);
+  const [collection, setCollection] = useState<
+    "postcards" | "souvenirs" | null
+  >(null);
+  const [shelfPage, setShelfPage] = useState(0);
   const [moving, setMoving] = useState(false);
   const [cityName, setCityName] = useState(home.city.name);
   const [luggageOpen, setLuggageOpen] = useState(false);
-  const { actor, target, move, changePose } = useRoomFrog(home.perch, luggage, onPerch);
-  const busy = actor.phase !== 'idle' && actor.phase !== 'seated';
+  const { actor, target, move, changePose } = useRoomFrog(
+    home.perch,
+    luggage,
+    onPerch,
+  );
+  const busy = actor.phase !== "idle" && actor.phase !== "seated";
   const pose = actor.pose;
   const visitDisplay = (display: HomeDisplay) => {
     if (away) return;
-    move({ kind: 'perch', perch: perchForDisplay(display) });
+    move({ kind: "perch", perch: perchForDisplay(display) });
   };
-  const depth = 0.86 + 0.2 * Math.max(0, Math.min(1, (actor.position.y - 70) / 28));
-  const jumping = actor.phase === 'jump-down' || actor.phase === 'jump-up';
+  const depth =
+    0.86 + 0.2 * Math.max(0, Math.min(1, (actor.position.y - 70) / 28));
+  const jumping = actor.phase === "jump-down" || actor.phase === "jump-up";
   const luggageFront = { small: 93.2, standard: 93.2, wardrobe: 95.5 }[luggage];
-  const onChair = actor.phase === 'seated' || actor.phase === 'rise' || actor.phase === 'sit';
+  const onChair =
+    actor.phase === "seated" || actor.phase === "rise" || actor.phase === "sit";
   let layer = 20;
   if (!jumping) {
     if (onChair || actor.position.y < 89) layer = 10;
-    else if (actor.position.x > 77 && actor.position.y < luggageFront) layer = 16;
+    else if (actor.position.x > 77 && actor.position.y < luggageFront)
+      layer = 16;
   }
   const pinned = postcards.filter(
-    (card) => card.status !== "fulfilled" && card.status !== "declined",
+    (card) =>
+      card.status !== "fulfilled" &&
+      card.status !== "declined" &&
+      card.status !== "pending",
   );
   const archived = postcards
     .filter((card) => card.status === "fulfilled")
@@ -112,7 +134,38 @@ export function HomeRoom({
       data-luggage={luggage}
       data-frog-away={away}
     >
-      <div className="home-stage">
+      <button
+        type="button"
+        className="room-view-toggle"
+        onClick={() => setSpatial(!spatial)}
+      >
+        {spatial ? "插画视角" : "环视房间 · 预览"}
+      </button>
+      {spatial && (
+        <Suspense fallback={<p className="space-hint">正在打开房间…</p>}>
+          <SpatialRoom
+            actor={actor}
+            furniture={furniture}
+            luggage={luggage}
+            postcards={postcards}
+            specialties={home.specialties}
+            city={home.city.name}
+            away={away}
+            onTravel={onTravel}
+            onMove={(command) => {
+              if (!away) move(command);
+            }}
+            onPose={() => {
+              if (!away) changePose();
+            }}
+            onMap={onMap}
+            onPostcard={onPostcard}
+            onSpecialty={onSpecialty}
+            onCollection={setCollection}
+          />
+        </Suspense>
+      )}
+      <div className="home-stage" hidden={spatial}>
         <div className="home-scene" aria-hidden="true" />
         <div className="home-vignette" aria-hidden="true" />
         <button
@@ -120,23 +173,61 @@ export function HomeRoom({
           disabled={away}
           type="button"
           aria-label="房间地板 · 点击走动，方向键移动"
-          style={{ clipPath: `polygon(${ROOM_FLOOR.map(point => `${point.x}% ${point.y}%`).join(',')})` }}
+          style={{
+            clipPath: `polygon(${ROOM_FLOOR.map((point) => `${point.x}% ${point.y}%`).join(",")})`,
+          }}
           onClick={(event) => {
-            if (!event.detail) { move({ kind: 'floor', point: { x: 50, y: 97 } }); return; }
+            if (!event.detail) {
+              move({ kind: "floor", point: { x: 50, y: 97 } });
+              return;
+            }
             const rect = event.currentTarget.getBoundingClientRect();
-            move({ kind: 'floor', point: { x: (event.clientX - rect.left) / rect.width * 100, y: (event.clientY - rect.top) / rect.height * 100 } });
+            move({
+              kind: "floor",
+              point: {
+                x: ((event.clientX - rect.left) / rect.width) * 100,
+                y: ((event.clientY - rect.top) / rect.height) * 100,
+              },
+            });
           }}
           onKeyDown={(event) => {
-            const directions: Record<string, readonly [number, number]> = { ArrowLeft: [-6, 0], ArrowRight: [6, 0], ArrowUp: [0, -6], ArrowDown: [0, 6] };
-            const delta = directions[event.key]; if (!delta) return;
+            const directions: Record<string, readonly [number, number]> = {
+              ArrowLeft: [-6, 0],
+              ArrowRight: [6, 0],
+              ArrowUp: [0, -6],
+              ArrowDown: [0, 6],
+            };
+            const delta = directions[event.key];
+            if (!delta) return;
             event.preventDefault();
-            move({ kind: 'floor', point: { x: actor.position.x + delta[0], y: actor.position.y + delta[1] } });
+            move({
+              kind: "floor",
+              point: {
+                x: actor.position.x + delta[0],
+                y: actor.position.y + delta[1],
+              },
+            });
           }}
         />
-        <div className="home-scene room-occluder room-table-occluder" aria-hidden="true" />
-        <div className="home-scene room-occluder room-chair-arm-occluder" aria-hidden="true" />
-        <div className="home-scene room-occluder room-table-legs-occluder" aria-hidden="true" />
-        {target && <span className="frog-destination" style={{ left: `${target.x}%`, top: `${target.y}%` }} aria-hidden="true" />}
+        <div
+          className="home-scene room-occluder room-table-occluder"
+          aria-hidden="true"
+        />
+        <div
+          className="home-scene room-occluder room-chair-arm-occluder"
+          aria-hidden="true"
+        />
+        <div
+          className="home-scene room-occluder room-table-legs-occluder"
+          aria-hidden="true"
+        />
+        {target && (
+          <span
+            className="frog-destination"
+            style={{ left: `${target.x}%`, top: `${target.y}%` }}
+            aria-hidden="true"
+          />
+        )}
         <header className="home-bar">
           <button type="button" className="home-back" onClick={onMap}>
             ← 回到地图
@@ -184,7 +275,7 @@ export function HomeRoom({
           disabled={away}
           type="button"
           aria-label="扶手椅"
-          onClick={() => move({ kind: 'perch', perch: 'armchair' })}
+          onClick={() => move({ kind: "perch", perch: "armchair" })}
         />
         <button
           className="room-hotspot room-lamp"
@@ -267,12 +358,19 @@ export function HomeRoom({
           aria-label="多宝阁"
           onClick={() => visitDisplay("curio")}
         >
-          {curioSlots(home.specialties).map((slot) =>
+          {curioSlots(
+            home.specialties.slice(shelfPage * 8, shelfPage * 8 + 8),
+          ).map((slot) =>
             slot.specialty ? (
               <button
                 className={`room-souvenir souvenir-${souvenirIndex(slot.specialty.name, slot.index)}`}
                 key={slot.index}
-                style={{ "--shelf-col": slot.index % 2, "--shelf-row": Math.floor(slot.index / 2) } as CSSProperties}
+                style={
+                  {
+                    "--shelf-col": slot.index % 2,
+                    "--shelf-row": Math.floor(slot.index / 2),
+                  } as CSSProperties
+                }
                 type="button"
                 aria-label={`${slot.specialty.name} · 来自${slot.specialty.cityKey}`}
                 title={slot.specialty.name}
@@ -302,27 +400,156 @@ export function HomeRoom({
         >
           <span className="luggage-art" />
         </button>
-        {!away && <button
-          className="home-frog room-actor"
-          data-pose={pose}
-          data-phase={actor.phase}
-          data-facing={actor.facing}
-          style={{
-            left: `${actor.position.x}%`, top: `${actor.position.y}%`, width: `${14.5 * depth}%`, zIndex: layer,
-            '--jump-height': `${actor.jump * 9 / 16}cqw`, '--frog-facing': actor.facing === 'left' ? -1 : 1,
-            '--shadow-scale': 1 - actor.jump / 5.5 * 0.55,
-            '--squash-y': actor.phase === 'rise' || actor.phase === 'sit' ? 0.9 + actor.progress * 0.1 : 1,
-          } as CSSProperties}
-          type="button"
-          aria-label={busy ? '青蛙正在移动' : `青蛙在${actor.perch ? PERCH_LABELS[actor.perch] : '房间里'} · ${FROG_POSE_LABELS[pose]} · 点击换姿态`}
-          aria-busy={busy}
-          onClick={changePose}
-        >
-          <span className="frog-elevation"><span className="frog-gait"><FrogPerchFigure perch={actor.perch ?? 'fireplace-rug'} pose={pose} locationLabel={actor.perch ? PERCH_LABELS[actor.perch] : '房间里'} /></span></span>
-        </button>}
-        {away && <button type="button" className="room-away-note" onClick={onTravel}>蛙蛙自己出门旅行了 · 看看它的行程</button>}
-        <p className="room-walk-hint" role="status" aria-live="polite">{away ? '家里的位置留着，等蛙蛙回来' : MOVEMENT_HINTS[actor.phase]}</p>
+        {!away && (
+          <button
+            className="home-frog room-actor"
+            data-pose={pose}
+            data-phase={actor.phase}
+            data-facing={actor.facing}
+            style={
+              {
+                left: `${actor.position.x}%`,
+                top: `${actor.position.y}%`,
+                width: `${14.5 * depth}%`,
+                zIndex: layer,
+                "--jump-height": `${(actor.jump * 9) / 16}cqw`,
+                "--frog-facing": actor.facing === "left" ? -1 : 1,
+                "--shadow-scale": 1 - (actor.jump / 5.5) * 0.55,
+                "--squash-y":
+                  actor.phase === "rise" || actor.phase === "sit"
+                    ? 0.9 + actor.progress * 0.1
+                    : 1,
+              } as CSSProperties
+            }
+            type="button"
+            aria-label={
+              busy
+                ? "青蛙正在移动"
+                : `青蛙在${actor.perch ? PERCH_LABELS[actor.perch] : "房间里"} · ${FROG_POSE_LABELS[pose]} · 点击换姿态`
+            }
+            aria-busy={busy}
+            onClick={changePose}
+          >
+            <span className="frog-elevation">
+              <span className="frog-gait">
+                <FrogPerchFigure
+                  perch={actor.perch ?? "fireplace-rug"}
+                  pose={pose}
+                  locationLabel={
+                    actor.perch ? PERCH_LABELS[actor.perch] : "房间里"
+                  }
+                />
+              </span>
+            </span>
+          </button>
+        )}
+        {away && (
+          <button type="button" className="room-away-note" onClick={onTravel}>
+            蛙蛙自己出门旅行了 · 看看它的行程
+          </button>
+        )}
+        <nav className="room-archive-links" aria-label="家中的收藏">
+          <button type="button" onClick={() => setCollection("postcards")}>
+            墙上来信
+          </button>
+          <button type="button" onClick={() => setCollection("souvenirs")}>
+            旅行纪念品
+          </button>
+          {home.specialties.length > 8 && (
+            <button
+              type="button"
+              onClick={() =>
+                setShelfPage(
+                  (shelfPage + 1) % Math.ceil(home.specialties.length / 8),
+                )
+              }
+            >
+              换一层陈列 · {shelfPage + 1}/
+              {Math.ceil(home.specialties.length / 8)}
+            </button>
+          )}
+        </nav>
+        <p className="room-walk-hint" role="status" aria-live="polite">
+          {away ? "家里的位置留着，等蛙蛙回来" : MOVEMENT_HINTS[actor.phase]}
+        </p>
       </div>
+      {collection && (
+        <div
+          className="room-collection"
+          role="dialog"
+          aria-modal="true"
+          aria-label={
+            collection === "postcards" ? "全部墙上来信" : "全部旅行纪念品"
+          }
+          onClick={() => setCollection(null)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setCollection(null);
+            }
+          }}
+        >
+          <section onClick={(e) => e.stopPropagation()}>
+            <header>
+              <h2>{collection === "postcards" ? "墙上来信" : "旅行纪念品"}</h2>
+              <button
+                autoFocus
+                type="button"
+                aria-label="收起收藏"
+                onClick={() => setCollection(null)}
+              >
+                ×
+              </button>
+            </header>
+            <p>
+              {collection === "postcards"
+                ? "蛙蛙寄来的每一张，都在这里。"
+                : "每件纪念品，都连着一段走过的旅行。"}
+            </p>
+            <div className="room-collection-grid">
+              {collection === "postcards"
+                ? postcards
+                    .filter((c) => !["pending", "declined"].includes(c.status))
+                    .map((card) => (
+                      <button
+                        type="button"
+                        key={card.id}
+                        onClick={() => {
+                          setCollection(null);
+                          onPostcard(card.id);
+                        }}
+                      >
+                        <span className="collection-letter">✉</span>
+                        <strong>{card.name}</strong>
+                        <span>
+                          {wishStatusLabel(card.status)} · {card.year}
+                        </span>
+                      </button>
+                    ))
+                : home.specialties.map((award) => (
+                    <button
+                      type="button"
+                      key={award.specialtyId}
+                      onClick={() => {
+                        setCollection(null);
+                        onSpecialty(award);
+                      }}
+                    >
+                      <strong>{award.name}</strong>
+                      <span>{award.cityKey.split(":").slice(1).join(":")}</span>
+                    </button>
+                  ))}
+            </div>
+            {(collection === "postcards"
+              ? postcards.filter(
+                  (c) => !["pending", "declined"].includes(c.status),
+                ).length
+              : home.specialties.length) === 0 && (
+              <p>这里还空着。想起一段旅行时，再回来看看。</p>
+            )}
+          </section>
+        </div>
+      )}
       {luggageOpen && (
         <div
           className="luggage-focus"
