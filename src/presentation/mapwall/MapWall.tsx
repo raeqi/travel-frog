@@ -776,17 +776,6 @@ export function MapWall() {
         })),
     [model.wishes],
   );
-  const homeMapPhotos = useMemo(() => {
-    const trip = model.trips[0];
-    if (!trip) return [];
-    const photos: Array<{ id: string; image: string }> = [];
-    for (const photoId of trip.photoIds) {
-      if (photos.length >= 4) break;
-      const photo = model.photoById.get(photoId);
-      if (photo) photos.push({ id: photo.id, image: imageFor(photo) });
-    }
-    return photos;
-  }, [model, imageFor]);
 
   const searchItems = useMemo<SearchItem[]>(() => {
     const items: SearchItem[] = [];
@@ -1356,7 +1345,6 @@ export function MapWall() {
           home={snapshot.home}
           furniture={homeFurniture}
           luggage={homeLuggage}
-          mapPhotos={homeMapPhotos}
           postcards={homePostcards}
           onFrog={() => moveFrogTo(nextPerch(snapshot.home.perch))}
           onPerch={moveFrogTo}

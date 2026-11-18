@@ -1,4 +1,6 @@
 import { useState, type CSSProperties } from 'react';
+import { fnv1a } from './geometry';
+import { paletteFor, scene } from './photoArt';
 import type { HomeState } from '../../domain/home/home';
 import {
   LUGGAGE_LABELS,
@@ -23,7 +25,6 @@ export interface HomeRoomProps {
   readonly home: HomeState;
   readonly furniture: FurnitureState;
   readonly luggage: LuggageTier;
-  readonly mapPhotos: readonly { readonly id: string; readonly image: string }[];
   readonly postcards: readonly HomePostcard[];
   readonly onFrog: () => void;
   readonly onPerch: (perch: FrogPerch) => void;
@@ -43,7 +44,6 @@ export function HomeRoom({
   home,
   furniture,
   luggage,
-  mapPhotos,
   postcards,
   onFrog,
   onPerch,
@@ -145,19 +145,6 @@ export function HomeRoom({
         title="展开地图"
         onClick={onMap}
       >
-        <span className="home-map-sheet" aria-hidden="true">
-          {mapPhotos.slice(0, 4).map((photo, index) => (
-            <span
-              key={photo.id}
-              className={`home-map-photo p${index}`}
-              style={{ backgroundImage: `url("${photo.image}")` }}
-              aria-hidden="true"
-            />
-          ))}
-          {['p1', 'p2', 'p3', 'p4'].map((pin) => (
-            <i key={pin} className={`home-pin ${pin}`} aria-hidden="true" />
-          ))}
-        </span>
       </button>
 
       <div
@@ -182,8 +169,12 @@ export function HomeRoom({
               onPostcard(card.id);
             }}
           >
-            <span className="home-postcard-clip" aria-hidden="true" />
-            {card.status === 'stamped' ? <span className="home-postcard-stamp" aria-hidden="true" /> : null}
+            <span className="home-postcard-pin" aria-hidden="true" />
+            <span
+              className="home-postcard-photo"
+              style={{ backgroundImage: `url("${scene(fnv1a(card.id), paletteFor(fnv1a(card.id)))}")` }}
+              aria-hidden="true"
+            />
           </button>
         ))}
         {archived.length > 0 ? (
@@ -200,7 +191,13 @@ export function HomeRoom({
                   event.stopPropagation();
                   onPostcard(card.id);
                 }}
-              />
+              >
+                <span
+                  className="home-postcard-photo"
+                  style={{ backgroundImage: `url("${scene(fnv1a(card.id), paletteFor(fnv1a(card.id)))}")` }}
+                  aria-hidden="true"
+                />
+              </button>
             ))}
           </div>
         ) : null}
