@@ -360,7 +360,7 @@ export function MapBoard(props: MapBoardProps) {
 
         {frogActions ? <FrogActions x={frogActions.x} y={frogActions.y} below={frogActions.below} onAction={onFrogAction} /> : null}
         {props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
-        {destHint ? <div className="entrust-hint">选一个没去过的地方 · 青蛙下次路过时替你寄一张</div> : null}
+        {destHint ? <div className="entrust-hint">给下一趟留个方向 · 蛙蛙也会自己安排旅行</div> : null}
       </div>
     </div>
   );

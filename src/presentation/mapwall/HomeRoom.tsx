@@ -26,6 +26,8 @@ export interface HomePostcard {
   readonly year: number;
 }
 export interface HomeRoomProps {
+  readonly away?: boolean;
+  readonly onTravel?: () => void;
   readonly home: HomeState;
   readonly furniture: FurnitureState;
   readonly luggage: LuggageTier;
@@ -66,6 +68,8 @@ export function HomeRoom({
   onSpecialty,
   onPostcard,
   onMoveHome,
+  away = false,
+  onTravel,
 }: HomeRoomProps) {
   const [moving, setMoving] = useState(false);
   const [cityName, setCityName] = useState(home.city.name);
@@ -74,6 +78,7 @@ export function HomeRoom({
   const busy = actor.phase !== 'idle' && actor.phase !== 'seated';
   const pose = actor.pose;
   const visitDisplay = (display: HomeDisplay) => {
+    if (away) return;
     move({ kind: 'perch', perch: perchForDisplay(display) });
   };
   const depth = 0.86 + 0.2 * Math.max(0, Math.min(1, (actor.position.y - 70) / 28));
@@ -105,12 +110,14 @@ export function HomeRoom({
       className="home-room"
       data-furniture={furniture.stage}
       data-luggage={luggage}
+      data-frog-away={away}
     >
       <div className="home-stage">
         <div className="home-scene" aria-hidden="true" />
         <div className="home-vignette" aria-hidden="true" />
         <button
           className="room-floor"
+          disabled={away}
           type="button"
           aria-label="房间地板 · 点击走动，方向键移动"
           style={{ clipPath: `polygon(${ROOM_FLOOR.map(point => `${point.x}% ${point.y}%`).join(',')})` }}
@@ -167,24 +174,28 @@ export function HomeRoom({
         </header>
         <button
           className="room-hotspot room-hearth"
+          disabled={away}
           type="button"
           aria-label="壁炉"
           onClick={() => visitDisplay("fireplace")}
         />
         <button
           className="room-hotspot room-chair"
+          disabled={away}
           type="button"
           aria-label="扶手椅"
           onClick={() => move({ kind: 'perch', perch: 'armchair' })}
         />
         <button
           className="room-hotspot room-lamp"
+          disabled={away}
           type="button"
           aria-label="到落地灯旁"
           onClick={() => visitDisplay("lamp")}
         />
         <button
           className="room-hotspot room-curio-frame"
+          disabled={away}
           type="button"
           aria-label="多宝阁架"
           onClick={() => visitDisplay("curio")}
@@ -291,7 +302,7 @@ export function HomeRoom({
         >
           <span className="luggage-art" />
         </button>
-        <button
+        {!away && <button
           className="home-frog room-actor"
           data-pose={pose}
           data-phase={actor.phase}
@@ -308,8 +319,9 @@ export function HomeRoom({
           onClick={changePose}
         >
           <span className="frog-elevation"><span className="frog-gait"><FrogPerchFigure perch={actor.perch ?? 'fireplace-rug'} pose={pose} locationLabel={actor.perch ? PERCH_LABELS[actor.perch] : '房间里'} /></span></span>
-        </button>
-        <p className="room-walk-hint" role="status" aria-live="polite">{MOVEMENT_HINTS[actor.phase]}</p>
+        </button>}
+        {away && <button type="button" className="room-away-note" onClick={onTravel}>蛙蛙自己出门旅行了 · 看看它的行程</button>}
+        <p className="room-walk-hint" role="status" aria-live="polite">{away ? '家里的位置留着，等蛙蛙回来' : MOVEMENT_HINTS[actor.phase]}</p>
       </div>
       {luggageOpen && (
         <div

@@ -1,5 +1,5 @@
 export const DB_NAME = 'travel-frog';
-export const DB_VERSION = 6;
+export const DB_VERSION = 7;
 
 export interface IndexSpec {
   readonly name: string;
@@ -26,6 +26,7 @@ export const STORES = {
   importIssues: 'importIssues',
   settings: 'settings',
   home: 'home',
+  frogTravel: 'frogTravel',
   mapView: 'mapView',
   blobs: 'blobs',
   audit: 'audit',

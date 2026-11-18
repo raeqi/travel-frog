@@ -79,8 +79,8 @@ const ICONS: Record<'replay' | 'entrust' | 'packing', ReactNode> = {
 export type FrogAction = 'replay' | 'entrust' | 'packing';
 
 const ACTION_LABELS: Record<FrogAction, string> = {
-  replay: '回放这趟旅行',
-  entrust: '托付下一趟',
+  replay: '回放我的照片旅程',
+  entrust: '给下一趟留方向',
   packing: '收拾行李',
 };
 

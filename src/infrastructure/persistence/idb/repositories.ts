@@ -3,6 +3,7 @@ import type {
   AuditRepository,
   CandidateRepository,
   HomeRepository,
+  FrogTravelRepository,
   MapViewRepository,
   ImportBatchRepository,
   ImportIssueRepository,
@@ -31,6 +32,8 @@ import { validateMapViewState, type MapViewState } from '../../../domain/home/ma
 import type { ImportBatch, ImportIssue } from '../../../domain/import/import-issue';
 import type { IdbDatabase, WriteBuffer } from './database';
 import { STORES } from './schema';
+import { validFrogTravel, type FrogTravelState } from '../../../domain/frog/journey';
+import { StorageError } from '../errors';
 
 /** Shared read/write plumbing: writes go to the buffer, reads overlay the buffer on IndexedDB rows. */
 abstract class Repo {
@@ -320,6 +323,34 @@ class HomeRepositoryImpl extends Repo implements HomeRepository {
   }
 }
 
+class FrogTravelRepositoryImpl extends Repo implements FrogTravelRepository {
+  async get(): Promise<FrogTravelState | null> {
+    const row = await this.db.get<{
+      key: string;
+      revision: number;
+      state: FrogTravelState;
+    }>(STORES.frogTravel, 'app');
+    if (this.buffer.frogTravelRevision === undefined)
+      this.buffer.frogTravelRevision = row?.revision ?? 0;
+    const buffered = overlay(this.buffer, STORES.frogTravel, 'app', row);
+    if (buffered?.state && !validFrogTravel(buffered.state))
+      throw new StorageError(
+        'STORAGE_FAILED',
+        '蛙蛙旅行记录格式无效，原记录已保留',
+      );
+    return buffered?.state ?? null;
+  }
+  async save(state: FrogTravelState): Promise<void> {
+    if (!validFrogTravel(state))
+      throw new StorageError('STORAGE_FAILED', '蛙蛙旅行记录无效');
+    if (this.buffer.frogTravelRevision === undefined) await this.get();
+    put(this.buffer, STORES.frogTravel, 'app', {
+      key: 'app',
+      revision: this.buffer.frogTravelRevision! + 1,
+      state,
+    });
+  }
+}
 class MapViewRepositoryImpl extends Repo implements MapViewRepository {
 
   async get(): Promise<MapViewState | null> {
@@ -414,6 +445,7 @@ export function createRepositories(db: IdbDatabase, buffer: WriteBuffer): Reposi
     manualVisits: new ManualVisits(db, buffer),
     settings: new SettingsRepositoryImpl(db, buffer),
     home: new HomeRepositoryImpl(db, buffer),
+    frogTravel: new FrogTravelRepositoryImpl(db, buffer),
     mapView: new MapViewRepositoryImpl(db, buffer),
     batches: new Batches(db, buffer),
     issues: new Issues(db, buffer),

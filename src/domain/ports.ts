@@ -22,6 +22,12 @@ import type { Trip } from './trip/trip';
 import type { Visit } from './visit/visit';
 import type { ManualVisit } from './wish/manual-visit';
 import type { Wish } from './wish/wish';
+import type { FrogTravelState } from './frog/journey';
+
+export interface FrogTravelRepository {
+  get(): Promise<FrogTravelState | null>;
+  save(state: FrogTravelState): Promise<void>;
+}
 
 export interface PhotoRepository {
   get(id: PhotoId): Promise<Photo | null>;
@@ -138,6 +144,7 @@ export interface Repositories {
   readonly manualVisits: ManualVisitRepository;
   readonly settings: SettingsRepository;
   readonly home: HomeRepository;
+  readonly frogTravel: FrogTravelRepository;
   readonly mapView: MapViewRepository;
   readonly batches: ImportBatchRepository;
   readonly issues: ImportIssueRepository;

@@ -44,6 +44,9 @@ import type { PlacedPostcard } from './Postcard';
 import { cityCamera } from './city-camera';
 import { boundCamera, maxMapZoom } from './map-gestures';
 import { POSTCARD_DELIVERY_MS } from '../../domain/wish/wish';
+import { EMPTY_FROG_TRAVEL, frogJourneyLocation, journeyAway, journeyPhase } from '../../domain/frog/journey';
+import { useFrogJourney } from './useFrogJourney';
+import { FrogJourneyPanel } from './FrogJourneyPanel';
 
 type Mode = 'world' | 'city' | 'region';
 type Level = 'world' | 'country' | 'city' | 'region';
@@ -216,6 +219,11 @@ const HIGHLIGHT_MS = 1500;
 export function MapWall() {
   const service = useService();
   const snapshot = useArchive();
+  const travel = snapshot.frogTravel ?? EMPTY_FROG_TRAVEL;
+  const { journeyNow,journeyError,reconcile } = useFrogJourney(service,snapshot.frogTravel,snapshot.status==='ready');
+  const [journeyPanelOpen,setJourneyPanelOpen] = useState(false);
+  const travelPhase = journeyPhase(travel.current,journeyNow);
+  const frogAway = journeyAway(travel.current,journeyNow);
   const model = useMemo(() => buildWallModel(snapshot, snapshot.home.city.key), [snapshot]);
   const empty = wallModelIsEmpty(model);
 
@@ -532,12 +540,12 @@ export function MapWall() {
 
   const house = useMemo(() => {
     const marker = snapshot.home.marker;
-    if (!marker || empty || metrics.sheetW <= 0) return null;
+    if (!marker || metrics.sheetW <= 0) return null;
     if (level === 'city' || level === 'region') return null;
     const point = toScreen(projectAt(mode, marker.lat, marker.lng), camera, metrics);
     if (!inBoard(point.x, point.y, metrics, 42)) return null;
     return { x: point.x, y: point.y, name: snapshot.home.city.name };
-  }, [snapshot.home, empty, metrics, mode, camera, level]);
+  }, [snapshot.home, metrics, mode, camera, level]);
 
   const replayPoints = useMemo(() => {
     if (!replay) return [];
@@ -550,8 +558,17 @@ export function MapWall() {
   }, [replay, model, camera, metrics]);
 
   const frogPos = useMemo(() => {
-    if (model.photos.length === 0 || metrics.sheetW <= 0) return null;
+    if (metrics.sheetW <= 0) return null;
     let anchor: { x: number; y: number } | null = replayPoints[replay?.index ?? -1] ?? null;
+    if (!anchor && mode === 'world') {
+      const location = frogJourneyLocation(travel.current,snapshot.home.city,journeyNow);
+      if (location) {
+        const point = toScreen(projectWorld(location.lat,location.lng),camera,metrics);
+        if (!inBoard(point.x,point.y,metrics,48)) return null;
+        anchor = point;
+      }
+    }
+    if (!anchor && mode !== 'world' && !replay) return null;
     if (!anchor && mode === 'city' && effectiveCityKey) {
       const photos = model.photos
         .filter((photo) => photo.cityKey === effectiveCityKey)
@@ -571,7 +588,7 @@ export function MapWall() {
     }
     if (!Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return null;
     return placeFrog({ anchor, piles, photoPoints, level, mode, metrics });
-  }, [model, replayPoints, replay, mode, effectiveCityKey, activeTrip, camera, metrics, piles, photoPoints, level]);
+  }, [model, replayPoints, replay, mode, effectiveCityKey, activeTrip, camera, metrics, piles, photoPoints, level,travel,snapshot.home.city,journeyNow]);
 
   const wishPlacement = useMemo(() => {
     const cards: Array<{ wish: WallWish; cx: number; cy: number; width: number; height: number }> = [];
@@ -659,7 +676,7 @@ export function MapWall() {
   }, [entrusting, metrics, entrustOptions, camera]);
 
   const frogActions = useMemo(() => {
-    if (!frogActionsOpen || !frogPos || model.photos.length === 0) return null;
+    if (!frogActionsOpen || !frogPos) return null;
     const obstacles: Rect[] = piles.map((pile) => ({ x: pile.sx - 40, y: pile.sy - 38, w: 80, h: 76 }));
     if (mode === 'city') {
       for (const point of photoPoints) obstacles.push({ x: point.x - 26, y: point.y - 25, w: 52, h: 50 });
@@ -670,7 +687,7 @@ export function MapWall() {
       y: placement.below ? placement.y - 20 : placement.y + 20,
       below: placement.below,
     };
-  }, [frogActionsOpen, frogPos, model.photos.length, piles, mode, photoPoints, metrics]);
+  }, [frogActionsOpen, frogPos, piles, mode, photoPoints, metrics]);
 
   const bubble = useMemo(
     () => (bubbleText && frogPos ? { placement: placeBubble(frogPos, metrics.boardW), text: bubbleText } : null),
@@ -892,22 +909,20 @@ export function MapWall() {
   );
 
   const startEntrust = useCallback(() => {
-    if (model.photos.length === 0) {
-      notify('先导入一张照片，青蛙才知道从哪儿出发');
-      return;
-    }
+    setScene('wall');
+    setJourneyPanelOpen(false);
     setFrogActionsOpen(false);
     setFan(null);
     setListOpen(false);
     setWishFocus(null);
     animateCamera(WORLD_CAMERA, 'world', 'world');
     setEntrusting(true);
-  }, [animateCamera, model.photos.length, notify]);
+  }, [animateCamera]);
 
   // Rebuild the next delivery from durable postcards, including after reload.
   useEffect(() => {
     if (snapshot.status !== 'ready') return;
-    const pending = snapshot.wishes.filter((wish) => wish.origin === 'user' && wish.status === 'pending');
+    const pending = snapshot.wishes.filter((wish) => wish.origin === 'user' && wish.delivery !== 'journey' && wish.status === 'pending');
     if (pending.length === 0) return;
     const deadline = Math.min(...pending.map((wish) => wish.createdAt + POSTCARD_DELIVERY_MS));
     const timer = window.setTimeout(() => {
@@ -928,24 +943,25 @@ export function MapWall() {
       entrustBusy.current = true;
       setEntrustSelection(destination.key);
       void guard(async () => {
-        const wishId = await service.addWish({
+        const wishId = await service.directFrogTravel({
           name: destination.name,
-          region: destination.country,
+          country: destination.country,
           countryCode: destination.countryCode,
           lat: destination.lat,
           lng: destination.lng,
         });
         setEntrusting(false);
         setFrogMode('postcard');
-        if (hints) setBubbleText(`去 ${destination.name} 的路上 · 等它寄回来`);
-        notify(`已托付 · ${destination.name} · 约 6 秒收到蛙蛙的来信`, POSTCARD_DELIVERY_MS + 500);
+        setBubbleText(null);
+        setJourneyPanelOpen(true);
+        notify(`方向已留好 · ${destination.name} · 蛙蛙会按旅行日程寄信`,5000);
         setHighlightWish(wishId);
       }).finally(() => {
         entrustBusy.current = false;
         setEntrustSelection(null);
       });
     },
-    [guard, hints, notify, service],
+    [guard, notify, service],
   );
 
   const startReplay = useCallback(
@@ -1000,6 +1016,7 @@ export function MapWall() {
       setFrogActionsOpen(false);
       if (action === 'replay') {
         if (activeTrip) startReplay(activeTrip.id);
+        else { setJourneyPanelOpen(true); notify('还没有真实照片旅程；这里可以查看蛙蛙自己的行程'); }
         return;
       }
       if (action === 'entrust') {
@@ -1263,6 +1280,8 @@ export function MapWall() {
     <>
       {scene === 'home' ? (
         <HomeRoom
+          away={frogAway}
+          onTravel={() => setJourneyPanelOpen(true)}
           home={snapshot.home}
           furniture={homeFurniture}
           luggage={homeLuggage}
@@ -1295,7 +1314,7 @@ export function MapWall() {
         labels={labels}
         postcards={postcards}
         wishLinks={wishPlacement.links}
-        frog={frogPos ? { x: frogPos.x, y: frogPos.y, mode: replay ? 'rest' : frogMode, charmCount } : null}
+        frog={frogPos ? { x: frogPos.x, y: frogPos.y, mode: replay ? 'rest' : travelPhase==='packing'?'packing':travelPhase==='visiting'?'postcard':frogMode, charmCount } : null}
         frogActions={frogActions}
         bubble={bubble}
         destTags={destinations}
@@ -1313,7 +1332,6 @@ export function MapWall() {
         onLabelClick={focusCityFromList}
         onWishClick={handleWishClick}
         onFrogClick={() => {
-          if (model.photos.length === 0) return;
           setFrogActionsOpen((open) => !open);
         }}
         onFrogAction={onFrogAction}
@@ -1340,6 +1358,16 @@ export function MapWall() {
         onTheme={toggleTheme}
         onSettings={() => setSettingsOpen(true)}
       />
+
+      {snapshot.status === 'ready' && <FrogJourneyPanel
+        state={travel} home={snapshot.home.city} now={journeyNow}
+        open={journeyPanelOpen} onOpen={setJourneyPanelOpen}
+        onConfigure={input=>service.configureFrogTravel(input)}
+        onHome={openHome} onEntrust={startEntrust}
+        onLetter={id=>{ const wish=model.wishById.get(id); if(wish) openWishFocus(wish); else notify('这张信已收起，可以在档案中保留它的记录'); }}
+        error={journeyError} onRetry={reconcile}
+        onCancelDirection={()=>service.cancelFrogDirection()}
+      />}
 
       {entrusting && scene === 'wall' ? (
         <EntrustChooser
@@ -1394,8 +1422,9 @@ export function MapWall() {
         </>
       ) : null}
 
-      {empty ? (
+      {empty && scene === 'wall' && !entrusting ? (
         <EmptyCard
+          onFrog={() => setJourneyPanelOpen(true)}
           onImport={() => {
             setDrawerTab('import');
             setDrawerOpen(true);

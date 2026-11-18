@@ -7,7 +7,7 @@ export function PostcardBody({ wish, now }: { wish: WallWish; now: number }) {
     return (
       <>
         <span className="pc-place">{wish.name}</span>
-        <span className="pc-wait">等青蛙路过</span>
+        <span className="pc-wait">{wish.journey?'等旅途来信':wish.demo?'示例 · 等待展示':'等青蛙路过'}</span>
       </>
     );
   }
@@ -137,7 +137,7 @@ export function WishFocus({
             })}
           </span>
         ) : null}
-        <span className="wf-note">{wish.note ?? ''}</span>
+        <span className="wf-note">{wish.note ?? (wish.journey?'你留好的旅行方向。蛙蛙会在这趟或下一趟停留期间寄信，进度可在“蛙蛙的旅行”查看。':wish.demo?'这是展示待寄状态的示例卡片，不会自动投递。蛙蛙自己的旅行可以在旅行面板查看。':'蛙蛙还没有寄来这张信。')}</span>
         <span className="wf-date">{wish.status === 'pending' ? '等青蛙路过' : `青蛙寄于 ${formattedDay(wish.deliveredAt ?? wish.createdAt)}`}</span>
         <span className="wf-coords">
           {wish.lat.toFixed(4)}, {wish.lng.toFixed(4)}

@@ -13,10 +13,10 @@ export function EntrustChooser({ destinations, busy, onSelect, onClose }: {
   return (
     <section className="entrust-chooser" role="dialog" aria-labelledby="entrust-title" aria-describedby="entrust-description" aria-busy={busy !== null}>
       <div className="entrust-heading">
-        <h2 id="entrust-title">让蛙蛙从哪里寄一张？</h2>
+        <h2 id="entrust-title">给蛙蛙的下一趟留个方向</h2>
         <button ref={closeRef} type="button" className="entrust-close" onClick={onClose} aria-label="取消托付">×</button>
       </div>
-      <p id="entrust-description">点下面的目的地即可托付，约 6 秒收到来信。也可以点地图上的同名标签。</p>
+      <p id="entrust-description">蛙蛙会自己出门。想让它去这里，也可以点一个目的地：在家时为这一趟收拾行李，已经出门就留到下一趟。来信在旅行途中寄回，不再按 6 秒投递。</p>
       <div className="entrust-options">
         {destinations.map(destination => (
           <button key={destination.key} type="button" disabled={busy !== null} onClick={() => onSelect(destination)} aria-label={`托付 · ${destination.name}`}>
@@ -26,7 +26,7 @@ export function EntrustChooser({ destinations, busy, onSelect, onClose }: {
         ))}
       </div>
       {destinations.length === 0 ? <p className="entrust-empty">这些目的地都已有足迹或明信片，暂时没有新的可选地点。</p> : null}
-      <p className="entrust-foot">这是蛙蛙寄给你的本机模拟来信，不会发送给其他人。</p>
+      <p className="entrust-foot">这是按日程推进的本机模拟旅行。自然节奏一趟数小时；在蛙蛙的旅行面板可以明确切换加速演示。</p>
     </section>
   );
 }

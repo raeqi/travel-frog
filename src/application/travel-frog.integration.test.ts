@@ -403,3 +403,185 @@ it("reloading the demo preserves a user choice already made on its postcard", as
   ).toBe("declined");
   db.close();
 });
+
+describe('autonomous travel persistence and direction', () => {
+  const hoian = {
+    name: '会安',
+    country: '越南',
+    countryCode: 'VNM',
+    lat: 15.8801,
+    lng: 108.338,
+  };
+  it('travels without imported photos, delivers once, and creates no real trips or awards', async () => {
+    let now = NOW;
+    const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
+    const { service, db } = await createService(clock);
+    await service.configureFrogTravel({ pace: 'preview' });
+    const j = service.getSnapshot().frogTravel!.current!;
+    expect(j.source).toBe('autonomous');
+    now = j.letterAt! - 1;
+    await service.advanceFrogTravel();
+    expect(service.getSnapshot().wishes).toHaveLength(0);
+    now = j.letterAt!;
+    await service.advanceFrogTravel();
+    await service.advanceFrogTravel();
+    expect(service.getSnapshot().wishes).toHaveLength(1);
+    expect(service.getSnapshot().wishes[0]).toMatchObject({
+      status: 'received',
+      delivery: 'journey',
+      source: 'frog',
+    });
+    expect(service.getSnapshot().wishes[0]?.note).toContain('模拟旅记');
+    expect(service.getSnapshot().trips).toHaveLength(0);
+    expect(service.getSnapshot().home.specialties).toHaveLength(0);
+    db.close();
+  });
+  it('recovers one planned journey after months offline without inventing a backlog', async () => {
+    let now = NOW;
+    const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
+    const factory = new IDBFactory();
+    const first = await createService(clock, factory);
+    const j = first.service.getSnapshot().frogTravel!.current!;
+    first.db.close();
+    now = j.homeAt + 60 * 86400_000;
+    const second = await createService(clock, factory);
+    expect(second.service.getSnapshot().frogTravel?.history).toHaveLength(1);
+    expect(
+      second.service.getSnapshot().frogTravel?.current?.prepareAt,
+    ).toBeGreaterThan(now);
+    const count = second.service.getSnapshot().wishes.length;
+    await second.service.advanceFrogTravel();
+    expect(second.service.getSnapshot().wishes).toHaveLength(count);
+    second.db.close();
+  });
+  it('queues a direction while away and excludes its card from legacy six-second delivery', async () => {
+    let now = NOW;
+    const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
+    const { service, db } = await createService(clock);
+    await service.configureFrogTravel({ pace: 'preview' });
+    const j = service.getSnapshot().frogTravel!.current!;
+    now = j.departAt + 1;
+    await service.advanceFrogTravel();
+    const id = await service.directFrogTravel(hoian);
+    expect(service.getSnapshot().frogTravel?.current?.id).toBe(j.id);
+    expect(service.getSnapshot().frogTravel?.direction?.destination.name).toBe(
+      '会安',
+    );
+    now += 6001;
+    await service.deliverDuePostcards();
+    expect(service.getSnapshot().wishes.find((w) => w.id === id)?.status).toBe(
+      'pending',
+    );
+    now = j.homeAt + 1;
+    await service.advanceFrogTravel();
+    expect(service.getSnapshot().frogTravel?.current).toMatchObject({
+      source: 'directed',
+      wishId: id,
+      destination: { name: '会安' },
+    });
+    db.close();
+  });
+  it('finishes an active journey when automatic departure is switched off and then stays home', async () => {
+    let now = NOW;
+    const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
+    const { service, db } = await createService(clock);
+    const j = service.getSnapshot().frogTravel!.current!;
+    now = j.departAt + 1;
+    await service.configureFrogTravel({ enabled: false });
+    expect(service.getSnapshot().frogTravel?.current?.id).toBe(j.id);
+    now = j.homeAt + 1;
+    await service.advanceFrogTravel();
+    expect(service.getSnapshot().frogTravel).toMatchObject({
+      enabled: false,
+      current: null,
+    });
+    now += 86400_000;
+    await service.advanceFrogTravel();
+    expect(service.getSnapshot().frogTravel?.history).toHaveLength(1);
+    db.close();
+  });
+  it('guards the transaction so two open tabs cannot duplicate a letter or itinerary', async () => {
+    let now = NOW;
+    const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
+    const factory = new IDBFactory();
+    const first = await createService(clock, factory);
+    await first.service.configureFrogTravel({ pace: 'preview' });
+    const second = await createService(clock, factory);
+    const j = first.service.getSnapshot().frogTravel!.current!;
+    now = j.letterAt!;
+    await Promise.all([
+      first.service.advanceFrogTravel(),
+      second.service.advanceFrogTravel(),
+    ]);
+    const stored = await new IdbUnitOfWork(first.db).read(async (repos) => ({
+      letters: await repos.wishes.list(),
+      travel: await repos.frogTravel.get(),
+    }));
+    expect(stored.letters.filter((w) => w.id === j.wishId)).toHaveLength(1);
+    expect(stored.travel?.current?.id).toBe(j.id);
+    first.db.close();
+    second.db.close();
+  });
+  it('keeps a directed journey on its actual itinerary instead of a fixed six-second promise', async () => {
+    let now = NOW;
+    const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
+    const { service, db } = await createService(clock);
+    const id = await service.directFrogTravel(hoian);
+    const journey = service.getSnapshot().frogTravel!.current!;
+    expect(journey.source).toBe('directed');
+    expect(journey.pace).toBe('natural');
+    now += 6001;
+    await service.deliverDuePostcards();
+    await service.advanceFrogTravel();
+    expect(service.getSnapshot().wishes.find((w) => w.id === id)?.status).toBe(
+      'pending',
+    );
+    now = journey.letterAt!;
+    await service.advanceFrogTravel();
+    expect(service.getSnapshot().wishes.find((w) => w.id === id)?.status).toBe(
+      'received',
+    );
+    expect(service.getSnapshot().frogTravel?.current?.id).toBe(journey.id);
+    db.close();
+  });
+  it('withdraws only a pending direction and resumes choosing independently', async () => {
+    const { service, db } = await createService();
+    const id = await service.directFrogTravel(hoian);
+    await service.cancelFrogDirection();
+    expect(service.getSnapshot().wishes.some((w) => w.id === id)).toBe(false);
+    expect(service.getSnapshot().frogTravel?.current?.source).toBe(
+      'autonomous',
+    );
+    expect(service.getSnapshot().frogTravel?.direction).toBeNull();
+    db.close();
+  });
+  it('replans an unstarted journey from the new home while preserving the saved direction', async () => {
+    const { service, db } = await createService();
+    const id = await service.directFrogTravel(hoian);
+    await service.moveHome('京都');
+    expect(service.getSnapshot().frogTravel?.current).toMatchObject({
+      source: 'directed',
+      wishId: id,
+      from: { name: '京都' },
+      destination: { name: '会安' },
+    });
+    db.close();
+  });
+  it('allows one explicit direction while automatic travel is off without silently re-enabling it', async () => {
+    let now = NOW;
+    const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
+    const { service, db } = await createService(clock);
+    await service.configureFrogTravel({ enabled: false });
+    const id = await service.directFrogTravel(hoian);
+    const j = service.getSnapshot().frogTravel!.current!;
+    expect(j.wishId).toBe(id);
+    expect(service.getSnapshot().frogTravel?.enabled).toBe(false);
+    now = j.homeAt + 1;
+    await service.advanceFrogTravel();
+    expect(service.getSnapshot().frogTravel).toMatchObject({
+      enabled: false,
+      current: null,
+    });
+    db.close();
+  });
+});
