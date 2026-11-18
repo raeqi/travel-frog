@@ -118,17 +118,24 @@ export function imageSeed(photoId: string): number {
   return fnv1a(`art:${photoId}`);
 }
 
-export function buildWallModel(snapshot: ArchiveSnapshot): WallModel {
+export function buildWallModel(snapshot: ArchiveSnapshot, homeCityKey: string | null = null): WallModel {
+  const isHome = (key: string) => homeCityKey !== null && key === homeCityKey;
   const tripById: Map<string, Trip> = new Map(snapshot.trips.map((trip) => [trip.id, trip] as const));
   const visitById = new Map(snapshot.visits.map((visit) => [visit.id, visit] as const));
   const memoryByTrip = new Map(snapshot.memories.map((memory) => [memory.tripId, memory.text] as const));
 
   const refs = new Map<string, CityRef>();
   for (const trip of snapshot.trips) {
-    for (const ref of trip.cityRefs) refs.set(ref.key, ref);
+    for (const ref of trip.cityRefs) {
+      if (!isHome(ref.key)) refs.set(ref.key, ref);
+    }
   }
-  for (const visit of snapshot.visits) refs.set(visit.cityRef.key, visit.cityRef);
-  for (const wish of snapshot.wishes) refs.set(wish.cityRef.key, wish.cityRef);
+  for (const visit of snapshot.visits) {
+    if (!isHome(visit.cityRef.key)) refs.set(visit.cityRef.key, visit.cityRef);
+  }
+  for (const wish of snapshot.wishes) {
+    if (!isHome(wish.cityRef.key)) refs.set(wish.cityRef.key, wish.cityRef);
+  }
   const candidateRefs = Array.from(refs.values()).filter((ref) => ref.centroid !== null);
 
   const visitsByTrip = new Map<string, WallVisit[]>();
@@ -143,6 +150,7 @@ export function buildWallModel(snapshot: ArchiveSnapshot): WallModel {
   const wallVisits: WallVisit[] = [];
   for (const visit of snapshot.visits) {
     if (!tripById.has(visit.tripId)) continue;
+    if (isHome(visit.cityRef.key)) continue;
     const lat = visit.geo?.lat ?? visit.cityRef.centroid?.lat;
     const lng = visit.geo?.lng ?? visit.cityRef.centroid?.lng;
     if (lat === undefined || lng === undefined || !isFiniteCoordinate(lat, lng)) continue;
@@ -178,6 +186,7 @@ export function buildWallModel(snapshot: ArchiveSnapshot): WallModel {
     const nearest = refs.size > 0 ? nearestRef(candidateRefs, photo.geo.lat, photo.geo.lng) : null;
     const cityRef = visit?.cityRef ?? nearest ?? tripById.get(photo.tripId)?.cityRefs[0] ?? null;
     const cityKey = cityRef?.key ?? `photo:${photo.id}`;
+    if (isHome(cityKey)) continue;
     wallPhotos.push({
       id: photo.id,
       tripId: photo.tripId,
@@ -191,22 +200,24 @@ export function buildWallModel(snapshot: ArchiveSnapshot): WallModel {
     });
   }
 
-  const wallTrips: WallTrip[] = snapshot.trips.map((trip) => {
-    const visits = visitsByTrip.get(trip.id) ?? [];
-    const photoIds = wallPhotos.filter((photo) => photo.tripId === trip.id).map((photo) => photo.id);
-    return {
-      id: trip.id,
-      title: trip.title,
-      year: new Date(trip.timeRange.end - 1).getUTCFullYear(),
-      start: trip.timeRange.start,
-      end: trip.timeRange.end,
-      days: Math.max(1, Math.round((trip.timeRange.end - trip.timeRange.start) / DAY_MS)),
-      memory: memoryByTrip.get(trip.id) ?? null,
-      visits,
-      cityKeys: Array.from(new Set(trip.cityRefs.map((ref) => ref.key))),
-      photoIds,
-    };
-  });
+  const wallTrips: WallTrip[] = snapshot.trips
+    .map((trip) => {
+      const visits = visitsByTrip.get(trip.id) ?? [];
+      const photoIds = wallPhotos.filter((photo) => photo.tripId === trip.id).map((photo) => photo.id);
+      return {
+        id: trip.id,
+        title: trip.title,
+        year: new Date(trip.timeRange.end - 1).getUTCFullYear(),
+        start: trip.timeRange.start,
+        end: trip.timeRange.end,
+        days: Math.max(1, Math.round((trip.timeRange.end - trip.timeRange.start) / DAY_MS)),
+        memory: memoryByTrip.get(trip.id) ?? null,
+        visits,
+        cityKeys: Array.from(new Set(trip.cityRefs.map((ref) => ref.key).filter((key) => !isHome(key)))),
+        photoIds,
+      };
+    })
+    .filter((trip) => trip.visits.length > 0 || trip.cityKeys.length > 0 || trip.photoIds.length > 0);
 
   const cityMap = new Map<string, { ref: CityRef; photos: WallPhoto[]; tripIds: Set<string> }>();
   for (const photo of wallPhotos) {
@@ -259,6 +270,7 @@ export function buildWallModel(snapshot: ArchiveSnapshot): WallModel {
 
   const wishes: WallWish[] = [];
   for (const wish of snapshot.wishes) {
+    if (isHome(wish.cityRef.key)) continue;
     const centroid = wish.cityRef.centroid;
     if (!centroid) continue;
     wishes.push({

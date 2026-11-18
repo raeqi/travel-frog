@@ -35,6 +35,8 @@ export interface FootprintInput {
   readonly photos: readonly Photo[];
   readonly manualVisits: readonly ManualVisit[];
   readonly year?: number;
+  /** Beijing (or whichever city is home) never counts as a travel destination. */
+  readonly homeCityKey?: string | null;
 }
 
 function tripYear(trip: Trip): number {
@@ -42,15 +44,33 @@ function tripYear(trip: Trip): number {
 }
 
 export function computeFootprint(input: FootprintInput): Footprint {
-  const allYears = new Set<number>();
-  for (const trip of input.trips) allYears.add(tripYear(trip));
-  for (const visit of input.manualVisits) allYears.add(visit.year);
+  const homeCityKey = input.homeCityKey ?? null;
+  const isHome = (key: string) => homeCityKey !== null && key === homeCityKey;
 
-  const trips = input.year === undefined ? input.trips : input.trips.filter((trip) => tripYear(trip) === input.year);
+  const visitsByTripAll = new Map<string, Visit[]>();
+  for (const visit of input.visits) {
+    const list = visitsByTripAll.get(visit.tripId) ?? [];
+    list.push(visit);
+    visitsByTripAll.set(visit.tripId, list);
+  }
+
+  const travelTrips = input.trips.filter((trip) => {
+    const members = visitsByTripAll.get(trip.id) ?? [];
+    return members.length === 0 || members.some((visit) => !isHome(visit.cityRef.key));
+  });
+
+  const allYears = new Set<number>();
+  for (const trip of travelTrips) allYears.add(tripYear(trip));
+  for (const visit of input.manualVisits) {
+    if (isHome(visit.cityRef.key)) continue;
+    allYears.add(visit.year);
+  }
+
+  const trips = input.year === undefined ? travelTrips : travelTrips.filter((trip) => tripYear(trip) === input.year);
   const tripIds = new Set(trips.map((trip) => trip.id));
   const visitsByTrip = new Map<string, Visit[]>();
   for (const visit of input.visits) {
-    if (!tripIds.has(visit.tripId)) continue;
+    if (!tripIds.has(visit.tripId) || isHome(visit.cityRef.key)) continue;
     const list = visitsByTrip.get(visit.tripId) ?? [];
     list.push(visit);
     visitsByTrip.set(visit.tripId, list);
@@ -86,6 +106,7 @@ export function computeFootprint(input: FootprintInput): Footprint {
   }
 
   for (const visit of input.manualVisits) {
+    if (isHome(visit.cityRef.key)) continue;
     if (input.year !== undefined && visit.year !== input.year) continue;
     const entry = byCity.get(visit.cityRef.key) ?? {
       city: visit.cityRef,
