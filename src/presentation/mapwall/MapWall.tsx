@@ -28,6 +28,7 @@ import { availableDestinations, type DestinationCandidate } from './candidates';
 import { usePhotoImages, photoImage } from './usePhotoImages';
 import { MapBoard, type CityPhotoMarker, type DestTagPlacement, type RoutePath } from './MapBoard';
 import { PoiList } from './PoiList';
+import { EntrustChooser } from './EntrustChooser';
 import { Crumb, EmptyCard, TopBar, Toast, Tray, ZoomControls } from './Chrome';
 import { MemoryOverlay } from './MemoryOverlay';
 import { Drawer, type DrawerTab } from './Drawer';
@@ -260,17 +261,18 @@ export function MapWall() {
   const toastTimer = useRef<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
   const linkedTimer = useRef<number | null>(null);
-  const entrustBusy = useRef<Set<string>>(new Set());
+  const entrustBusy = useRef(false);
+  const [entrustSelection, setEntrustSelection] = useState<string | null>(null);
   const poiScrollRef = useRef<HTMLDivElement>(null);
   const savedView = useRef<MapViewState | null>(null);
   const pendingScroll = useRef<number | null>(null);
   const restoredView = useRef(false);
   const viewSaveTimer = useRef<number | null>(null);
 
-  const notify = useCallback((message: string) => {
+  const notify = useCallback((message: string, duration = 2600) => {
     setToastMessage(message);
     if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToastMessage(null), 2600);
+    toastTimer.current = window.setTimeout(() => setToastMessage(null), duration);
   }, []);
 
   const guard = useCallback(
@@ -633,10 +635,14 @@ export function MapWall() {
     [model],
   );
   const visitedKeys = useMemo(() => model.cities.map((city) => city.key), [model]);
+  const entrustOptions = useMemo(
+    () => availableDestinations({ visitedCityKeys: visitedKeys, activeWishCityKeys }),
+    [visitedKeys, activeWishCityKeys],
+  );
 
   const destinations = useMemo<DestTagPlacement[]>(() => {
     if (!entrusting || metrics.sheetW <= 0) return [];
-    const offers = availableDestinations({ visitedCityKeys: visitedKeys, activeWishCityKeys });
+    const offers = entrustOptions;
     const tags: DestTagPlacement[] = [];
     offers.forEach((destination, index) => {
       const point = toScreen(projectWorld(destination.lat, destination.lng), camera, metrics);
@@ -650,7 +656,7 @@ export function MapWall() {
       });
     });
     return tags;
-  }, [entrusting, metrics, visitedKeys, activeWishCityKeys, camera]);
+  }, [entrusting, metrics, entrustOptions, camera]);
 
   const frogActions = useMemo(() => {
     if (!frogActionsOpen || !frogPos || model.photos.length === 0) return null;
@@ -892,9 +898,11 @@ export function MapWall() {
     }
     setFrogActionsOpen(false);
     setFan(null);
-    if (level !== 'world') animateCamera(WORLD_CAMERA, 'world', 'world');
+    setListOpen(false);
+    setWishFocus(null);
+    animateCamera(WORLD_CAMERA, 'world', 'world');
     setEntrusting(true);
-  }, [animateCamera, level, model.photos.length, notify]);
+  }, [animateCamera, model.photos.length, notify]);
 
   // Rebuild the next delivery from durable postcards, including after reload.
   useEffect(() => {
@@ -915,8 +923,9 @@ export function MapWall() {
 
   const entrustTo = useCallback(
     (destination: DestinationCandidate) => {
-      if (entrustBusy.current.has(destination.key)) return;
-      entrustBusy.current.add(destination.key);
+      if (entrustBusy.current) return;
+      entrustBusy.current = true;
+      setEntrustSelection(destination.key);
       void guard(async () => {
         const wishId = await service.addWish({
           name: destination.name,
@@ -928,10 +937,11 @@ export function MapWall() {
         setEntrusting(false);
         setFrogMode('postcard');
         if (hints) setBubbleText(`去 ${destination.name} 的路上 · 等它寄回来`);
-        notify(`已托付 · ${destination.name} · 等青蛙路过`);
+        notify(`已托付 · ${destination.name} · 约 6 秒收到蛙蛙的来信`, POSTCARD_DELIVERY_MS + 500);
         setHighlightWish(wishId);
       }).finally(() => {
-        entrustBusy.current.delete(destination.key);
+        entrustBusy.current = false;
+        setEntrustSelection(null);
       });
     },
     [guard, hints, notify, service],
@@ -1329,6 +1339,15 @@ export function MapWall() {
         onTheme={toggleTheme}
         onSettings={() => setSettingsOpen(true)}
       />
+
+      {entrusting && scene === 'wall' ? (
+        <EntrustChooser
+          destinations={entrustOptions}
+          busy={entrustSelection}
+          onSelect={entrustTo}
+          onClose={() => setEntrusting(false)}
+        />
+      ) : null}
 
       {!empty && scene === 'wall' ? (
         <>
