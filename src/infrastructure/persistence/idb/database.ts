@@ -3,6 +3,7 @@ import { runMigrations } from './migrations';
 import { DB_NAME, DB_VERSION, STORES } from './schema';
 
 export interface WriteBuffer {
+  frogTravelRevision?: number;
   readonly puts: Map<string, Map<string, unknown>>;
   readonly deletes: Map<string, Set<string>>;
   readonly touched: Set<string>;
@@ -112,27 +113,59 @@ export class IdbDatabase {
         return;
       }
       tx.oncomplete = () => resolve();
+      let conflict = false;
       tx.onerror = () => reject(toStorageError(tx.error));
-      tx.onabort = () => reject(toStorageError(tx.error ?? new StorageError('STORAGE_FAILED', '写入被中止')));
+      tx.onabort = () =>
+        reject(
+          conflict
+            ? new StorageError(
+                'WRITE_CONFLICT',
+                '另一页面已更新蛙蛙的旅行，正在重新读取',
+              )
+            : toStorageError(
+                tx.error ?? new StorageError('STORAGE_FAILED', '写入被中止'),
+              ),
+        );
       try {
-        for (const storeName of stores) {
-          const deletions = buffer.deletes.get(storeName);
-          if (deletions) {
-            const store = tx.objectStore(storeName);
-            for (const key of deletions) store.delete(key);
+        const apply = () => {
+          for (const storeName of stores) {
+            const deletions = buffer.deletes.get(storeName);
+            if (deletions) {
+              const store = tx.objectStore(storeName);
+              for (const key of deletions) store.delete(key);
+            }
+            const puts = buffer.puts.get(storeName);
+            if (puts) {
+              const store = tx.objectStore(storeName);
+              for (const value of puts.values()) store.put(value);
+            }
           }
-          const puts = buffer.puts.get(storeName);
-          if (puts) {
-            const store = tx.objectStore(storeName);
-            for (const value of puts.values()) store.put(value);
-          }
-        }
-        const meta = tx.objectStore(STORES.meta);
-        const revisionRequest = meta.get('revision');
-        revisionRequest.onsuccess = () => {
-          const current = (revisionRequest.result as { value?: number } | undefined)?.value ?? 0;
-          meta.put({ key: 'revision', value: current + 1 });
+          const meta = tx.objectStore(STORES.meta);
+          const revisionRequest = meta.get('revision');
+          revisionRequest.onsuccess = () => {
+            const current =
+              (revisionRequest.result as { value?: number } | undefined)
+                ?.value ?? 0;
+            meta.put({ key: 'revision', value: current + 1 });
+          };
         };
+        if (
+          buffer.touched.has(STORES.frogTravel) &&
+          buffer.frogTravelRevision !== undefined
+        ) {
+          const request = tx.objectStore(STORES.frogTravel).get('app');
+          request.onsuccess = () => {
+            const revision =
+              (request.result as { revision?: number } | undefined)?.revision ??
+              0;
+            if (revision !== buffer.frogTravelRevision) {
+              conflict = true;
+              tx.abort();
+              return;
+            }
+            apply();
+          };
+        } else apply();
       } catch (error) {
         try {
           tx.abort();

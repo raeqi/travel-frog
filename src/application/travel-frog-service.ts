@@ -32,6 +32,8 @@ import { ArchiveStore } from './archive-store';
 import { importPhotos, type ImportProgress, type ImportSummary } from './import-photos';
 import { AppError, toAppError, type ArchiveGateway } from './ports';
 import { INITIAL_SNAPSHOT, type ArchiveSnapshot } from './snapshot';
+import { advanceFrogJourney, EMPTY_FROG_TRAVEL, journeyAway, planFrogJourney, type FrogPace, type FrogTravelState } from '../domain/frog/journey';
+import { FROG_DESTINATIONS } from '../domain/frog/destinations';
 
 export interface ServiceDeps {
   readonly gateway: ArchiveGateway;
@@ -45,6 +47,7 @@ export interface ServiceDeps {
 }
 
 export interface ArchiveExport {
+  readonly frogTravel: FrogTravelState | null;
   readonly version: number;
   readonly exportedAt: number;
   readonly includeCoordinates: boolean;
@@ -86,7 +89,7 @@ export class TravelFrogService {
 
   private async readAll(): Promise<Omit<ArchiveSnapshot, 'status' | 'error' | 'revision' | 'loadedAt'>> {
     return this.deps.gateway.read(async (repos) => {
-      const [trips, photos, visits, candidates, memories, wishes, manualVisits, settings, home, mapView, batches, issues] =
+      const [trips, photos, visits, candidates, memories, wishes, manualVisits, settings, home, mapView, batches, issues, frogTravel] =
         await Promise.all([
           repos.trips.listAll(),
           repos.photos.listAll(),
@@ -100,6 +103,7 @@ export class TravelFrogService {
           repos.mapView.get(),
           repos.batches.listRecent(20),
           repos.issues.listRecent(100),
+          repos.frogTravel.get(),
         ]);
       return {
         trips: trips.sort((a, b) => b.timeRange.end - a.timeRange.end),
@@ -111,6 +115,7 @@ export class TravelFrogService {
         manualVisits,
         settings,
         home,
+        frogTravel,
         mapView,
         batches,
         issues,
@@ -121,6 +126,7 @@ export class TravelFrogService {
   async load(): Promise<void> {
     this.store.patch({ status: 'loading', error: null });
     try {
+      await this.writeFrogTravel(async () => undefined);
       const data = await this.readAll();
       const home = await this.persistHome(data);
       this.store.set({
@@ -176,6 +182,241 @@ export class TravelFrogService {
 
   private offset(): number {
     return this.deps.clock.localOffsetMinutes(this.deps.clock.now());
+  }
+
+  /** Each itinerary and its letter commit together. A stale tab retries a guarded write. */
+  private async writeFrogTravel<T>(
+    change: (
+      state: FrogTravelState,
+      home: HomeState,
+      repos: Repositories,
+      now: number,
+    ) => Promise<{ state: FrogTravelState; value: T } | undefined>,
+  ): Promise<T | undefined> {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        return await this.deps.gateway.run(async (repos) => {
+          const stored = await repos.frogTravel.get();
+          const home = await repos.home.get();
+          const now = this.deps.clock.now();
+          const wishes = await repos.wishes.list();
+          const active = new Set(
+            wishes
+              .filter(
+                (w) => w.status !== 'declined' && w.status !== 'fulfilled',
+              )
+              .map((w) => w.cityRef.key),
+          );
+          const eligible = FROG_DESTINATIONS.filter(
+            (city) => !active.has(city.key),
+          );
+          const cities = eligible.length ? eligible : FROG_DESTINATIONS;
+          const advanced = advanceFrogJourney(
+            stored ?? EMPTY_FROG_TRAVEL,
+            home.city,
+            cities,
+            now,
+          );
+          const journey = advanced.letter;
+          if (journey?.wishId) {
+            let wish = await repos.wishes.get(asWishId(journey.wishId));
+            if (!wish) {
+              const made = createWish({
+                id: journey.wishId,
+                cityRef: journey.destination,
+                region: journey.destination.countryName,
+                note: null,
+                status: 'pending',
+                source: 'frog',
+                from: journey.from.key,
+                origin: 'user',
+                now: journey.departAt,
+              });
+              if (!made.ok) throw new DomainViolation(made.error);
+              wish = { ...made.value, delivery: 'journey' };
+              await repos.wishes.save(wish);
+            }
+            if (wish?.status === 'pending') {
+              const delivered = changeWishStatus(wish, 'received', now, {
+                note: journey.note,
+                from: journey.from.key,
+              });
+              if (!delivered.ok) throw new DomainViolation(delivered.error);
+              await repos.wishes.save(delivered.value);
+            }
+          }
+          const changed = await change(advanced.state, home, repos, now);
+          const next = changed?.state ?? advanced.state;
+          if (stored === null || next !== stored)
+            await repos.frogTravel.save(next);
+          return changed?.value;
+        });
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !('code' in error) ||
+          error.code !== 'WRITE_CONFLICT' ||
+          attempt === 3
+        )
+          throw error;
+      }
+    }
+    return undefined;
+  }
+
+  async advanceFrogTravel(): Promise<void> {
+    await this.writeFrogTravel(async () => undefined);
+    await this.refresh();
+  }
+
+  async configureFrogTravel(input: {
+    enabled?: boolean;
+    pace?: FrogPace;
+  }): Promise<void> {
+    if (
+      input.pace !== undefined &&
+      input.pace !== 'natural' &&
+      input.pace !== 'preview'
+    )
+      throw new AppError('INVALID_INPUT', '未知的旅行节奏');
+    await this.writeFrogTravel(async (state, home, _repos, now) => {
+      const away = journeyAway(state.current, now);
+      const enabled = input.enabled ?? state.enabled;
+      const pace = input.pace ?? state.pace;
+      let next: FrogTravelState = { ...state, enabled, pace };
+      if (
+        !away &&
+        !(state.current?.source === 'directed' && input.pace === undefined)
+      ) {
+        const current = state.current;
+        const direction =
+          state.direction ??
+          (current?.source === 'directed' && current.wishId
+            ? {
+                destination: current.destination,
+                wishId: current.wishId,
+                requestedAt: now,
+              }
+            : null);
+        next = planFrogJourney(
+          { ...next, current: null, direction },
+          home.city,
+          FROG_DESTINATIONS,
+          now,
+          true,
+        );
+      }
+      return { state: next, value: undefined };
+    });
+    await this.refresh();
+  }
+
+  async directFrogTravel(input: {
+    name: string;
+    countryCode: string;
+    country: string;
+    lat: number;
+    lng: number;
+  }): Promise<string> {
+    const city =
+      this.deps.cityResolver.resolveByName(input.name, input.countryCode) ??
+      makeCityRef({
+        name: input.name,
+        countryCode: input.countryCode,
+        countryName: input.country,
+        centroid: {
+          lat: input.lat,
+          lng: input.lng,
+          source: 'manual',
+          approximate: true,
+          accuracyM: null,
+        },
+        source: 'manual',
+        confidence: 'low',
+      });
+    const id = await this.writeFrogTravel(async (state, home, repos, now) => {
+      if (city.key === home.city.key || !city.centroid)
+        throw new AppError('INVALID_INPUT', '给蛙蛙选一个家以外的地方');
+      if (
+        state.direction ||
+        (state.current?.source === 'directed' &&
+          !journeyAway(state.current, now))
+      )
+        throw new AppError(
+          'INVALID_INPUT',
+          '已经留好了下一趟的方向，等这一趟出发后再托付',
+        );
+      const wishes = await repos.wishes.list();
+      if (
+        wishes.some(
+          (w) =>
+            w.cityRef.key === city.key &&
+            w.status !== 'declined' &&
+            w.status !== 'fulfilled',
+        )
+      )
+        throw new AppError('INVALID_INPUT', '这个地方已经有一张明信片');
+      const wishId = this.deps.ids.newWishId();
+      const made = createWish({
+        id: wishId,
+        cityRef: city,
+        region: city.countryName,
+        note: null,
+        source: 'user',
+        from: home.city.key,
+        origin: 'user',
+        now,
+        status: 'pending',
+      });
+      if (!made.ok) throw new DomainViolation(made.error);
+      await repos.wishes.save({ ...made.value, delivery: 'journey' });
+      let next: FrogTravelState = {
+        ...state,
+        direction: { destination: city, wishId, requestedAt: now },
+      };
+      if (!journeyAway(state.current, now))
+        next = planFrogJourney(
+          { ...next, current: null },
+          home.city,
+          FROG_DESTINATIONS,
+          now,
+          true,
+        );
+      return { state: next, value: wishId };
+    });
+    await this.refresh();
+    if (!id) throw new AppError('STORAGE_FAILED', '没有保存下这次托付，请重试');
+    return id;
+  }
+
+  async cancelFrogDirection(): Promise<void> {
+    await this.writeFrogTravel(async (state, home, repos, now) => {
+      const current = state.current;
+      const plannedDirection =
+        current?.source === 'directed' && !journeyAway(current, now)
+          ? current
+          : null;
+      const id = state.direction?.wishId ?? plannedDirection?.wishId;
+      if (!id)
+        throw new AppError(
+          'INVALID_INPUT',
+          '没有待撤回的方向；已经出发的一趟会继续走完',
+        );
+      const wish = await repos.wishes.get(asWishId(id));
+      if (wish && wish.status !== 'pending')
+        throw new AppError('INVALID_INPUT', '这张信已经寄出，不能再撤回方向');
+      if (wish) await repos.wishes.delete(asWishId(id));
+      const next = {
+        ...state,
+        direction: null,
+        current: plannedDirection ? null : current,
+      };
+      return {
+        state: planFrogJourney(next, home.city, FROG_DESTINATIONS, now),
+        value: undefined,
+      };
+    });
+    await this.refresh();
   }
 
   async importFiles(files: readonly File[], onProgress?: (progress: ImportProgress) => void): Promise<ImportSummary> {
@@ -613,11 +854,11 @@ export class TravelFrogService {
   async deliverDuePostcards(): Promise<void> {
     const now = this.deps.clock.now();
     const due = this.store.getSnapshot().wishes.some((wish) =>
-      wish.origin === 'user' && wish.status === 'pending' && wish.createdAt + POSTCARD_DELIVERY_MS <= now);
+      wish.origin === 'user' && wish.delivery !== 'journey' && wish.status === 'pending' && wish.createdAt + POSTCARD_DELIVERY_MS <= now);
     if (!due) return;
     await this.deps.gateway.run(async (repos) => {
       for (const wish of await repos.wishes.list()) {
-        if (wish.origin !== 'user' || wish.status !== 'pending' || wish.createdAt + POSTCARD_DELIVERY_MS > now) continue;
+        if (wish.origin !== 'user' || wish.delivery === 'journey' || wish.status !== 'pending' || wish.createdAt + POSTCARD_DELIVERY_MS > now) continue;
         const next = changeWishStatus(wish, 'received', now, { note: postcardNote(wish.cityRef.name) });
         if (!next.ok) throw new DomainViolation(next.error);
         await repos.wishes.save(next.value);
@@ -650,6 +891,12 @@ export class TravelFrogService {
     const next = moveHomeState(this.store.getSnapshot().home, city, this.deps.clock.now());
     if (!next.ok) throw new DomainViolation(next.error);
     await this.deps.gateway.run((repos) => repos.home.save(next.value));
+    await this.writeFrogTravel(async (state,home,_repos,now) => {
+      const current=state.current;
+      if (!current || journeyAway(current,now) || current.from.key===home.city.key) return undefined;
+      const direction=state.direction ?? (current.source==='directed' && current.wishId ? {destination:current.destination,wishId:current.wishId,requestedAt:now} : null);
+      return {state:planFrogJourney({...state,current:null,direction},home.city,FROG_DESTINATIONS,now),value:undefined};
+    });
     await this.refresh();
   }
 
@@ -668,7 +915,8 @@ export class TravelFrogService {
   async exportArchive(includeCoordinates: boolean): Promise<ArchiveExport> {
     const data = await this.readAll();
     return {
-      version: 6,
+      version: 7,
+      frogTravel: data.frogTravel,
       exportedAt: this.deps.clock.now(),
       includeCoordinates,
       trips: data.trips,

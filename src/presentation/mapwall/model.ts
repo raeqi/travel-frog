@@ -46,6 +46,8 @@ export interface WallTrip {
 }
 
 export interface WallWish {
+  readonly journey?: boolean;
+  readonly demo?: boolean;
   readonly updatedAt?: number;
   readonly deliveredAt?: number | null;
   readonly id: string;
@@ -89,7 +91,7 @@ export interface WallModel {
 const DAY_MS = 86_400_000;
 
 export function wallModelIsEmpty(model: WallModel): boolean {
-  return model.trips.length === 0 && model.photos.length === 0;
+  return model.trips.length === 0 && model.photos.length === 0 && model.wishes.length === 0;
 }
 
 function isFiniteCoordinate(lat: number, lng: number): boolean {
@@ -279,6 +281,8 @@ export function buildWallModel(snapshot: ArchiveSnapshot, homeCityKey: string | 
     const centroid = wish.cityRef.centroid;
     if (!centroid) continue;
     wishes.push({
+      journey: wish.delivery === 'journey',
+      demo: wish.origin === 'demo',
       id: wish.id,
       cityKey: wish.cityRef.key,
       name: wish.cityRef.name,

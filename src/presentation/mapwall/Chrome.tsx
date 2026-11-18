@@ -86,14 +86,16 @@ export function Crumb({
       <button type="button" className={current === 0 ? 'current' : ''} onClick={onWorld}>
         世界
       </button>
-      <span className="sep">/</span>
+      {countryName !== '世界' && <><span className="sep">/</span>
       <button type="button" className={current === 1 ? 'current' : ''} onClick={onCountry}>
         {countryName}
       </button>
-      <span className="sep">/</span>
+      {cityName && <><span className="sep">/</span>
       <button type="button" className={current === 2 ? 'current' : ''} onClick={onCity}>
         {cityName}
       </button>
+      </>}
+      </>}
     </div>
   );
 }
@@ -135,7 +137,7 @@ export function Tray({ count, onOpen }: { readonly count: number; readonly onOpe
   );
 }
 
-export function EmptyCard({ onImport, onDemo }: { readonly onImport: () => void; readonly onDemo: () => void }) {
+export function EmptyCard({ onImport, onDemo, onFrog }: { readonly onImport: () => void; readonly onDemo: () => void; readonly onFrog?: () => void }) {
   return (
     <section className="empty-card">
       <span className="tape tape-l" aria-hidden="true" />
@@ -146,6 +148,7 @@ export function EmptyCard({ onImport, onDemo }: { readonly onImport: () => void;
       <h1>从照片开始</h1>
       <p>把手机里的一叠旅行照片拖进来。照片只在本机解析，位置和一句话记忆都留在这面墙上。</p>
       <div className="empty-actions">
+        {onFrog && <button className="btn ghost" type="button" onClick={onFrog}>看看蛙蛙的旅行</button>}
         <button className="btn primary" type="button" onClick={onImport}>
           导入照片
         </button>

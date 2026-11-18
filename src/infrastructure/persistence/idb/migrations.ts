@@ -175,7 +175,17 @@ const migrationV6: Migration = {
   },
 };
 
-export const MIGRATIONS: readonly Migration[] = [migrationV2, migrationV3, migrationV4, migrationV5, migrationV6];
+const migrationV7: Migration = {
+  version: 7,
+  name: 'autonomous-frog-travel',
+  up: ({ db, tx, now }) => {
+    createStore(db, { name: STORES.frogTravel, keyPath: 'key', indexes: [] });
+    tx.objectStore(STORES.meta).put({ key: 'schema', schemaVersion: 7, lastOpenedAt: now });
+    tx.objectStore(STORES.migrations).put({ version: 7, name: 'autonomous-frog-travel', appliedAt: now });
+  },
+};
+
+export const MIGRATIONS: readonly Migration[] = [migrationV2, migrationV3, migrationV4, migrationV5, migrationV6, migrationV7];
 
 /** Runs every migration whose target version is newer than the database. */
 export function runMigrations(context: MigrationContext): void {

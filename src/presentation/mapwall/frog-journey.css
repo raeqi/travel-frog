@@ -1,0 +1,220 @@
+.journey-chip {
+  position: fixed;
+  right: 108px;
+  bottom: 22px;
+  z-index: 37;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(350px, calc(100vw - 48px));
+  padding: 8px 14px;
+  color: #294534;
+  background: #fff9ecf5;
+  border: 1px solid #bbaa8d;
+  border-radius: 14px;
+  box-shadow: 0 3px 12px #352c2424;
+  cursor: pointer;
+  text-align: left;
+}
+.journey-chip .frog-sprite {
+  width: 35px;
+  height: 35px;
+  flex-shrink: 0;
+}
+.journey-chip strong,
+.journey-chip small {
+  display: block;
+}
+.journey-chip strong {
+  font-size: 12px;
+}
+.journey-chip small {
+  font-size: 10px;
+  opacity: 0.75;
+  margin-top: 2px;
+}
+.journey-shade {
+  position: fixed;
+  inset: 0;
+  background: #18271d88;
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.journey-panel {
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  padding: 22px;
+  background: #fff9ec;
+  color: #354236;
+  border-radius: 16px;
+  box-shadow: 0 16px 60px #0005;
+  font: 13px/1.65 system-ui;
+}
+.journey-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.journey-panel h2 {
+  font-size: 21px;
+}
+.journey-panel h3 {
+  font-size: 14px;
+}
+.journey-panel p {
+  margin: 12px 0;
+}
+.journey-panel button,
+.journey-panel select {
+  border: 1px solid #b7b59e;
+  border-radius: 7px;
+  padding: 7px 11px;
+  background: #fffdf6;
+  color: inherit;
+  cursor: pointer;
+}
+.journey-panel header button {
+  font-size: 20px;
+  min-width: 38px;
+}
+.journey-current {
+  font-size: 18px;
+  font-weight: 600;
+}
+.journey-source {
+  display: block;
+  font-size: 11px;
+  color: #687466;
+}
+.journey-stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  list-style: none;
+  padding: 0;
+  margin: 14px 0;
+}
+.journey-stages li {
+  font-size: 11px;
+  padding: 4px 7px;
+  background: #ecebdf;
+  border-radius: 5px;
+}
+.journey-stages [aria-current] {
+  background: #2e6445;
+  color: #fff;
+}
+.journey-panel dl {
+  margin: 12px 0;
+  padding: 12px;
+  background: #efefe2;
+  border-radius: 8px;
+}
+.journey-panel dl > div {
+  display: flex;
+  gap: 16px;
+}
+.journey-panel dt {
+  width: 72px;
+  flex-shrink: 0;
+  color: #697367;
+}
+.journey-panel dd {
+  margin: 0;
+}
+.journey-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+.journey-panel .journey-primary {
+  background: #2e6445;
+  color: #fff;
+}
+.journey-panel fieldset {
+  border: 1px solid #d1cdb7;
+  border-radius: 8px;
+  padding: 12px;
+}
+.journey-panel label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+.journey-panel small {
+  display: block;
+  color: #697367;
+}
+.journey-panel details {
+  margin-top: 14px;
+}
+.journey-panel summary {
+  cursor: pointer;
+  text-decoration: underline;
+}
+.journey-panel details p {
+  font-size: 12px;
+  color: #63705f;
+}
+.journey-history {
+  margin-top: 16px;
+  border-top: 1px solid #d1cdb7;
+  padding-top: 12px;
+}
+.journey-error {
+  color: #8a3429;
+}
+.journey-direction {
+  background: #f2e4be;
+  padding: 10px;
+  border-radius: 7px;
+}
+.home-room[data-frog-away='true'] .room-floor,
+.home-room[data-frog-away='true'] .room-hotspot {
+  pointer-events: none;
+}
+.home-room[data-frog-away='true'] .frog-destination {
+  display: none;
+}
+.room-away-note {
+  position: absolute;
+  z-index: 32;
+  bottom: 7%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #172a20e8;
+  color: #f2ead7;
+  border: 1px solid #acb38c;
+  padding: 10px 18px;
+  border-radius: 9px;
+  cursor: pointer;
+  text-align: center;
+}
+@media (max-width: 600px) {
+  .journey-chip {
+    left: 12px;
+    right: auto;
+    bottom: 78px;
+    max-width: calc(100vw - 24px);
+  }
+  .journey-shade {
+    padding: 10px;
+  }
+  .journey-panel {
+    padding: 17px;
+    max-height: calc(100dvh - 20px);
+  }
+  .journey-panel h2 {
+    font-size: 18px;
+  }
+  .room-away-note {
+    width: 75%;
+    bottom: 12%;
+  }
+}

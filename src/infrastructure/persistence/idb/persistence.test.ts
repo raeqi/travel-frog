@@ -4,7 +4,7 @@ import { createTrip } from "../../../domain/trip/trip";
 import { makeTimeRange } from "../../../domain/common/time";
 import { DEFAULT_HOME_STATE } from "../../../domain/home/home";
 import type { MapViewState } from "../../../domain/home/map-view";
-import { DB_NAME, SCHEMA_V2, SCHEMA_V4, STORES } from "./schema";
+import { DB_NAME, DB_VERSION, SCHEMA_V2, SCHEMA_V4, STORES } from "./schema";
 import { openDatabase } from "./database";
 import { IdbUnitOfWork } from "./unit-of-work";
 
@@ -366,7 +366,7 @@ describe("home and map view persistence", () => {
     expect(before.home).toEqual(DEFAULT_HOME_STATE);
     expect(before.mapView).toBeNull();
     expect(await db.getMeta<{ schemaVersion: number }>("schema")).toMatchObject(
-      { schemaVersion: 6 },
+      { schemaVersion: DB_VERSION },
     );
 
     await uow.run(async (repos) =>
@@ -421,13 +421,13 @@ describe("home and map view persistence", () => {
     expect(byId.get("w-declined" as never)).toBe("declined");
     expect(byId.get("w-visited" as never)).toBe("fulfilled");
     expect(await db.getMeta<{ schemaVersion: number }>("schema")).toMatchObject(
-      { schemaVersion: 6 },
+      { schemaVersion: DB_VERSION },
     );
     db.close();
   });
 });
 
-it("v6 preserves v5 postcard rows and photo records verbatim", async () => {
+it("latest schema preserves v5 postcard rows and photo records verbatim", async () => {
   const factory = new IDBFactory();
   const postcard = {
     id: "v5-card",
@@ -461,6 +461,48 @@ it("v6 preserves v5 postcard rows and photo records verbatim", async () => {
   const db = await openDatabase(factory, NOW);
   expect(await db.get(STORES.wishes, postcard.id)).toEqual(postcard);
   expect(await db.get(STORES.photos, photo.id)).toEqual(photo);
-  expect(await db.getMeta("schema")).toMatchObject({ schemaVersion: 6 });
+  expect(await db.getMeta("schema")).toMatchObject({ schemaVersion: DB_VERSION });
+  db.close();
+});
+
+it('adds frog travel to a v6 archive without rewriting existing home, photos or postcards', async () => {
+  const factory = new IDBFactory();
+  const postcard = {
+    id: 'keep-v6',
+    status: 'stamped',
+    note: '原来的来信',
+    createdAt: NOW - 10,
+    updatedAt: NOW,
+  };
+  await createLegacyV4(factory, [postcard]);
+  const photo = {
+    id: 'photo-v6',
+    thumbRef: 'original-preview',
+    fileName: 'preserve.jpg',
+  };
+  const home = { key: 'app', state: { ...DEFAULT_HOME_STATE, updatedAt: NOW } };
+  await new Promise<void>((resolve, reject) => {
+    const request = factory.open(DB_NAME, 6);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const native = request.result,
+        tx = native.transaction([STORES.photos, STORES.home], 'readwrite');
+      tx.objectStore(STORES.photos).put(photo);
+      tx.objectStore(STORES.home).put(home);
+      tx.oncomplete = () => {
+        native.close();
+        resolve();
+      };
+      tx.onerror = () => reject(tx.error);
+    };
+  });
+  const db = await openDatabase(factory, NOW);
+  expect(await db.get(STORES.wishes, postcard.id)).toEqual(postcard);
+  expect(await db.get(STORES.photos, photo.id)).toEqual(photo);
+  expect(await db.get(STORES.home, 'app')).toEqual(home);
+  expect(
+    await new IdbUnitOfWork(db).read((repos) => repos.frogTravel.get()),
+  ).toBeNull();
+  expect(await db.getMeta('schema')).toMatchObject({ schemaVersion: 7 });
   db.close();
 });

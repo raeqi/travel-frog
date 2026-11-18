@@ -10,6 +10,7 @@ import type { Wish } from '../domain/wish/wish';
 import type { Instant } from '../domain/common/time';
 import { DEFAULT_HOME_STATE, type HomeState } from '../domain/home/home';
 import type { MapViewState } from '../domain/home/map-view';
+import type { FrogTravelState } from '../domain/frog/journey';
 
 export type ArchiveStatus = 'loading' | 'ready' | 'error';
 
@@ -27,6 +28,7 @@ export interface ArchiveSnapshot {
   readonly manualVisits: readonly ManualVisit[];
   readonly settings: Settings;
   readonly home: HomeState;
+  readonly frogTravel: FrogTravelState | null;
   readonly mapView: MapViewState | null;
   readonly batches: readonly ImportBatch[];
   readonly issues: readonly ImportIssue[];
@@ -56,6 +58,7 @@ export const INITIAL_SNAPSHOT: ArchiveSnapshot = {
   manualVisits: [],
   settings: EMPTY_SETTINGS,
   home: DEFAULT_HOME_STATE,
+  frogTravel: null,
   mapView: null,
   batches: [],
   issues: [],

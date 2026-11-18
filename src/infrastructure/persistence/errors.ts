@@ -1,4 +1,4 @@
-export type StorageErrorCode = 'STORAGE_FAILED' | 'STORAGE_QUOTA_EXCEEDED' | 'DB_OPEN_FAILED' | 'MIGRATION_FAILED' | 'NOT_SUPPORTED';
+export type StorageErrorCode = 'STORAGE_FAILED' | 'STORAGE_QUOTA_EXCEEDED' | 'DB_OPEN_FAILED' | 'MIGRATION_FAILED' | 'NOT_SUPPORTED' | 'WRITE_CONFLICT';
 
 export class StorageError extends Error {
   readonly code: StorageErrorCode;

@@ -24,6 +24,8 @@ const TRANSITIONS: Readonly<Record<WishStatus, readonly WishStatus[]>> = {
 };
 
 export interface Wish {
+  /** Journey letters are delivered by their saved itinerary, never the legacy timer. */
+  readonly delivery?: 'journey';
   readonly id: WishId;
   readonly cityRef: CityRef;
   /** Display region / country line; never used for identity. */
@@ -132,6 +134,7 @@ export function changeWishStatus(
 }
 
 export function validateWish(wish: Wish): Result<Wish> {
+  if (wish.delivery !== undefined && wish.delivery !== 'journey') return err(domainError('WISH_STATE_INVALID', '未知的明信片投递方式'));
   if (!isWishStatus(wish.status)) {
     return err(domainError('WISH_STATE_INVALID', '未知的明信片状态', { id: wish.id }));
   }
