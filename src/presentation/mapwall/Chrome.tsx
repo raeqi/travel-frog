@@ -43,7 +43,6 @@ export function TopBar({
             <path d="M3 8h14M8 8v8" />
           </svg>
           <span>整理</span>
-          <i className="dot" aria-label="有待处理" />
         </button>
         <button className="tbtn" type="button" onClick={onSearch}>
           <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">

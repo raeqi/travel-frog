@@ -4,19 +4,23 @@ import { domainError, err, ok, type Result } from '../common/result';
 import { isFiniteInstant, type Instant } from '../common/time';
 import type { DataOrigin } from '../photo/photo';
 
-/** PRD §3.1: 托付 → 来信 → 掀开 → 盖戳 → 兑现. */
-export type WishStatus = 'pending' | 'received' | 'opened' | 'stamped' | 'fulfilled';
+/** Storyboard: entrusted → delivered → keep/stamp or decline → photos fulfil it.
+ * `opened` remains readable for existing archives; flipping is transient UI state.
+ */
+export type WishStatus = 'pending' | 'received' | 'opened' | 'stamped' | 'fulfilled' | 'declined';
+export const POSTCARD_DELIVERY_MS = 6000;
 /** `frog` = the frog brought it back; `user` = the user entrusted the frog with it. */
 export type WishSource = 'frog' | 'user';
 
-export const WISH_STATUSES: readonly WishStatus[] = ['pending', 'received', 'opened', 'stamped', 'fulfilled'];
+export const WISH_STATUSES: readonly WishStatus[] = ['pending', 'received', 'opened', 'stamped', 'fulfilled', 'declined'];
 
 const TRANSITIONS: Readonly<Record<WishStatus, readonly WishStatus[]>> = {
   pending: ['received'],
-  received: ['opened'],
-  opened: ['stamped'],
+  received: ['opened', 'stamped', 'declined'],
+  opened: ['stamped', 'declined'],
   stamped: ['fulfilled'],
   fulfilled: [],
+  declined: [],
 };
 
 export interface Wish {
@@ -33,6 +37,8 @@ export interface Wish {
   readonly origin: DataOrigin;
   readonly createdAt: Instant;
   readonly updatedAt: Instant;
+  /** Stable postal date; subsequent choices never change the date printed on the card. */
+  readonly deliveredAt?: Instant | null;
 }
 
 export function isWishStatus(value: unknown): value is WishStatus {
@@ -71,7 +77,7 @@ export function createWish(input: CreateWishInput): Result<Wish> {
   if (input.cityRef.name.trim().length === 0) {
     return err(domainError('VALIDATION_FAILED', '明信片需要一个地点名称'));
   }
-  if ((status === 'received' || status === 'opened' || status === 'stamped' || status === 'fulfilled') && note === null) {
+  if (status !== 'pending' && (note === null || note.length === 0)) {
     return err(domainError('WISH_STATE_INVALID', '已寄到的明信片必须有青蛙的留言'));
   }
   return ok({
@@ -85,6 +91,7 @@ export function createWish(input: CreateWishInput): Result<Wish> {
     origin: input.origin,
     createdAt: input.now,
     updatedAt: input.now,
+    deliveredAt: status === 'pending' ? null : input.now,
   });
 }
 
@@ -121,7 +128,7 @@ export function changeWishStatus(
   if (note !== null && note.length > 200) {
     return err(domainError('VALIDATION_FAILED', '明信片留言不能超过 200 字符', { id: wish.id }));
   }
-  return ok({ ...wish, status, note, from, updatedAt: now });
+  return ok({ ...wish, status, note, from, updatedAt: now, deliveredAt: status === 'received' ? now : wish.deliveredAt ?? wish.createdAt });
 }
 
 export function validateWish(wish: Wish): Result<Wish> {
@@ -148,14 +155,12 @@ export function validateWish(wish: Wish): Result<Wish> {
 
 /**
  * One-time bridge for archives written before the PRD states: old `wish`/`next`/`wished`
- * become `opened`, old `visited` becomes `fulfilled`, and old `declined` falls back to
- * `received` because the lifecycle no longer has a rejection branch.
+ * become `opened`, old `visited` becomes `fulfilled`. Declines stay declined.
  */
 export function migrateLegacyWishStatus(status: unknown): Result<WishStatus> {
   if (isWishStatus(status)) return ok(status);
   if (status === 'wish' || status === 'next' || status === 'wished') return ok('opened');
   if (status === 'visited') return ok('fulfilled');
-  if (status === 'declined') return ok('received');
   return err(domainError('WISH_STATE_INVALID', '无法识别的旧愿望状态', { status: String(status) }));
 }
 
@@ -171,5 +176,12 @@ export function wishStatusLabel(status: WishStatus): string {
       return '盖戳';
     case 'fulfilled':
       return '兑现';
+    case 'declined':
+      return '这次不去';
   }
+}
+
+export function postcardNote(cityName: string): string {
+  if (cityName === '会安') return '会安的古宅门口挂着一排灯笼，替你挑了一盏最小的。';
+  return `${cityName}的傍晚很安静，风从街角吹过来。替你多站了一会儿。`;
 }

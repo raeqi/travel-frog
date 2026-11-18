@@ -45,6 +45,8 @@ export interface WallTrip {
 }
 
 export interface WallWish {
+  readonly updatedAt?: number;
+  readonly deliveredAt?: number | null;
   readonly id: string;
   readonly cityKey: string;
   readonly name: string;
@@ -270,6 +272,7 @@ export function buildWallModel(snapshot: ArchiveSnapshot, homeCityKey: string | 
 
   const wishes: WallWish[] = [];
   for (const wish of snapshot.wishes) {
+    if (wish.status === 'declined') continue;
     if (isHome(wish.cityRef.key)) continue;
     const centroid = wish.cityRef.centroid;
     if (!centroid) continue;
@@ -285,6 +288,8 @@ export function buildWallModel(snapshot: ArchiveSnapshot, homeCityKey: string | 
       lat: centroid.lat,
       lng: centroid.lng,
       createdAt: wish.createdAt,
+      updatedAt: wish.updatedAt,
+      deliveredAt: wish.deliveredAt ?? null,
     });
   }
   wishes.sort((a, b) => a.createdAt - b.createdAt);
@@ -345,7 +350,7 @@ export function frogAnchor(model: WallModel): { lat: number; lng: number; tripId
 
 export function isNewWish(wish: WallWish, now: number): boolean {
   if (wish.status !== 'received') return false;
-  const age = now - wish.createdAt;
+  const age = now - (wish.deliveredAt ?? wish.createdAt);
   return age >= 0 && age < 21 * DAY_MS;
 }
 

@@ -23,7 +23,7 @@ import { validateTrip, type Trip } from '../../../domain/trip/trip';
 import { validateVisit, type Visit } from '../../../domain/visit/visit';
 import { validateCandidate, type Candidate } from '../../../domain/candidate/candidate';
 import { DEFAULT_SETTINGS, normalizeSettings, type Settings } from '../../../domain/settings/settings';
-import { validateWish, type Wish } from '../../../domain/wish/wish';
+import { canTransitionWish, validateWish, type Wish } from '../../../domain/wish/wish';
 import type { ManualVisit } from '../../../domain/wish/manual-visit';
 import type { Memory } from '../../../domain/memory/memory';
 import { DEFAULT_HOME_STATE, validateHomeState, type HomeState } from '../../../domain/home/home';
@@ -259,6 +259,10 @@ class Wishes extends Repo implements WishRepository {
   }
 
   async save(wish: Wish): Promise<void> {
+    const previous = await this.get(wish.id);
+    if (previous && previous.status !== wish.status && !canTransitionWish(previous.status, wish.status)) {
+      throw new DomainViolation({ code: 'WISH_STATE_INVALID', message: '明信片状态不能跳过用户的选择' });
+    }
     put(this.buffer, STORES.wishes, wish.id, must(validateWish(wish)));
   }
 

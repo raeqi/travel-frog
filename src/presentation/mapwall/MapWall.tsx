@@ -40,6 +40,7 @@ import type { MapViewState } from '../../domain/home/map-view';
 import { SettingsPanel, type ThemeChoice } from './SettingsPanel';
 import { SearchPanel, type SearchItem } from './SearchPanel';
 import type { PlacedPostcard } from './Postcard';
+import { POSTCARD_DELIVERY_MS } from '../../domain/wish/wish';
 
 type Mode = 'world' | 'city' | 'region';
 type Level = 'world' | 'country' | 'city' | 'region';
@@ -208,9 +209,6 @@ function nearestCityScreen(
 
 const ARRIVAL_MS = 1200;
 const HIGHLIGHT_MS = 1500;
-const DELIVERY_MS = 6000;
-const NOTE_TAILS = ['路口的面包店还亮着灯。', '风从河面吹过来，像刚洗过的布。', '傍晚的云压得很低，替你多站了一会儿。'];
-const WISH_STEP_LABELS = { opened: '已掀开', stamped: '已盖戳', fulfilled: '已兑现' } as const;
 
 export function MapWall() {
   const service = useService();
@@ -248,19 +246,18 @@ export function MapWall() {
   const [highlightWish, setHighlightWish] = useState<string | null>(null);
   const [memoryTripId, setMemoryTripId] = useState<string | null>(null);
   const [wishFocus, setWishFocus] = useState<{ wishId: string; left: number; top: number } | null>(null);
+  const [choosingWish, setChoosingWish] = useState(false);
   const [replay, setReplay] = useState<ReplayState | null>(null);
   const [activeTripId, setActiveTripId] = useState('');
   const [cityKey, setCityKey] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [flew, setFlew] = useState<ReadonlySet<string>>(() => new Set());
-  const [dropping, setDropping] = useState<ReadonlySet<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
   const [specialtyFocus, setSpecialtyFocus] = useState<SpecialtyAward | null>(null);
 
   const toastTimer = useRef<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
   const linkedTimer = useRef<number | null>(null);
-  const deliveryTimers = useRef<number[]>([]);
   const entrustBusy = useRef<Set<string>>(new Set());
   const poiScrollRef = useRef<HTMLDivElement>(null);
   const savedView = useRef<MapViewState | null>(null);
@@ -339,6 +336,8 @@ export function MapWall() {
     savedView.current = saved;
     setMode(saved.mode);
     setLevel(saved.level);
+    setCityKey(saved.cityKey ?? '');
+    setActiveTripId(saved.activeTripId ?? '');
     setCamera(saved.camera);
     pendingScroll.current = saved.poiScrollTop;
   }, [snapshot.status, snapshot.mapView]);
@@ -372,8 +371,11 @@ export function MapWall() {
 
   useEffect(() => {
     if (model.trips.length === 0) return;
-    if (!model.tripById.has(activeTripId)) setActiveTripId(model.trips[0]?.id ?? '');
-  }, [model, activeTripId]);
+    if (!model.tripById.has(activeTripId)) {
+      const restored = snapshot.mapView?.activeTripId;
+      setActiveTripId(restored && model.tripById.has(restored) ? restored : model.trips[0]?.id ?? '');
+    }
+  }, [model, activeTripId, snapshot.mapView]);
 
   const resolvedTheme = theme === 'dark' || (theme === 'system' && systemDark) ? 'dark' : 'light';
 
@@ -394,7 +396,6 @@ export function MapWall() {
       if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
       if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current);
       if (linkedTimer.current !== null) window.clearTimeout(linkedTimer.current);
-      for (const timer of deliveryTimers.current) window.clearTimeout(timer);
     },
     [],
   );
@@ -466,6 +467,7 @@ export function MapWall() {
       const city = model.cityByKey.get(key);
       if (!city) return;
       setCityKey(key);
+      if (city.tripIds[0]) setActiveTripId(city.tripIds[0]);
       if (city.name === '京都') {
         animateCamera({ cx: 500, cy: 320, zoom: 1 }, 'city', 'city');
         return;
@@ -476,7 +478,7 @@ export function MapWall() {
         return;
       }
       const point = projectWorld(city.lat, city.lng);
-      animateCamera({ cx: point.x, cy: point.y, zoom: Math.max(cameraRef.current.zoom, 9) }, 'world', 'country');
+      animateCamera({ cx: point.x, cy: point.y, zoom: Math.max(cameraRef.current.zoom, 28) }, 'world', 'city');
     },
     [animateCamera, model],
   );
@@ -571,6 +573,7 @@ export function MapWall() {
       : null;
     const seen = new Set<string>();
     for (const wish of model.wishes) {
+      if (wish.status === 'fulfilled' && model.cities.some((city) => city.key === wish.cityKey)) continue;
       if (seen.has(wish.cityKey)) continue;
       const anchor = toScreen(projectAt(mode, wish.lat, wish.lng), camera, metrics);
       if (!inBoard(anchor.x, anchor.y, metrics, 40)) continue;
@@ -671,13 +674,13 @@ export function MapWall() {
         width: card.width,
         height: card.height,
         arriving,
-        dropping: dropping.has(card.wish.id),
+        dropping: false,
         flipping: wishFocus?.wishId === card.wish.id,
         flyX: from.x - card.cx,
         flyY: from.y - card.cy,
       };
     });
-  }, [wishPlacement.cards, frogPos, metrics, now, flew, dropping, wishFocus]);
+  }, [wishPlacement.cards, frogPos, metrics, now, flew, wishFocus]);
 
   const arrivingKey = postcards
     .filter((card) => card.arriving)
@@ -713,9 +716,9 @@ export function MapWall() {
           id: wish.id,
           name: wish.name,
           status: wish.status,
-          year: new Date(wish.createdAt).getUTCFullYear(),
+          year: (wish.status === 'fulfilled' ? model.trips.find(trip => trip.cityKeys.includes(wish.cityKey))?.year : undefined) ?? new Date(wish.createdAt).getUTCFullYear(),
         })),
-    [model.wishes],
+    [model.wishes, model.trips],
   );
   const homeMapPhotos = useMemo(() => {
     const trip = model.trips[0];
@@ -860,27 +863,18 @@ export function MapWall() {
     [wishPlacement.centers],
   );
 
-  const advanceWish = useCallback(
-    (wishId: string, status: 'opened' | 'stamped' | 'fulfilled') => {
-      const wish = model.wishById.get(wishId);
-      setWishFocus(null);
-      setDropping((previous) => new Set(previous).add(wishId));
-      window.setTimeout(() => {
-        setDropping((previous) => {
-          const next = new Set(previous);
-          next.delete(wishId);
-          return next;
-        });
-      }, 700);
+  const chooseWish = useCallback(
+    (wishId: string, keep: boolean) => {
+      if (choosingWish) return;
+      setChoosingWish(true);
       void guard(async () => {
-        await service.setWishStatus(wishId, status);
-        setHighlightWish(wishId);
-        if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current);
-        highlightTimer.current = window.setTimeout(() => setHighlightWish(null), HIGHLIGHT_MS);
-        notify(`${WISH_STEP_LABELS[status]} · ${wish?.name ?? '这张明信片'}`);
-      });
+        await service.setWishStatus(wishId, keep ? 'stamped' : 'declined');
+        setWishFocus(null);
+        setHighlightWish(keep ? wishId : null);
+        notify(keep ? '已留着 · 想去的地方，慢慢来' : '这次不去 · 明信片已收起');
+      }).finally(() => setChoosingWish(false));
     },
-    [guard, model, notify, service],
+    [choosingWish, guard, notify, service],
   );
 
   const handleWishClick = useCallback(
@@ -905,25 +899,22 @@ export function MapWall() {
     setEntrusting(true);
   }, [animateCamera, level, model.photos.length, notify]);
 
-  const deliver = useCallback(
-    (wishId: string, destination: DestinationCandidate) => {
-      const timer = window.setTimeout(() => {
-        const origin = activeTrip?.visits[0]?.cityKey ?? null;
-        const tail = NOTE_TAILS[Math.floor(Math.random() * NOTE_TAILS.length)] ?? NOTE_TAILS[0];
-        void guard(async () => {
-          await service.deliverWish(wishId, { note: `替你在${destination.name}走了一圈，${tail}`, from: origin });
-          setFrogMode('rest');
-          if (hints) setBubbleText(`明信片寄到了 · ${destination.name}`);
-          setHighlightWish(wishId);
-          if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current);
-          highlightTimer.current = window.setTimeout(() => setHighlightWish(null), HIGHLIGHT_MS);
-          notify(`明信片寄到了 · ${destination.name}`);
-        });
-      }, DELIVERY_MS);
-      deliveryTimers.current.push(timer);
-    },
-    [activeTrip, guard, hints, notify, service],
-  );
+  // Rebuild the next delivery from durable postcards, including after reload.
+  useEffect(() => {
+    if (snapshot.status !== 'ready') return;
+    const pending = snapshot.wishes.filter((wish) => wish.origin === 'user' && wish.status === 'pending');
+    if (pending.length === 0) return;
+    const deadline = Math.min(...pending.map((wish) => wish.createdAt + POSTCARD_DELIVERY_MS));
+    const timer = window.setTimeout(() => {
+      void guard(async () => {
+        await service.deliverDuePostcards();
+        setNow(Date.now());
+        setFrogMode('rest');
+        notify('青蛙带回了一张明信片');
+      });
+    }, Math.max(0, deadline - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [snapshot.status, snapshot.wishes, service, guard, notify]);
 
   const entrustTo = useCallback(
     (destination: DestinationCandidate) => {
@@ -941,12 +932,12 @@ export function MapWall() {
         setFrogMode('postcard');
         if (hints) setBubbleText(`去 ${destination.name} 的路上 · 等它寄回来`);
         notify(`已托付 · ${destination.name} · 等青蛙路过`);
-        deliver(wishId, destination);
+        setHighlightWish(wishId);
       }).finally(() => {
         entrustBusy.current.delete(destination.key);
       });
     },
-    [deliver, guard, hints, notify, service],
+    [guard, hints, notify, service],
   );
 
   const startReplay = useCallback(
@@ -1087,6 +1078,8 @@ export function MapWall() {
     viewSaveTimer.current = window.setTimeout(() => {
       viewSaveTimer.current = null;
       const view: MapViewState = {
+        cityKey,
+        activeTripId,
         camera: cameraRef.current,
         mode,
         level,
@@ -1095,7 +1088,7 @@ export function MapWall() {
       };
       void service.saveMapView(view).catch(() => undefined);
     }, 500);
-  }, [scene, mode, level, service, snapshot.status]);
+  }, [scene, mode, level, cityKey, activeTripId, service, snapshot.status]);
 
   useEffect(() => {
     if (!restoredView.current || snapshot.status !== 'ready') return;
@@ -1113,6 +1106,8 @@ export function MapWall() {
 
   const openHome = useCallback(() => {
     const view: MapViewState = {
+      cityKey,
+      activeTripId,
       camera,
       mode,
       level,
@@ -1129,7 +1124,7 @@ export function MapWall() {
     setMemoryTripId(null);
     setScene('home');
     void service.setFrogPerch(perchFromRandom(Math.random())).catch(() => undefined);
-  }, [camera, mode, level, service]);
+  }, [camera, mode, level, cityKey, activeTripId, service]);
 
   const returnToMap = useCallback(() => {
     setScene('wall');
@@ -1140,6 +1135,8 @@ export function MapWall() {
     cameraFrame.current = null;
     setMode(view.mode);
     setLevel(view.level);
+    setCityKey(view.cityKey ?? '');
+    setActiveTripId(view.activeTripId ?? '');
     setCamera(view.camera);
     pendingScroll.current = view.poiScrollTop;
   }, [snapshot.mapView]);
@@ -1257,7 +1254,7 @@ export function MapWall() {
   const replayStop = replay ? replayPoints[replay.index] : undefined;
 
   const countryName =
-    activeTrip?.visits[0]?.countryName ?? model.cities[0]?.countryName ?? '日本';
+    model.cityByKey.get(effectiveCityKey)?.countryName ?? activeTrip?.visits[0]?.countryName ?? '世界';
   const cityName =
     level === 'region'
       ? '关西'
@@ -1488,7 +1485,8 @@ export function MapWall() {
             const photo = model.photoById.get(photoId);
             return photo ? imageFor(photo) : null;
           }}
-          onAdvance={(status) => advanceWish(focusWishValue.id, status)}
+          onChoose={(keep) => chooseWish(focusWishValue.id, keep)}
+          busy={choosingWish}
           onClose={() => setWishFocus(null)}
         />
       ) : null}
@@ -1501,7 +1499,7 @@ export function MapWall() {
         open={settingsOpen}
         theme={theme}
         hints={hints}
-        tripCount={snapshot.trips.length}
+        tripCount={model.trips.length}
         photoCount={snapshot.photos.length}
         wishCount={snapshot.wishes.length}
         lastWrite={snapshot.loadedAt > 0 ? new Date(snapshot.loadedAt).toLocaleString('zh-CN', { hour12: false }) : '—'}

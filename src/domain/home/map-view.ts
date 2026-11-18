@@ -20,6 +20,8 @@ export interface MapViewState {
   readonly level: MapLevel;
   readonly poiScrollTop: number;
   readonly savedAt: Instant;
+  readonly cityKey?: string;
+  readonly activeTripId?: string;
 }
 
 export const DEFAULT_MAP_VIEW: MapViewState = {
@@ -39,6 +41,10 @@ function isLevel(value: unknown): value is MapLevel {
 }
 
 export function validateMapViewState(value: MapViewState): Result<MapViewState> {
+  if ((value.cityKey !== undefined && typeof value.cityKey !== 'string') ||
+      (value.activeTripId !== undefined && typeof value.activeTripId !== 'string')) {
+    return err(domainError('VALIDATION_FAILED', '地图所选位置无效'));
+  }
   const { camera } = value;
   if (
     !Number.isFinite(camera.cx) ||

@@ -25,10 +25,10 @@ describe('migrateWishRow', () => {
     expect(wish?.note).toBe('想去看看兼六园。');
   });
 
-  it('maps the legacy "next" state to "opened", "visited" to "fulfilled", and "declined" to "received"', () => {
+  it('maps the legacy "next" state to "opened", "visited" to "fulfilled", and preserves "declined"', () => {
     expect(migrateWishRow(legacyRow({ status: 'next' }), NOW)?.status).toBe('opened');
     expect(migrateWishRow(legacyRow({ status: 'visited' }), NOW)?.status).toBe('fulfilled');
-    expect(migrateWishRow(legacyRow({ status: 'declined' }), NOW)?.status).toBe('received');
+    expect(migrateWishRow(legacyRow({ status: 'declined' }), NOW)?.status).toBe('declined');
   });
 
   it('keeps rows that already use the five-state model', () => {

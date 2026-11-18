@@ -4,21 +4,23 @@
 
 travel-frog 是一个**本地优先的私人旅行档案**。它从照片的 EXIF 时间和 GPS 出发，把散落的照片切成一趟趟旅行（Trip），再提供站点时间轴、路线回放、城市点亮、照片补位置和隐私设置。
 
-它不是地图工具，也不是公开社交 feed；地图是结果页，不是入口。
+地图墙是主入口；家的里屋收存明信片与旅行记忆。照片在本机解析，没有账号或云端上传。
 
 ## 文档与原型
 
-- 产品需求文档：[`docs/PRD.md`](docs/PRD.md)
+- 当前素材与交互验收基线：[`docs/PRD-v4-reference.md`](docs/PRD-v4-reference.md)
+- 地图墙历史基线：[`docs/PRD-v3-map-first.md`](docs/PRD-v3-map-first.md)
+- v1 历史文档：[`docs/PRD.md`](docs/PRD.md)
 - 低保真九屏原型：[`docs/prototype/index.html`](docs/prototype/index.html)
 
 原型使用**示例数据**，仅用于确认信息架构与中文文案，不代表真实用户档案；界面视觉以可运行实现为准。
 
 ## 本地运行
 
-要求 Node.js 18+（开发环境使用 Node 22）。
+要求 Node.js 22.12+；本次验证使用 Node.js 24。
 
 ```bash
-npm install
+npm ci --cache /tmp/travel-frog-npm-cache
 npm run dev       # 开发服务器，默认 http://localhost:5173
 npm run build     # 类型检查 + 生产构建，输出 dist/
 npm run preview   # 预览生产构建
@@ -28,7 +30,7 @@ npm run lint      # oxlint
 
 首次打开为空态，可在首页点击「加载示例旅程」体验完整流程。
 
-## 已实现范围（v1）
+## 已实现基础能力
 
 - **照片导入**：文件选择 + 拖拽文件夹；本地解析 EXIF 拍摄时间与 GPS；本地生成缩略图。
 - **Trip 切分**：纯函数，按时间间隔、地理距离、连续天数切分；切分参数可在导入确认页调整。
@@ -52,11 +54,11 @@ npm run lint      # oxlint
 | 照片补位置 | 同日 GPS 均值 / 最近有时间照片回退，真实本地计算 |
 | 青蛙页元素映射 | 简化占位：按城市固定映射生成展示元素 |
 | 云同步 | 仅保存偏好，v1 不发起任何网络请求 |
-| 真实照片 EXIF 样本验证 | 未包含真实照片，导入流程以代码与示例数据验证 |
+| 文件导入验证 | 已用合成 EXIF JPEG 验证真实文件导入，不涉及用户照片；HEIC 兼容性未完成 |
 
 ## 隐私
 
-- 原图、缩略图、精确坐标与档案默认只保存在本机浏览器（IndexedDB）。
+- 原图不复制或保存；最大边 480px 的缩略图、精确坐标与档案保存在本机浏览器（IndexedDB）。
 - v1 不上传照片，不接入分析 SDK，不做行为上报。
 - 云同步默认关闭；即使开启也只保存偏好，不联网。
 - 支持导出完整 JSON，以及一键删除全部本地数据。
@@ -64,3 +66,10 @@ npm run lint      # oxlint
 ## 技术栈
 
 Vite + React 19 + TypeScript，Vitest 单测，无运行时外部地图或网络依赖。
+
+## 素材还原改动
+
+- 来信阅读恢复“留着 / 这次不去”，留着盖想去邮戳；真实照片确认后才兑现。
+- 待寄任务按已存托付时间补投，刷新不丢失。拒绝保留在档案中并从墙面收起。
+- 家接入写实场景，卡片、照片、特产、单只水彩青蛙和三档皮箱独立叠加。
+- 素材来源与制作说明见 [`public/art/README.md`](public/art/README.md)。

@@ -93,6 +93,13 @@ export const CITY_TABLE: readonly CitySeed[] = [
   { name: '开普敦', countryName: '南非', countryCode: 'ZAF', lat: -33.9249, lng: 18.4241 },
   { name: '马拉喀什', countryName: '摩洛哥', countryCode: 'MAR', lat: 31.6295, lng: -7.9811 },
   { name: '内罗毕', countryName: '肯尼亚', countryCode: 'KEN', lat: -1.2921, lng: 36.8219 },
+  // Every place offered by the postcard flow must resolve imported GPS to the same city key.
+  { name: '金泽', countryName: '日本', countryCode: 'JPN', lat: 36.5613, lng: 136.6562 },
+  { name: '会安', countryName: '越南', countryCode: 'VNM', lat: 15.8801, lng: 108.338 },
+  { name: '斋浦尔', countryName: '印度', countryCode: 'IND', lat: 26.9124, lng: 75.7873 },
+  { name: '库斯科', countryName: '秘鲁', countryCode: 'PER', lat: -13.5319, lng: -71.9675 },
+  { name: '努克', countryName: '格陵兰', countryCode: 'GRL', lat: 64.1835, lng: -51.7216 },
+  { name: '波特兰', countryName: '美国', countryCode: 'USA', lat: 45.5152, lng: -122.6784 },
 ];
 
 export const CITY_TABLE_VERSION = '2026.1';
