@@ -915,6 +915,7 @@ export function MapWall() {
         await service.deliverDuePostcards();
         setNow(Date.now());
         setFrogMode('rest');
+        setBubbleText(null);
         notify('青蛙带回了一张明信片');
       });
     }, Math.max(0, deadline - Date.now()));

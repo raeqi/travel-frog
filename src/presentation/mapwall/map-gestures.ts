@@ -116,6 +116,8 @@ export function useMapGestures(
       stop();
       points.set(event.pointerId, pos(event));
       if (points.size === 1) {
+        // Ignore the drag's trailing click, but accept a fresh deliberate press.
+        suppressUntil = 0;
         origin = previous = pos(event);
         moved = false;
         velocity = { x: 0, y: 0 };
