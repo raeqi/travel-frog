@@ -33,6 +33,7 @@ export interface ImportProgress {
   readonly done: number;
   readonly total: number;
   readonly fileName: string;
+  readonly stage?: 'metadata' | 'preview' | 'candidates' | 'saving' | 'completed';
 }
 
 const SUPPORTED = /\.(jpe?g|png|webp|heic|heif)$/i;
@@ -80,6 +81,7 @@ async function toPhoto(
   batchId: string,
   existingHashes: ReadonlyMap<string, string>,
   batchHashes: Set<string>,
+  onPreview: () => void,
 ): Promise<{ photo: Photo; issues: ImportIssue[]; thumbnail: Blob | null } | { duplicate: ImportIssue }> {
   const now = deps.clock.now();
   const issues: ImportIssue[] = [];
@@ -146,7 +148,8 @@ async function toPhoto(
     }
   }
 
-  const thumbnail = await deps.thumbnails.create(file, 480);
+  onPreview();
+  const thumbnail = await deps.thumbnails.create(file, 2048);
   const thumbRef = thumbnail ? `thumb_${id}` : null;
   if (!thumbnail) issues.push(issue(deps, batchId, file.name, 'thumbnail-failed', '缩略图生成失败，将显示占位'));
 
@@ -205,9 +208,9 @@ export async function importPhotos(
   for (let index = 0; index < files.length; index += 1) {
     const file = files[index];
     if (!file) continue;
-    onProgress?.({ done: index, total: files.length, fileName: file.name });
+    onProgress?.({ done: index, total: files.length, fileName: file.name, stage: 'metadata' });
     try {
-      const result = await toPhoto(deps, file, batchId, existingHashes, batchHashes);
+      const result = await toPhoto(deps, file, batchId, existingHashes, batchHashes, () => onProgress?.({done:index,total:files.length,fileName:file.name,stage:'preview'}));
       if ('duplicate' in result) {
         duplicates += 1;
         issues.push(result.duplicate);
@@ -225,6 +228,7 @@ export async function importPhotos(
     }
   }
 
+  onProgress?.({done:files.length,total:files.length,fileName:'',stage:'candidates'});
   const resolvable = photos.filter(
     (photo) => photo.capturedAtSource !== 'missing' && !isFuture(photo.capturedAt, now),
   );
@@ -275,6 +279,7 @@ export async function importPhotos(
     origin: 'user',
   };
 
+  onProgress?.({done:files.length,total:files.length,fileName:'',stage:'saving'});
   try {
     await deps.gateway.run(async (repos) => {
       await repos.batches.save(batch);
@@ -292,6 +297,6 @@ export async function importPhotos(
     throw new AppError('STORAGE_FAILED', '这次导入没有写入本地数据库，照片没有被添加。请检查存储空间后重试。');
   }
 
-  onProgress?.({ done: files.length, total: files.length, fileName: '' });
+  onProgress?.({ done: files.length, total: files.length, fileName: '', stage:'completed' });
   return { batchId, imported: photos.length, duplicates, failed, candidateCount: candidates.length, issues };
 }

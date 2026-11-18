@@ -26,7 +26,7 @@ export function usePhotoImages(photos: readonly WallPhoto[], service: TravelFrog
             return next;
           });
         } catch {
-          // A missing thumbnail is not fatal: the deterministic illustration remains.
+          // A missing personal photo is represented honestly, never by demo art.
         }
       }
     };
@@ -42,5 +42,11 @@ export function usePhotoImages(photos: readonly WallPhoto[], service: TravelFrog
 }
 
 export function photoImage(photo: WallPhoto, urls: ReadonlyMap<string, string>): string {
-  return urls.get(photo.id) ?? scene(imageSeed(photo.id), photo.palette);
+  const loaded = urls.get(photo.id);
+  if (loaded) return loaded;
+  if (photo.origin === 'demo') return scene(imageSeed(photo.id), photo.palette);
+  return MISSING_PHOTO;
 }
+
+/** Explicit placeholder for unavailable personal photos; demo art is never substituted. */
+export const MISSING_PHOTO = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320"><rect width="480" height="320" fill="#ece8df"/><path d="M200 125h80v60h-80zM210 170l18-20 18 15 12-10 15 20" fill="none" stroke="#9b978b" stroke-width="3"/><text x="240" y="220" text-anchor="middle" font-size="18" fill="#706d61">照片暂不可用</text></svg>')}`;

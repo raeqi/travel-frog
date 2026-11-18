@@ -4,6 +4,7 @@ import './styles/tokens.css';
 import './styles/app.css';
 import './styles/home.css';
 import './styles/room-motion.css';
+import './styles/room-space.css';
 import { TravelFrogService } from './application/travel-frog-service';
 import { openDatabase } from './infrastructure/persistence/idb/database';
 import { IdbUnitOfWork } from './infrastructure/persistence/idb/unit-of-work';

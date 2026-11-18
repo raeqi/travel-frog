@@ -15,14 +15,7 @@ export function TopBar({
     <header className="topbar">
       <div className="brand">
         <span className="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path d="M4 16c0-3.3 3.6-6 8-6s8 2.7 8 6-3.6 5-8 5-8-1.7-8-5z" fill="currentColor" />
-            <circle cx="8.4" cy="9.2" r="2.3" fill="currentColor" />
-            <circle cx="15.6" cy="9.2" r="2.3" fill="currentColor" />
-            <circle cx="8.4" cy="9.2" r=".9" fill="#fff" />
-            <circle cx="15.6" cy="9.2" r=".9" fill="#fff" />
-            <path d="M7 19.4 5 22M17 19.4 19 22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
+          <span className="frog-sprite pose-front" />
         </span>
         <span className="brand-text">
           <strong>旅行青蛙</strong>
@@ -148,17 +141,7 @@ export function EmptyCard({ onImport, onDemo }: { readonly onImport: () => void;
       <span className="tape tape-l" aria-hidden="true" />
       <span className="tape tape-r" aria-hidden="true" />
       <div className="empty-frog" aria-hidden="true">
-        <svg viewBox="0 0 64 56" width="78" height="68">
-          <ellipse cx="32" cy="49" rx="19" ry="4" fill="rgba(60,40,20,.18)" />
-          <path d="M9 36c0-9.4 10.3-17 23-17s23 7.6 23 17-10.3 14-23 14S9 45.4 9 36z" fill="#6FA977" />
-          <circle cx="22" cy="19" r="6.4" fill="#6FA977" />
-          <circle cx="42" cy="19" r="6.4" fill="#6FA977" />
-          <circle cx="22" cy="19" r="2.6" fill="#20301F" />
-          <circle cx="42" cy="19" r="2.6" fill="#20301F" />
-          <path d="M24 33c2.6 2.4 13.4 2.4 16 0" stroke="#2C4A2E" strokeWidth="2" fill="none" strokeLinecap="round" />
-          <path d="M14 47 10 52M50 47l4 5" stroke="#2C4A2E" strokeWidth="3" strokeLinecap="round" />
-          <path d="M45 8c4-1 7 1 7 1s-2 5-6 5" fill="#D9902A" opacity=".9" />
-        </svg>
+        <span className="frog-sprite pose-welcome" />
       </div>
       <h1>从照片开始</h1>
       <p>把手机里的一叠旅行照片拖进来。照片只在本机解析，位置和一句话记忆都留在这面墙上。</p>

@@ -8,6 +8,9 @@ travel-frog 是一个**本地优先的私人旅行档案**。它从照片的 EXI
 
 ## 文档与原型
 
+- 最新用户口径与空间成长：[`docs/PRD-v4-growth-space.md`](docs/PRD-v4-growth-space.md)
+- 本轮实现与验证：[`docs/implementation-v4.md`](docs/implementation-v4.md)
+
 - 当前素材与交互验收基线：[`docs/PRD-v4-reference.md`](docs/PRD-v4-reference.md)
 - 地图墙历史基线：[`docs/PRD-v3-map-first.md`](docs/PRD-v3-map-first.md)
 - v1 历史文档：[`docs/PRD.md`](docs/PRD.md)
