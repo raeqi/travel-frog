@@ -1,52 +1,67 @@
-import { useState, type CSSProperties } from 'react';
-import type { HomeState } from '../../domain/home/home';
+import { useState, type CSSProperties } from "react";
+import type { HomeState } from "../../domain/home/home";
 import {
   curioSlots,
+  LUGGAGE_LABELS,
   type FurnitureState,
   type LuggageTier,
   type SpecialtyAward,
-} from '../../domain/home/collection';
-import { PERCH_LABELS, type FrogPerch, type HomeDisplay } from '../../domain/home/perch';
-import type { WishStatus } from '../../domain/wish/wish';
-import { FrogPerchFigure } from './Frog';
+} from "../../domain/home/collection";
+import {
+  PERCH_LABELS,
+  perchForDisplay,
+  type FrogPerch,
+  type HomeDisplay,
+} from "../../domain/home/perch";
+import { wishStatusLabel, type WishStatus } from "../../domain/wish/wish";
+import { FrogPerchFigure } from "./Frog";
+import { FROG_POSE_LABELS } from "./frog-poses";
+import { ROOM_FLOOR } from "./room-navigation";
+import { useRoomFrog } from "./useRoomFrog";
 
-/** A postcard on the home board: the same object the map renders, no home-only state. */
 export interface HomePostcard {
   readonly id: string;
   readonly name: string;
   readonly status: WishStatus;
   readonly year: number;
 }
-
 export interface HomeRoomProps {
   readonly home: HomeState;
   readonly furniture: FurnitureState;
   readonly luggage: LuggageTier;
-  readonly mapPhotos: readonly { readonly id: string; readonly image: string }[];
   readonly postcards: readonly HomePostcard[];
-  readonly onFrog: () => void;
   readonly onPerch: (perch: FrogPerch) => void;
-  readonly onDisplay: (display: HomeDisplay) => void;
   readonly onMap: () => void;
   readonly onSpecialty: (award: SpecialtyAward) => void;
   readonly onPostcard: (wishId: string) => void;
   readonly onMoveHome: (cityName: string) => Promise<boolean>;
 }
 
-/**
- * The room behind the map. Every display here expands an existing memory; nothing is
- * generated, dropped or unlocked by clicking. Only the frog, the three main displays
- * and the souvenirs are interactive.
- */
+function souvenirIndex(name: string, slot: number): number {
+  if (name.includes("书签")) return 0;
+  if (/瓷砖|杯垫|马赛克/.test(name)) return 1;
+  if (name.includes("扇")) return 2;
+  if (/香料|袋/.test(name)) return 3;
+  if (/黑石|石/.test(name)) return 4;
+  if (/小铜佛|佛/.test(name)) return 5;
+  if (/布|毯/.test(name)) return 6;
+  if (/瓷|碗/.test(name)) return 7;
+  return [7, 4, 7, 6][slot % 4] ?? 7;
+}
+
+const MOVEMENT_HINTS = {
+  idle: '点空地走走 · 点椅子坐下', seated: '点空地走走 · 点椅子坐下',
+  rise: '先从椅子上起来…', 'jump-down': '从椅子上跳下来…',
+  walk: '蛙蛙走过去…', 'jump-up': '跳回椅子上…', sit: '在椅子上坐好…',
+};
+
+/** The painted room is scenery; every card, photo and frog is a live archive object. */
 export function HomeRoom({
   home,
   furniture,
   luggage,
-  mapPhotos,
   postcards,
-  onFrog,
   onPerch,
-  onDisplay,
   onMap,
   onSpecialty,
   onPostcard,
@@ -54,170 +69,200 @@ export function HomeRoom({
 }: HomeRoomProps) {
   const [moving, setMoving] = useState(false);
   const [cityName, setCityName] = useState(home.city.name);
-  const pinned = postcards.filter((card) => card.status !== 'fulfilled');
+  const [luggageOpen, setLuggageOpen] = useState(false);
+  const { actor, target, move, changePose } = useRoomFrog(home.perch, luggage, onPerch);
+  const busy = actor.phase !== 'idle' && actor.phase !== 'seated';
+  const pose = actor.pose;
+  const visitDisplay = (display: HomeDisplay) => {
+    move({ kind: 'perch', perch: perchForDisplay(display) });
+  };
+  const depth = 0.86 + 0.2 * Math.max(0, Math.min(1, (actor.position.y - 70) / 28));
+  const jumping = actor.phase === 'jump-down' || actor.phase === 'jump-up';
+  const luggageFront = { small: 93.2, standard: 93.2, wardrobe: 95.5 }[luggage];
+  const onChair = actor.phase === 'seated' || actor.phase === 'rise' || actor.phase === 'sit';
+  let layer = 20;
+  if (!jumping) {
+    if (onChair || actor.position.y < 89) layer = 10;
+    else if (actor.position.x > 77 && actor.position.y < luggageFront) layer = 16;
+  }
+  const pinned = postcards.filter(
+    (card) => card.status !== "fulfilled" && card.status !== "declined",
+  );
   const archived = postcards
-    .filter((card) => card.status === 'fulfilled')
+    .filter((card) => card.status === "fulfilled")
     .slice()
     .sort((a, b) => a.year - b.year);
-
   const submitMove = async () => {
-    const name = cityName.trim();
-    if (name.length === 0 || name === home.city.name) return;
-    const ok = await onMoveHome(name);
-    if (ok) setMoving(false);
+    if (
+      cityName.trim() &&
+      cityName.trim() !== home.city.name &&
+      (await onMoveHome(cityName.trim()))
+    )
+      setMoving(false);
   };
-
   return (
-    <div className="home-room" data-furniture={furniture.stage} data-luggage={luggage}>
-      <div className="home-vignette" aria-hidden="true" />
-
-      <header className="home-bar">
-        <button type="button" className="home-back" onClick={onMap}>
-          回到地图
-        </button>
-        <div className="home-city">
-          <button
-            type="button"
-            className="home-city-chip"
-            aria-expanded={moving}
-            onClick={() => {
-              setCityName(home.city.name);
-              setMoving((open) => !open);
-            }}
-          >
-            家 · {home.city.name}
+    <div
+      className="home-room"
+      data-furniture={furniture.stage}
+      data-luggage={luggage}
+    >
+      <div className="home-stage">
+        <div className="home-scene" aria-hidden="true" />
+        <div className="home-vignette" aria-hidden="true" />
+        <button
+          className="room-floor"
+          type="button"
+          aria-label="房间地板 · 点击走动，方向键移动"
+          style={{ clipPath: `polygon(${ROOM_FLOOR.map(point => `${point.x}% ${point.y}%`).join(',')})` }}
+          onClick={(event) => {
+            if (!event.detail) { move({ kind: 'floor', point: { x: 50, y: 97 } }); return; }
+            const rect = event.currentTarget.getBoundingClientRect();
+            move({ kind: 'floor', point: { x: (event.clientX - rect.left) / rect.width * 100, y: (event.clientY - rect.top) / rect.height * 100 } });
+          }}
+          onKeyDown={(event) => {
+            const directions: Record<string, readonly [number, number]> = { ArrowLeft: [-6, 0], ArrowRight: [6, 0], ArrowUp: [0, -6], ArrowDown: [0, 6] };
+            const delta = directions[event.key]; if (!delta) return;
+            event.preventDefault();
+            move({ kind: 'floor', point: { x: actor.position.x + delta[0], y: actor.position.y + delta[1] } });
+          }}
+        />
+        <div className="home-scene room-occluder room-table-occluder" aria-hidden="true" />
+        <div className="home-scene room-occluder room-chair-arm-occluder" aria-hidden="true" />
+        <div className="home-scene room-occluder room-table-legs-occluder" aria-hidden="true" />
+        {target && <span className="frog-destination" style={{ left: `${target.x}%`, top: `${target.y}%` }} aria-hidden="true" />}
+        <header className="home-bar">
+          <button type="button" className="home-back" onClick={onMap}>
+            ← 回到地图
           </button>
-          {moving ? (
-            <form
-              className="home-move"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submitMove();
+          <div className="home-city">
+            <button
+              type="button"
+              className="home-city-chip"
+              aria-expanded={moving}
+              onClick={() => {
+                setCityName(home.city.name);
+                setMoving(!moving);
               }}
             >
-              <input
-                value={cityName}
-                onChange={(event) => setCityName(event.target.value)}
-                aria-label="家所在的城市"
-                maxLength={20}
-              />
-              <button type="submit">搬家</button>
-            </form>
-          ) : null}
-        </div>
-      </header>
-
-      <div className="home-wall" aria-hidden="true" />
-
-      <button
-        type="button"
-        className="home-fireplace"
-        data-lit={furniture.fireplaceLit}
-        aria-label="壁炉"
-        title="壁炉"
-        onClick={() => onDisplay('fireplace')}
-      />
-
-      <div className="home-rug" aria-hidden="true" />
-
-      <button
-        type="button"
-        className="home-armchair"
-        aria-label="扶手椅"
-        title="扶手椅"
-        onClick={() => onPerch('armchair')}
-      />
-
-      <button
-        type="button"
-        className={`home-lamp${furniture.floorLampLit ? ' is-lit' : ''}`}
-        aria-label="落地灯"
-        title="落地灯"
-        onClick={() => onDisplay('lamp')}
-      />
-      <button type="button" className="home-footstool" aria-label="脚凳" title="脚凳" onClick={() => onDisplay('lamp')} />
-
-      <button
-        type="button"
-        className="home-map-table"
-        aria-label="矮几上摊开的世界地图 · 展开地图"
-        title="展开地图"
-        onClick={onMap}
-      >
-        <span className="home-map-sheet" aria-hidden="true">
-          {mapPhotos.slice(0, 4).map((photo, index) => (
-            <span
-              key={photo.id}
-              className={`home-map-photo p${index}`}
-              style={{ backgroundImage: `url("${photo.image}")` }}
-              aria-hidden="true"
-            />
-          ))}
-          {['p1', 'p2', 'p3', 'p4'].map((pin) => (
-            <i key={pin} className={`home-pin ${pin}`} aria-hidden="true" />
-          ))}
-        </span>
-      </button>
-
-      <div
-        className="home-postcard-wall"
-        role="group"
-        aria-label="明信片板"
-        onClick={() => onDisplay('postcard-wall')}
-      >
-        <span className="home-board-rope" aria-hidden="true" />
-        {['a', 'b', 'c', 'd'].map((nail) => (
-          <span key={nail} className={`home-board-nail nail-${nail}`} aria-hidden="true" />
-        ))}
-        {pinned.map((card, index) => (
-          <button
-            key={card.id}
-            type="button"
-            className={`home-postcard st-${card.status} slot-${index % 8}`}
-            aria-label={`${card.name} · ${POSTCARD_STATE_LABELS[card.status]}`}
-            title={`${card.name} · ${POSTCARD_STATE_LABELS[card.status]}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              onPostcard(card.id);
-            }}
-          >
-            <span className="home-postcard-clip" aria-hidden="true" />
-            {card.status === 'stamped' ? <span className="home-postcard-stamp" aria-hidden="true" /> : null}
-          </button>
-        ))}
-        {archived.length > 0 ? (
-          <div className="home-postcard-archive" aria-label="按年份归档的明信片">
-            {archived.map((card) => (
-              <button
-                key={card.id}
-                type="button"
-                className="home-postcard is-archived"
-                data-year={card.year}
-                aria-label={`${card.name} · ${card.year} 年归档`}
-                title={card.name}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onPostcard(card.id);
+              家 · {home.city.name}
+            </button>
+            {moving && (
+              <form
+                className="home-move"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitMove();
                 }}
-              />
-            ))}
+              >
+                <input
+                  aria-label="家所在的城市"
+                  value={cityName}
+                  onChange={(event) => setCityName(event.target.value)}
+                  maxLength={20}
+                />
+                <button type="submit">搬家</button>
+              </form>
+            )}
           </div>
-        ) : null}
-      </div>
-
-      <div
-        className={`home-curio${furniture.curioFilled ? ' is-filled' : ''}`}
-        role="group"
-        aria-label="多宝阁"
-        onClick={() => onDisplay('curio')}
-      >
-        <div className="home-curio-shelves">
+        </header>
+        <button
+          className="room-hotspot room-hearth"
+          type="button"
+          aria-label="壁炉"
+          onClick={() => visitDisplay("fireplace")}
+        />
+        <button
+          className="room-hotspot room-chair"
+          type="button"
+          aria-label="扶手椅"
+          onClick={() => move({ kind: 'perch', perch: 'armchair' })}
+        />
+        <button
+          className="room-hotspot room-lamp"
+          type="button"
+          aria-label="到落地灯旁"
+          onClick={() => visitDisplay("lamp")}
+        />
+        <button
+          className="room-hotspot room-curio-frame"
+          type="button"
+          aria-label="多宝阁架"
+          onClick={() => visitDisplay("curio")}
+        />
+        <button
+          className="room-map"
+          type="button"
+          aria-label="矮几上摊开的世界地图 · 展开地图"
+          onClick={onMap}
+        />
+        <div
+          className="room-postcards"
+          role="group"
+          aria-label="明信片板"
+          onClick={() => visitDisplay("postcard-wall")}
+        >
+          {pinned.slice(0, 8).map((card, index) => (
+            <button
+              key={card.id}
+              type="button"
+              className={`room-card st-${card.status}`}
+              style={
+                {
+                  "--slot": index % 4,
+                  "--row": Math.floor(index / 4),
+                  "--card-tilt": `${index % 2 ? 5 : -6}deg`,
+                } as CSSProperties
+              }
+              aria-label={`${card.name} · ${wishStatusLabel(card.status)}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onPostcard(card.id);
+              }}
+            >
+              <span className="room-card-pin" />
+              <span className="room-card-city">{card.name}</span>
+              <span className="room-card-lines" />
+              {card.status === "received" && <i className="room-card-dot" />}
+              {card.status === "stamped" && (
+                <span className="room-card-stamp">想去</span>
+              )}
+            </button>
+          ))}
+          {archived.slice(-4).map((card, index) => (
+            <button
+              className="room-card is-archived"
+              style={
+                {
+                  "--slot": index,
+                  "--row": 2,
+                  "--card-tilt": "-3deg",
+                } as CSSProperties
+              }
+              key={card.id}
+              type="button"
+              aria-label={`${card.name} · ${card.year} 年归档`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onPostcard(card.id);
+              }}
+            >
+              <span className="room-card-city">{card.year}</span>
+            </button>
+          ))}
+        </div>
+        <div
+          className="room-curio"
+          role="group"
+          aria-label="多宝阁"
+          onClick={() => visitDisplay("curio")}
+        >
           {curioSlots(home.specialties).map((slot) =>
             slot.specialty ? (
               <button
+                className={`room-souvenir souvenir-${souvenirIndex(slot.specialty.name, slot.index)}`}
                 key={slot.index}
+                style={{ "--shelf-col": slot.index % 2, "--shelf-row": Math.floor(slot.index / 2) } as CSSProperties}
                 type="button"
-                className="home-specialty"
                 aria-label={`${slot.specialty.name} · 来自${slot.specialty.cityKey}`}
                 title={slot.specialty.name}
                 onClick={(event) => {
@@ -225,79 +270,80 @@ export function HomeRoom({
                   onSpecialty(slot.specialty as SpecialtyAward);
                 }}
               >
-                <span className="home-specialty-mark" aria-hidden="true" />
+                <span />
               </button>
             ) : (
-              <span key={slot.index} className="home-specialty is-empty" aria-hidden="true" />
+              <span
+                key={slot.index}
+                className="room-souvenir is-empty"
+                aria-hidden="true"
+              />
             ),
           )}
         </div>
+        <button
+          type="button"
+          className={`room-luggage tier-${luggage}`}
+          aria-label={`行李 · ${LUGGAGE_LABELS[luggage]}`}
+          onClick={() => {
+            setLuggageOpen(true);
+          }}
+        >
+          <span className="luggage-art" />
+        </button>
+        <button
+          className="home-frog room-actor"
+          data-pose={pose}
+          data-phase={actor.phase}
+          data-facing={actor.facing}
+          style={{
+            left: `${actor.position.x}%`, top: `${actor.position.y}%`, width: `${14.5 * depth}%`, zIndex: layer,
+            '--jump-height': `${actor.jump * 9 / 16}cqw`, '--frog-facing': actor.facing === 'left' ? -1 : 1,
+            '--shadow-scale': 1 - actor.jump / 5.5 * 0.55,
+            '--squash-y': actor.phase === 'rise' || actor.phase === 'sit' ? 0.9 + actor.progress * 0.1 : 1,
+          } as CSSProperties}
+          type="button"
+          aria-label={busy ? '青蛙正在移动' : `青蛙在${actor.perch ? PERCH_LABELS[actor.perch] : '房间里'} · ${FROG_POSE_LABELS[pose]} · 点击换姿态`}
+          aria-busy={busy}
+          onClick={changePose}
+        >
+          <span className="frog-elevation"><span className="frog-gait"><FrogPerchFigure perch={actor.perch ?? 'fireplace-rug'} pose={pose} locationLabel={actor.perch ? PERCH_LABELS[actor.perch] : '房间里'} /></span></span>
+        </button>
+        <p className="room-walk-hint" role="status" aria-live="polite">{MOVEMENT_HINTS[actor.phase]}</p>
       </div>
-
-      {furniture.sideboard ? (
-        <button
-          type="button"
-          className="home-sideboard"
-          aria-label="边柜"
-          title="边柜"
-          onClick={() => onDisplay('bookshelf')}
-        />
-      ) : null}
-
-      {furniture.roundMirror ? <span className="home-mirror" aria-hidden="true" /> : null}
-
-      {furniture.bookshelf ? (
-        <button
-          type="button"
-          className="home-bookshelf"
-          aria-label="矮书架"
-          title="矮书架"
-          onClick={() => onDisplay('bookshelf')}
-        />
-      ) : null}
-
-      {furniture.globe ? <span className="home-globe" aria-hidden="true" /> : null}
-
-      <button
-        type="button"
-        className={`home-suitcase is-${luggage}${furniture.suitcaseFilled ? ' is-filled' : ''}`}
-        aria-label="敞开的行李箱"
-        title="敞开的行李箱"
-        onClick={() => onDisplay('suitcase')}
-      >
-        <span className="home-suitcase-strap" aria-hidden="true" />
-        <span className="home-suitcase-sticker" aria-hidden="true" />
-      </button>
-
-      <button
-        type="button"
-        className={`home-frog perch-${home.perch}`}
-        aria-label={`青蛙在${PERCH_LABELS[home.perch]} · 点击换一个位置`}
-        title={PERCH_LABELS[home.perch]}
-        onClick={(event) => {
-          event.stopPropagation();
-          onFrog();
-        }}
-      >
-        <FrogPerchFigure perch={home.perch} />
-      </button>
+      {luggageOpen && (
+        <div
+          className="luggage-focus"
+          role="dialog"
+          aria-label="旅行的行李"
+          onClick={() => setLuggageOpen(false)}
+        >
+          <div
+            className="luggage-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className={`luggage-preview tier-${luggage}`} />
+            <p>{LUGGAGE_LABELS[luggage]}</p>
+            <span>走过的地方，都装得下。</span>
+            <button type="button" onClick={() => setLuggageOpen(false)}>
+              收好
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-const POSTCARD_STATE_LABELS: Readonly<Record<WishStatus, string>> = {
-  pending: '托付中',
-  received: '来信',
-  opened: '已掀开',
-  stamped: '已盖戳',
-  fulfilled: '已兑现',
-};
 
 export interface SpecialtyProvenance {
   readonly award: SpecialtyAward;
   readonly cityName: string;
   readonly tripTitle: string;
-  readonly photos: readonly { readonly id: string; readonly image: string; readonly day: string }[];
+  readonly photos: readonly {
+    readonly id: string;
+    readonly image: string;
+    readonly day: string;
+  }[];
 }
 
 export interface SpecialtyFocusProps {
@@ -309,14 +355,24 @@ export interface SpecialtyFocusProps {
 export function SpecialtyFocus({ provenance, onClose }: SpecialtyFocusProps) {
   const { award } = provenance;
   return (
-    <div className="specialty-focus" role="dialog" aria-label={`${award.name} 的来历`} onClick={onClose}>
-      <div className="specialty-card" onClick={(event) => event.stopPropagation()}>
+    <div
+      className="specialty-focus"
+      role="dialog"
+      aria-label={`${award.name} 的来历`}
+      onClick={onClose}
+    >
+      <div
+        className="specialty-card"
+        onClick={(event) => event.stopPropagation()}
+      >
         <span className="sf-kicker">特产来历</span>
         <span className="sf-name">{award.name}</span>
         <span className="sf-line">
           {provenance.cityName} · {provenance.tripTitle}
         </span>
-        <span className="sf-date">带回于 {new Date(award.awardedAt).toISOString().slice(0, 10)}</span>
+        <span className="sf-date">
+          带回于 {new Date(award.awardedAt).toISOString().slice(0, 10)}
+        </span>
         {provenance.photos.length > 0 ? (
           <div className="sf-photos">
             {provenance.photos.map((photo) => (
@@ -324,7 +380,9 @@ export function SpecialtyFocus({ provenance, onClose }: SpecialtyFocusProps) {
                 key={photo.id}
                 className="sf-photo"
                 title={photo.day}
-                style={{ backgroundImage: `url("${photo.image}")` } as CSSProperties}
+                style={
+                  { backgroundImage: `url("${photo.image}")` } as CSSProperties
+                }
               />
             ))}
           </div>

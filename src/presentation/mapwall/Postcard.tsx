@@ -1,6 +1,5 @@
 import type { CSSProperties } from 'react';
 import { fnv1a, postcardTilt } from './geometry';
-import type { WishStatus } from '../../domain/wish/wish';
 import { formattedDay, isNewWish, type WallWish } from './model';
 import { scene, type PaletteName } from './photoArt';
 
@@ -47,10 +46,10 @@ export function PostcardBody({ wish, now }: { wish: WallWish; now: number }) {
     <>
       <span className="pc-place">{wish.name}</span>
       <span className="pc-note">{wish.note ?? ''}</span>
-      <span className="pc-meta">{formattedDay(wish.createdAt)}</span>
+      <span className="pc-meta">{formattedDay(wish.deliveredAt ?? wish.createdAt)}</span>
       <span className="pc-ring" />
       {wish.status === 'stamped' ? (
-        <span className={`pc-stamp${olive ? ' olive' : ''}`} />
+        <><span className={`pc-stamp${olive ? ' olive' : ''}`} /><span className="pc-kept-stamp">想去</span></>
       ) : null}
       {isNewWish(wish, now) ? <span className="pc-new" /> : null}
       {wish.status === 'received' ? <span className="pc-received-dot" /> : null}
@@ -126,7 +125,8 @@ export interface WishFocusProps {
   readonly top: number;
   readonly photos: readonly WishBackPhoto[];
   readonly photoImage: (photoId: string) => string | null;
-  readonly onAdvance: (status: 'opened' | 'stamped' | 'fulfilled') => void;
+  readonly onChoose: (keep: boolean) => void;
+  readonly busy: boolean;
   readonly onClose: () => void;
 }
 
@@ -134,22 +134,17 @@ export interface WishFocusProps {
  * The postcard lifted off the wall and turned over. Clicking anywhere on the card pins it
  * back; the only state changes are the explicit postcard transitions on the back side.
  */
-const NEXT_STEP: Partial<Record<WishStatus, { status: 'opened' | 'stamped' | 'fulfilled'; label: string }>> = {
-  received: { status: 'opened', label: '掀开' },
-  opened: { status: 'stamped', label: '盖戳' },
-  stamped: { status: 'fulfilled', label: '兑现' },
-};
-
 export function WishFocus({
   wish,
   left,
   top,
   photos,
   photoImage,
-  onAdvance,
+  onChoose,
+  busy,
   onClose,
 }: WishFocusProps) {
-  const step = NEXT_STEP[wish.status];
+  const choosing = wish.status === 'received' || wish.status === 'opened';
   return (
     <div className="wish-focus" role="dialog" aria-label={`${wish.name} 的明信片背面`} onClick={onClose}>
       <div
@@ -173,19 +168,22 @@ export function WishFocus({
           </span>
         ) : null}
         <span className="wf-note">{wish.note ?? ''}</span>
-        <span className="wf-date">青蛙寄于 {formattedDay(wish.createdAt)}</span>
+        <span className="wf-date">{wish.status === 'pending' ? '等青蛙路过' : `青蛙寄于 ${formattedDay(wish.deliveredAt ?? wish.createdAt)}`}</span>
         <span className="wf-coords">
           {wish.lat.toFixed(4)}, {wish.lng.toFixed(4)}
         </span>
         <span className="pc-ring" />
         {wish.status === 'stamped' || wish.status === 'fulfilled' ? <span className="pc-stamp" /> : null}
-        {step ? (
+        {wish.status === 'stamped' ? <span className="wf-kept">想去 · 留在这面墙上</span> : null}
+        {choosing ? (
           <div className="wf-actions" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="primary" onClick={() => onAdvance(step.status)}>
-              {step.label}
+            <button type="button" disabled={busy} className="primary" onClick={() => onChoose(true)}>
+              留着
             </button>
+            <button type="button" disabled={busy} onClick={() => onChoose(false)}>这次不去</button>
           </div>
         ) : null}
+        <button className="wf-close" type="button" aria-label="钉回明信片" onClick={onClose}>×</button>
       </div>
     </div>
   );

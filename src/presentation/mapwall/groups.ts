@@ -76,7 +76,7 @@ export function groupPoiData(input: PoiGroupInput): PoiGroups {
 
   return {
     years,
-    wished: input.wishes.filter((wish) => wish.status !== 'fulfilled'),
+    wished: input.wishes.filter((wish) => wish.status !== 'fulfilled' && wish.status !== 'declined'),
   };
 }
 

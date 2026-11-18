@@ -25,7 +25,7 @@ import type { FrogPerch } from '../domain/home/perch';
 import { createTrip, findOverlappingTrip, tripTitleFrom, validateTripPhotos } from '../domain/trip/trip';
 import type { Trip } from '../domain/trip/trip';
 import type { Visit } from '../domain/visit/visit';
-import { changeWishStatus, createWish, type Wish, type WishStatus } from '../domain/wish/wish';
+import { changeWishStatus, createWish, postcardNote, POSTCARD_DELIVERY_MS, type Wish, type WishStatus } from '../domain/wish/wish';
 import { makeGeoPoint } from '../domain/geo/geo-point';
 import type { Clock, CityResolver, ExifReader, FingerprintReader, IdGenerator, Logger, Repositories, ThumbnailGenerator } from '../domain/ports';
 import { ArchiveStore } from './archive-store';
@@ -266,16 +266,12 @@ export class TravelFrogService {
         await repos.candidates.save(markConfirmed(candidate, tripId, now));
         const wished = await repos.wishes.list();
         for (const wish of wished) {
-          if (wish.status === 'fulfilled' || wish.status === 'pending') continue;
+          if (wish.status !== 'stamped' || candidate.origin !== 'user') continue;
           if (!candidate.cityRefs.some((ref) => ref.key === wish.cityRef.key)) continue;
-          let nextWish = wish;
-          const chain = ['received', 'opened', 'stamped', 'fulfilled'] as const;
-          for (const status of chain.slice(chain.indexOf(wish.status) + 1)) {
-            const step = changeWishStatus(nextWish, status, now);
-            if (!step.ok) break;
-            nextWish = step.value;
-          }
-          if (nextWish !== wish) await repos.wishes.save(nextWish);
+          if (!members.some((photo) => photo.geo !== null)) continue;
+          const step = changeWishStatus(wish, 'fulfilled', now);
+          if (!step.ok) throw new DomainViolation(step.error);
+          await repos.wishes.save(step.value);
         }
       });
     } catch (error) {
@@ -613,6 +609,23 @@ export class TravelFrogService {
     await this.refresh();
   }
 
+  /** Deadlines derive from persisted creation time, so a reload cannot lose a delivery. */
+  async deliverDuePostcards(): Promise<void> {
+    const now = this.deps.clock.now();
+    const due = this.store.getSnapshot().wishes.some((wish) =>
+      wish.origin === 'user' && wish.status === 'pending' && wish.createdAt + POSTCARD_DELIVERY_MS <= now);
+    if (!due) return;
+    await this.deps.gateway.run(async (repos) => {
+      for (const wish of await repos.wishes.list()) {
+        if (wish.origin !== 'user' || wish.status !== 'pending' || wish.createdAt + POSTCARD_DELIVERY_MS > now) continue;
+        const next = changeWishStatus(wish, 'received', now, { note: postcardNote(wish.cityRef.name) });
+        if (!next.ok) throw new DomainViolation(next.error);
+        await repos.wishes.save(next.value);
+      }
+    });
+    await this.refresh();
+  }
+
   async deleteWish(wishId: string): Promise<void> {
     await this.deps.gateway.run(async (repos) => {
       await repos.manualVisits.deleteByWish(asWishId(wishId));
@@ -655,7 +668,7 @@ export class TravelFrogService {
   async exportArchive(includeCoordinates: boolean): Promise<ArchiveExport> {
     const data = await this.readAll();
     return {
-      version: 4,
+      version: 6,
       exportedAt: this.deps.clock.now(),
       includeCoordinates,
       trips: data.trips,
@@ -705,7 +718,9 @@ export class TravelFrogService {
         for (const memory of demo.memories) await repos.memories.save(memory);
       }
       if (demo.wishes.length > 0) {
-        for (const wish of demo.wishes) await repos.wishes.save(wish);
+        for (const wish of demo.wishes) {
+          if (!await repos.wishes.get(wish.id)) await repos.wishes.save(wish);
+        }
       }
       if (demo.manualVisits.length > 0) await repos.manualVisits.saveMany(demo.manualVisits);
     });

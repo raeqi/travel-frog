@@ -183,7 +183,7 @@ describe('candidate state machine', () => {
   });
 });
 
-describe('wish invariants (five postcard states)', () => {
+describe('wish invariants (postcard choices)', () => {
   const buildWish = () => {
     const made = createWish({
       id: 'w1',
@@ -210,10 +210,11 @@ describe('wish invariants (five postcard states)', () => {
     if (!opened.ok) throw new Error(opened.error.message);
     const stamped = changeWishStatus(opened.value, 'stamped', NOW + 3 * HOUR);
     if (!stamped.ok) throw new Error(stamped.error.message);
+    expect(stamped.value.deliveredAt).toBe(NOW + HOUR);
     const fulfilled = changeWishStatus(stamped.value, 'fulfilled', NOW + 4 * HOUR);
     if (!fulfilled.ok) throw new Error(fulfilled.error.message);
     expect(fulfilled.value.status).toBe('fulfilled');
-    expect(WISH_STATUSES).toEqual(['pending', 'received', 'opened', 'stamped', 'fulfilled']);
+    expect(WISH_STATUSES).toEqual(['pending', 'received', 'opened', 'stamped', 'fulfilled', 'declined']);
   });
 
   it('rejects illegal transitions instead of passing silently', () => {
@@ -226,7 +227,7 @@ describe('wish invariants (five postcard states)', () => {
     const received = changeWishStatus(wish, 'received', NOW + HOUR, { note: '到了。' });
     if (!received.ok) throw new Error(received.error.message);
     expect(changeWishStatus(received.value, 'pending', NOW + 2 * HOUR).ok).toBe(false);
-    expect(changeWishStatus(received.value, 'stamped', NOW + 2 * HOUR).ok).toBe(false);
+    expect(changeWishStatus(received.value, 'stamped', NOW + 2 * HOUR).ok).toBe(true);
     expect(changeWishStatus(received.value, 'fulfilled', NOW + 2 * HOUR).ok).toBe(false);
 
     const opened = changeWishStatus(received.value, 'opened', NOW + 2 * HOUR);
@@ -242,7 +243,7 @@ describe('wish invariants (five postcard states)', () => {
   });
 
   it('labels every state with the PRD wording', () => {
-    expect(WISH_STATUSES.map((status) => wishStatusLabel(status))).toEqual(['托付', '来信', '掀开', '盖戳', '兑现']);
+    expect(WISH_STATUSES.map((status) => wishStatusLabel(status))).toEqual(['托付', '来信', '掀开', '盖戳', '兑现', '这次不去']);
   });
 
   it('requires a sentence once the postcard has been written', () => {
@@ -267,7 +268,7 @@ describe('wish invariants (five postcard states)', () => {
     expect(migrateLegacyWishStatus('wish')).toEqual({ ok: true, value: 'opened' });
     expect(migrateLegacyWishStatus('next')).toEqual({ ok: true, value: 'opened' });
     expect(migrateLegacyWishStatus('wished')).toEqual({ ok: true, value: 'opened' });
-    expect(migrateLegacyWishStatus('declined')).toEqual({ ok: true, value: 'received' });
+    expect(migrateLegacyWishStatus('declined')).toEqual({ ok: true, value: 'declined' });
     expect(migrateLegacyWishStatus('visited')).toEqual({ ok: true, value: 'fulfilled' });
     expect(migrateLegacyWishStatus('received')).toEqual({ ok: true, value: 'received' });
     expect(migrateLegacyWishStatus('unknown').ok).toBe(false);

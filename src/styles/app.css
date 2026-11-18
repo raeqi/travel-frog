@@ -366,6 +366,9 @@ body[data-level="world"] .wish .wish-stamp { right: 4px; bottom: 4px; width: 14p
 
 /* ---------- frog ---------- */
 .frog {
+  border: 0;
+  padding: 0;
+  background: transparent;
   position: absolute;
   width: 56px;
   height: 54px;
@@ -2528,3 +2531,19 @@ body[data-scene="demo-postcard"] .wish.is-flipping { animation-name: pc-flip-dem
   flex-direction: column;
   gap: 8px;
 }
+
+/* Storyboard choices: the only decision is keep or decline; a later trip fulfils it. */
+.pc-kept-stamp { position: absolute; left: 11%; top: 36%; border: 1px solid #aa4438; border-radius: 50%; padding: 1px 5px; color: #aa4438; font: 8px var(--font-hand); transform: rotate(-16deg); animation: postcard-stamp-in .3s ease-out; }
+body:not([data-level="world"]) .pc-kept-stamp { font-size: 13px; padding: 2px 8px; }
+.wf-close { position: absolute; right: 4px; top: 3px; border: 0; background: transparent; color: #9e8b70; font-size: 10px; cursor: pointer; }
+.wf-kept { display: block; margin-top: 8px; font: 8px var(--font-hand); color: #aa4438; }
+.wish-focus-card { min-height: 133px; height: auto; padding-bottom: 33px; }
+.wish-focus-card .wf-note { min-height: 37px; padding-right: 5px; }
+.wish-focus-card .wf-actions button { height: 18px; }
+.frog-actions { padding: 8px 10px; border-radius: 12px; gap: 8px; box-shadow: 0 6px 20px #342a2033; }
+.frog-actions button { width: 34px; height: 34px; }
+.frog-actions button svg { width: 20px; height: 20px; }
+.pile { animation: memory-pin-in .45s ease-out; }
+@keyframes postcard-stamp-in { from { opacity: 0; transform: rotate(-20deg) scale(1.8); } to { opacity: 1; transform: rotate(-16deg) scale(1); } }
+@keyframes memory-pin-in { from { opacity: 0; translate: 0 -8px; } to { opacity: 1; translate: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .pc-kept-stamp, .pile { animation: none; } }

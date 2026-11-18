@@ -165,7 +165,17 @@ const migrationV5: Migration = {
   },
 };
 
-export const MIGRATIONS: readonly Migration[] = [migrationV2, migrationV3, migrationV4, migrationV5];
+// Additive lifecycle support. Existing v5 postcards and photos are preserved verbatim.
+const migrationV6: Migration = {
+  version: 6,
+  name: 'postcard-choices',
+  up: ({ tx, now }) => {
+    tx.objectStore(STORES.meta).put({ key: 'schema', schemaVersion: 6, lastOpenedAt: now });
+    tx.objectStore(STORES.migrations).put({ version: 6, name: 'postcard-choices', appliedAt: now });
+  },
+};
+
+export const MIGRATIONS: readonly Migration[] = [migrationV2, migrationV3, migrationV4, migrationV5, migrationV6];
 
 /** Runs every migration whose target version is newer than the database. */
 export function runMigrations(context: MigrationContext): void {
