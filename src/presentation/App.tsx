@@ -1,16 +1,13 @@
 import type { TravelFrogService } from '../application/travel-frog-service';
 import { ServiceProvider } from './context';
 import { ErrorBoundary } from './ErrorBoundary';
-import { AppShell } from './AppShell';
-import { ToastProvider } from './ui';
+import { MapWall } from './mapwall/MapWall';
 
 export function App({ service }: { service: TravelFrogService }) {
   return (
     <ErrorBoundary>
       <ServiceProvider value={service}>
-        <ToastProvider>
-          <AppShell />
-        </ToastProvider>
+        <MapWall />
       </ServiceProvider>
     </ErrorBoundary>
   );

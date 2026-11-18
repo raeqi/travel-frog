@@ -1,0 +1,356 @@
+import { useState } from 'react';
+import type { Candidate } from '../../domain/candidate/candidate';
+import type { ImportBatch, ImportIssue } from '../../domain/import/import-issue';
+import type { LocationSuggestion } from '../../domain/services/fill-locations';
+import { ISSUE_LABELS } from '../../domain/import/import-issue';
+import type { Photo } from '../../domain/photo/photo';
+import type { ImportProgress, ImportSummary } from '../../application/import-photos';
+import { fmtDate, fmtMonthDay } from '../format';
+
+export type DrawerTab = 'import' | 'candidates' | 'fill' | 'progress';
+
+const REASON_LABELS: Record<string, string> = {
+  'time-gap': '时间间隔',
+  'far-place': '远距离跳变',
+  'max-days': '单段最长天数',
+  manual: '初始分段',
+};
+
+const BATCH_LABELS: Record<string, string> = {
+  importing: '导入中',
+  completed: '已完成',
+  cancelled: '已取消',
+  failed: '失败',
+};
+
+function candidateCityNames(candidate: Candidate): string {
+  return candidate.cityRefs.map((city) => city.name).slice(0, 2).join(' · ') || '未识别地点';
+}
+
+function candidateRange(candidate: Candidate): string {
+  return `${fmtDate(candidate.timeRange.start)} → ${fmtMonthDay(candidate.timeRange.end - 1)}`;
+}
+
+export interface DrawerProps {
+  readonly open: boolean;
+  readonly tab: DrawerTab;
+  readonly onTab: (tab: DrawerTab) => void;
+  readonly onClose: () => void;
+  readonly candidates: readonly Candidate[];
+  readonly batches: readonly ImportBatch[];
+  readonly issues: readonly ImportIssue[];
+  readonly suggestions: readonly LocationSuggestion[];
+  readonly photosById: ReadonlyMap<string, Photo>;
+  readonly onImportFiles: (files: FileList, onProgress: (progress: ImportProgress) => void) => Promise<ImportSummary>;
+  readonly onConfirmCandidate: (id: string) => Promise<void>;
+  readonly onIgnoreCandidate: (id: string) => Promise<void>;
+  readonly onMergeCandidates: (first: string, second: string) => Promise<void>;
+  readonly onSplitCandidate: (id: string, at: number) => Promise<void>;
+  readonly onApplySuggestions: (photoIds: readonly string[]) => Promise<void>;
+}
+
+export function Drawer(props: DrawerProps) {
+  const [selectedCandidates, setSelectedCandidates] = useState<readonly string[]>([]);
+  const [selectedSuggestions, setSelectedSuggestions] = useState<readonly string[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
+  const [importResult, setImportResult] = useState<string | null>(null);
+
+  if (!props.open) return null;
+  const pending = props.candidates.filter((candidate) => candidate.status === 'pending');
+  const fillCount = props.suggestions.length;
+
+  const toggle = (current: readonly string[], id: string): readonly string[] =>
+    current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+
+  const runImport = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setImporting(true);
+    setProgress({ done: 0, total: files.length, fileName: '' });
+    setImportResult(null);
+    try {
+      const summary = await props.onImportFiles(files, setProgress);
+      setImportResult(
+        `已导入 ${summary.imported} 张 · 重复 ${summary.duplicates} · 失败 ${summary.failed} · 新候选 ${summary.candidateCount}`,
+      );
+    } catch (error) {
+      setImportResult(error instanceof Error ? error.message : '导入失败');
+    } finally {
+      setImporting(false);
+      setProgress(null);
+    }
+  };
+
+  return (
+    <aside className="drawer" aria-label="整理">
+      <header className="drawer-head">
+        <div>
+          <h2>整理</h2>
+          <p>照片留在本机，整理不离开这面墙。</p>
+        </div>
+        <button className="icon-btn" type="button" aria-label="关闭整理" onClick={props.onClose}>
+          ×
+        </button>
+      </header>
+      <div className="tabs" role="tablist" aria-label="整理分区">
+        <button type="button" role="tab" className={props.tab === 'import' ? 'is-on' : ''} onClick={() => props.onTab('import')}>
+          导入
+        </button>
+        <button type="button" role="tab" className={props.tab === 'candidates' ? 'is-on' : ''} onClick={() => props.onTab('candidates')}>
+          候选 {pending.length > 0 ? <i className="pill">{pending.length}</i> : null}
+        </button>
+        <button type="button" role="tab" className={props.tab === 'fill' ? 'is-on' : ''} onClick={() => props.onTab('fill')}>
+          补位置 {fillCount > 0 ? <i className="pill">{fillCount}</i> : null}
+        </button>
+        <button type="button" role="tab" className={props.tab === 'progress' ? 'is-on' : ''} onClick={() => props.onTab('progress')}>
+          进度
+        </button>
+      </div>
+      <div className="drawer-body">
+        {props.tab === 'import' ? (
+          <div className="panel">
+            <div
+              className="dropzone"
+              role="button"
+              tabIndex={0}
+              onClick={() => document.getElementById('wall-file-input')?.click()}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') document.getElementById('wall-file-input')?.click();
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                void runImport(event.dataTransfer.files);
+              }}
+            >
+              <span className="dz-icon">
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                  <path d="M12 16V5M7 10l5-5 5 5" />
+                  <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" />
+                </svg>
+              </span>
+              <strong>把照片拖到这里</strong>
+              <span>或点击选择文件 · JPG、PNG、WebP、HEIC</span>
+            </div>
+            <input
+              id="wall-file-input"
+              type="file"
+              accept=".jpg,.jpeg,.png,.webp,.heic,.heif"
+              multiple
+              hidden
+              onChange={(event) => {
+                void runImport(event.target.files);
+                event.target.value = '';
+              }}
+            />
+            {progress ? (
+              <div className="card">
+                <div className="panel-title">
+                  <h3>正在导入</h3>
+                  <span>
+                    {progress.done} / {progress.total}
+                  </span>
+                </div>
+                <div className="bar">
+                  <i style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }} />
+                </div>
+                <p className="note">{progress.fileName}</p>
+              </div>
+            ) : null}
+            {importResult ? <p className="note">{importResult}</p> : null}
+            <p className="note">照片只在本机解析；原图不会被复制进浏览器。导入完成后先生成候选，确认后才成为旅行。</p>
+          </div>
+        ) : null}
+
+        {props.tab === 'candidates' ? (
+          <div className="panel">
+            <div className="panel-title">
+              <h3>待确认</h3>
+              <span>{pending.length} 段</span>
+            </div>
+            {pending.length === 0 ? <p className="note">没有待确认的候选。导入照片后，这里会按时间与位置切分。</p> : null}
+            {pending.length > 1 ? (
+              <div className="merge-bar">
+                <span className="merge-icon">⇄</span>
+                <span>勾选两张候选可以合并；拆分按时间段的中点切开。</span>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  disabled={selectedCandidates.length !== 2 || importing}
+                  onClick={async () => {
+                    const [first, second] = selectedCandidates;
+                    if (!first || !second) return;
+                    setSelectedCandidates([]);
+                    await props.onMergeCandidates(first, second);
+                  }}
+                >
+                  合并所选
+                </button>
+              </div>
+            ) : null}
+            {pending.map((candidate) => {
+              const bars = ['on', 'on', 'on', candidate.confidence === 'high' ? 'on' : 'gap', 'on', 'on'];
+              const checked = selectedCandidates.includes(candidate.id);
+              return (
+                <div className="card candidate" key={candidate.id}>
+                  <div className="candidate-top">
+                    <div>
+                      <h4>{candidateCityNames(candidate)}</h4>
+                      <p className="sub">
+                        {candidateRange(candidate)} · {candidate.photoIds.length} 张
+                      </p>
+                    </div>
+                    <span className={`badge ${candidate.confidence}`}>{candidate.confidence === 'high' ? '高置信' : '低置信'}</span>
+                  </div>
+                  <div className="timeline">
+                    {bars.map((bar, index) => (
+                      <i key={index} className={bar} />
+                    ))}
+                  </div>
+                  <div className="reasons">
+                    {candidate.splitReasons.map((reason) => (
+                      <span className="chip" key={reason}>
+                        {REASON_LABELS[reason] ?? reason}
+                      </span>
+                    ))}
+                    {candidate.locationMissingCount > 0 ? <span className="chip">{candidate.locationMissingCount} 张缺定位</span> : null}
+                  </div>
+                  <div className="cand-actions">
+                    <button className="btn primary" type="button" onClick={() => void props.onConfirmCandidate(candidate.id)}>
+                      确认
+                    </button>
+                    <button className="btn ghost" type="button" onClick={() => void props.onIgnoreCandidate(candidate.id)}>
+                      忽略
+                    </button>
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      onClick={() =>
+                        void props.onSplitCandidate(
+                          candidate.id,
+                          Math.round((candidate.timeRange.start + candidate.timeRange.end) / 2),
+                        )
+                      }
+                    >
+                      拆分
+                    </button>
+                    <label className="chip">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setSelectedCandidates((current) => toggle(current, candidate.id))}
+                      />{' '}
+                      选择
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+            <p className="note">确认后才会写入档案；误操作可以撤销。</p>
+          </div>
+        ) : null}
+
+        {props.tab === 'fill' ? (
+          <div className="panel">
+            <div className="panel-title">
+              <h3>缺定位照片</h3>
+              <span>{fillCount} 张建议</span>
+            </div>
+            {fillCount === 0 ? <p className="note">没有可套用的位置。导入带 GPS 的照片后，同一天的无定位照片会出现在这里。</p> : null}
+            {fillCount > 0 ? (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={selectedSuggestions.length === 0}
+                  onClick={async () => {
+                    const ids = selectedSuggestions;
+                    setSelectedSuggestions([]);
+                    await props.onApplySuggestions(ids);
+                  }}
+                >
+                  套用所选 {selectedSuggestions.length} 张
+                </button>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={async () => {
+                    await props.onApplySuggestions(props.suggestions.map((item) => item.photoId));
+                  }}
+                >
+                  全部套用
+                </button>
+              </div>
+            ) : null}
+            <div className="card">
+              {props.suggestions.map((suggestion) => {
+                const photo = props.photosById.get(suggestion.photoId);
+                const checked = selectedSuggestions.includes(suggestion.photoId);
+                return (
+                  <div className="fill-row" key={suggestion.photoId}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => setSelectedSuggestions((current) => toggle(current, suggestion.photoId))}
+                    />
+                    <span className="meta">
+                      <strong>{photo?.fileName ?? suggestion.photoId}</strong>
+                      <span>
+                        → {suggestion.cityRef.name} · {suggestion.reason === 'same-day-gps' ? '同日 GPS' : '时间最近'} ·{' '}
+                        {suggestion.confidence === 'high' ? '高' : suggestion.confidence === 'medium' ? '中' : '低'}
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="note">候选来自本机照片的同日位置，不会自动写入。套用后照片会出现在地图上，并标记为「推断」。</p>
+          </div>
+        ) : null}
+
+        {props.tab === 'progress' ? (
+          <div className="panel">
+            <div className="panel-title">
+              <h3>最近的导入</h3>
+              <span>{props.batches.length} 批</span>
+            </div>
+            <div className="card">
+              {props.batches.length === 0 ? <p className="note">还没有导入记录。</p> : null}
+              {props.batches.map((batch) => (
+                <div className="progress-row" key={batch.id}>
+                  <span className={`pstate ${batch.status === 'completed' ? 'done' : batch.status === 'failed' ? 'error' : 'running'}`}>
+                    {batch.status === 'completed' ? '✓' : batch.status === 'failed' ? '!' : '·'}
+                  </span>
+                  <span className="plabel">
+                    <strong>{BATCH_LABELS[batch.status] ?? batch.status}</strong>
+                    <span>
+                      {batch.sourceFileCount} 个文件 · {batch.photoCount} 张照片 · {batch.candidateCount} 段候选
+                    </span>
+                  </span>
+                  {batch.issueCount > 0 ? <span className="hint">{batch.issueCount} 个问题</span> : null}
+                </div>
+              ))}
+            </div>
+            <div className="card">
+              <div className="panel-title">
+                <h3>问题文件</h3>
+                <span>{props.issues.length} 个</span>
+              </div>
+              {props.issues.length === 0 ? <p className="note">没有需要处理的问题文件。</p> : null}
+              {props.issues.map((issue) => (
+                <div className="file-row" key={issue.id}>
+                  <span className="name">{issue.fileName}</span>
+                  <span className="issue">{ISSUE_LABELS[issue.code] ?? issue.code}</span>
+                </div>
+              ))}
+              <p className="note" style={{ marginTop: 8 }}>
+                问题文件不会静默丢弃：可重试，或导出问题清单。
+              </p>
+            </div>
+            <p className="note">存档写入是事务性的；失败会保留上一次的完整快照。</p>
+          </div>
+        ) : null}
+      </div>
+    </aside>
+  );
+}

@@ -170,3 +170,68 @@
 @media (prefers-reduced-motion: reduce) {
   :root { --duration-instant:0ms; --duration-fast:0ms; --duration-base:0ms; --duration-slow:0ms; }
 }
+
+/* ------------------------------------------------------------------
+   v3 地图墙扩展令牌（语义层；组件只能引用这些变量）
+   对比度：纸面文字 12.4:1；标签文字 7.1:1；木框与软木仅作底，不承载文字。
+   ------------------------------------------------------------------ */
+:root {
+  --wall-frame: #6B4A33;
+  --wall-frame-inner: #5E3F2B;
+  --wall-frame-edge: rgba(40, 24, 15, .55);
+  --wall-board: #C9B79F;
+  --wall-board-deep: #B9A58A;
+  --wall-board-grain: rgba(92, 70, 48, .06);
+  --wall-paper: #EFE9DC;
+  --wall-paper-edge: rgba(92, 70, 48, .14);
+  --wall-water: #DDE6E4;
+  --wall-land: #E4DCCB;
+  --wall-land-line: rgba(92, 70, 48, .30);
+  --wall-visited: rgba(52, 147, 87, .16);
+  --wall-visited-line: rgba(36, 120, 67, .45);
+  --color-route: rgba(36, 120, 67, .52);
+  --color-route-muted: rgba(36, 120, 67, .10);
+  --color-route-inferred: rgba(142, 92, 13, .62);
+  --wall-label: #3F3A31;
+  --wall-label-sub: #7A7061;
+  --wall-label-halo: rgba(239, 233, 220, .92);
+  --photo-border: #FFFDF8;
+  --photo-shadow: rgba(58, 40, 24, .34);
+  --pin-head: #B23A2E;
+  --pin-shine: rgba(255, 255, 255, .45);
+  --postcard-paper: #FAF3E4;
+  --postcard-ink: #4A3B2A;
+  --postcard-stamp: #A8573F;
+  --wall-veil: rgba(24, 18, 12, .28);
+  --wall-drawer: #FBF8F2;
+  --wall-drawer-border: rgba(92, 70, 48, .18);
+}
+
+[data-theme="dark"] {
+  --wall-frame: #2E2119;
+  --wall-frame-edge: rgba(0, 0, 0, .7);
+  --wall-board: #2A241E;
+  --wall-board-deep: #221D18;
+  --wall-board-grain: rgba(255, 240, 214, .035);
+  --wall-paper: #2B2A26;
+  --wall-paper-edge: rgba(0, 0, 0, .45);
+  --wall-water: #1E2629;
+  --wall-land: #33322C;
+  --wall-land-line: rgba(214, 199, 172, .20);
+  --wall-visited: rgba(134, 201, 154, .20);
+  --wall-visited-line: rgba(134, 201, 154, .42);
+  --color-route: rgba(134, 201, 154, .55);
+  --color-route-muted: rgba(134, 201, 154, .10);
+  --color-route-inferred: rgba(251, 203, 99, .55);
+  --wall-label: #EDE6D8;
+  --wall-label-sub: #B3A897;
+  --wall-label-halo: rgba(43, 42, 38, .9);
+  --photo-border: #F4EFE4;
+  --photo-shadow: rgba(0, 0, 0, .62);
+  --postcard-paper: #37312A;
+  --postcard-ink: #EDE2CE;
+  --postcard-stamp: #D08A6D;
+  --wall-veil: rgba(0, 0, 0, .42);
+  --wall-drawer: #22201C;
+  --wall-drawer-border: rgba(255, 240, 214, .12);
+}

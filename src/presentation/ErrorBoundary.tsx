@@ -26,40 +26,31 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
   override render(): ReactNode {
     if (!this.state.error) return this.props.children;
     return (
-      <div className="app">
-        <a className="skip-link" href="#main">
-          跳到主要内容
-        </a>
-        <main className="main" id="main" tabIndex={-1}>
-          <section className="screen is-active" data-screen="error">
-            <div className="page screen-body">
-              <div className="page-error" role="alert">
-                <div className="error-icon" aria-hidden="true">
-                  !
-                </div>
-                <h1>页面渲染失败</h1>
-                <p>界面遇到未处理的错误。你的本地档案与照片原图没有受到影响，数据仍保存在 IndexedDB 中。</p>
-                <div className="actions">
-                  <button
-                    className="btn btn-primary"
-                    type="button"
-                    onClick={() => {
-                      this.reset();
-                      window.location.hash = '/home';
-                    }}
-                  >
-                    回到首页
-                  </button>
-                  <button className="btn btn-secondary" type="button" onClick={this.reset}>
-                    重试渲染
-                  </button>
-                </div>
-                <div className="meta">{this.state.error.message}</div>
-              </div>
-            </div>
-          </section>
-        </main>
-      </div>
+      <main className="boot-screen" id="main" tabIndex={-1}>
+        <div className="boot-card" role="alert">
+          <div className="boot-mark" aria-hidden="true">
+            !
+          </div>
+          <h1>页面渲染失败</h1>
+          <p>界面遇到未处理的错误。你的本地档案与照片原图没有受到影响，数据仍保存在 IndexedDB 中。</p>
+          <div className="boot-actions">
+            <button
+              className="btn primary"
+              type="button"
+              onClick={() => {
+                this.reset();
+                window.location.reload();
+              }}
+            >
+              重新加载
+            </button>
+            <button className="btn ghost" type="button" onClick={this.reset}>
+              重试渲染
+            </button>
+          </div>
+          <p className="boot-meta">{this.state.error.message}</p>
+        </div>
+      </main>
     );
   }
 }
