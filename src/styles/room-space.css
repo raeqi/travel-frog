@@ -1,0 +1,69 @@
+.room-view-toggle { position: fixed; z-index: 45; top: 20px; left: 50%; transform: translateX(-50%); color: #e6dac0; border: 1px solid #c9b18666; border-radius: 6px; background: #203527db; padding: 8px 16px; cursor: pointer; }
+.spatial-room { position: absolute; inset: 0; background: #181d18; color: #eee1c7; }
+.space-canvas { width: 100%; height: 100%; touch-action: none; }
+.space-canvas canvas { display: block; width: 100%; height: 100%; }
+.space-bar { position: absolute; top: 20px; left: 24px; right: 24px; display: flex; justify-content: space-between; pointer-events: none; }
+.space-bar button, .space-controls button, .room-archive-links button { pointer-events: auto; color: #e8dac0; background: #1c251dde; border: 1px solid #bca77d55; border-radius: 5px; padding: 8px 12px; cursor: pointer; }
+.space-bar span { padding: 8px; }
+.space-controls { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; width: min(94%,800px); }
+.space-controls button:hover, .room-archive-links button:hover { background: #375139; }
+.space-hint { position: absolute; bottom: 18px; width: 100%; text-align: center; color: #cfc3ab; font-size: 12px; pointer-events: none; }
+.space-error { position: absolute; top: 42%; width: 100%; text-align: center; }
+.room-archive-links { position: absolute; z-index: 31; left: 3%; bottom: 2%; display: flex; flex-wrap: wrap; gap: 5px; }
+.room-archive-links button { padding: 5px 9px; font-size: clamp(9px,.9cqw,13px); }
+.room-collection { position: fixed; z-index: 70; inset: 0; background: #080d0ace; display: grid; place-items: center; padding: 20px; }
+.room-collection section { width: min(750px,100%); max-height: 85vh; overflow: auto; background: #fffaf0; color: #3d4237; border-radius: 12px; padding: 24px; box-shadow: 0 16px 60px #0008; }
+.room-collection header { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.room-collection header button { border: 0; background: transparent; font-size: 25px; cursor: pointer; }
+.room-collection p { margin: 12px 0 20px; color: #807561; }
+.room-collection-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(145px,1fr)); gap: 12px; }
+.room-collection-grid button { display: flex; flex-direction: column; gap: 9px; align-items: start; border: 1px solid #d6c7ac; border-radius: 6px; background: #f6f0e3; padding: 16px; text-align: left; cursor: pointer; }
+.room-collection-grid button:hover { background: #e4ecdf; }
+.room-collection-grid span { font-size: 12px; color: #81725a; }
+.collection-letter { font-size: 28px !important; }
+.room-souvenir.souvenir-8 span { background-image: none; background-color: #b08b56; width: 38%; height: 55%; position: absolute; left: 31%; bottom: 1%; border: 1px solid #503a22; border-radius: 2px 2px 8px 8px; transform: rotate(-8deg); }
+.room-souvenir.souvenir-8 span::before { content: ''; position: absolute; top: 8%; left: 40%; width: 20%; height: 12%; background: #3a3322; border-radius: 50%; }
+/* The fulfilled letter remains a letter; actual travel photos are separate map objects. */
+.wish.st-fulfilled { background: var(--pc-paper); border: 1px solid var(--pc-line); box-shadow: 0 2px 8px #33240f26; }
+body[data-level="world"] .wish.st-fulfilled { width: 64px; height: 44px; padding: 5px; }
+body:not([data-level="world"]) .wish.st-fulfilled { width: 120px; height: 84px; padding: 9px; }
+.wish.st-fulfilled .pc-kept-stamp { color: #426644; border-color: #426644; }
+.presult.is-active { background: #e5ecdf; outline: 1px solid #97ae90; }
+.import-preview { margin-top: 14px; }
+.import-preview ul { max-height: 220px; overflow: auto; list-style: none; padding: 0; }
+.import-preview li { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid #e4dfd5; padding: 8px 0; font-size: 11px; overflow-wrap: anywhere; }
+.import-preview small { color: #81745f; white-space: nowrap; }
+.split-preview { padding: 14px 0 4px; border-top: 1px solid #e4dfd5; margin-top: 12px; }
+.split-preview input { width: 100%; accent-color: #23613d; }
+.split-preview p { font-size: 12px; margin: 8px 0; }
+@media(max-width:600px){ .space-bar {left:12px;right:12px;} .space-bar span {display:none;} .space-bar button,.space-controls button {font-size:11px;padding:7px 8px;} .room-view-toggle {top:20px;left:auto;right:12px;transform:none;} .room-archive-links {bottom:6%;} .room-walk-hint {bottom:1%;} }
+@media(prefers-reduced-motion:reduce){ .wish,.wish-focus,.wish-focus-card,.frog-actions,.drawer,.memory {animation:none!important;transition:none!important;} }
+
+.brand-mark .frog-sprite { width: 27px; }
+.empty-frog .frog-sprite { width: 82px; height: 82px; }
+
+/* Direct map manipulation and optional, source-backed real places. */
+.board { touch-action: none; cursor: grab; user-select: none; }
+.board.is-panning, .board.is-panning * { cursor: grabbing !important; }
+.board:focus-visible { outline: 3px solid var(--accent, #865739); outline-offset: -4px; }
+.board button, .board [role="button"], .board a { cursor: pointer; }
+.board img { -webkit-user-drag: none; }
+.real-poi-layer { position:absolute; inset:0; pointer-events:none; z-index:2; }
+.real-poi-pin { position:absolute; transform:translate(-50%,-50%); max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; pointer-events:auto; padding:4px 7px; border:1px solid #b2aa8e; border-radius:10px; background:#f7f1dedf; color:#4f654b; font:12px/1.3 system-ui; box-shadow:0 1px 3px #45321a30; }
+.real-poi-pin::before { content:'· '; font-weight:bold; }
+.real-places { position:absolute; right:18px; top:104px; z-index:12; max-width:300px; font:12px/1.6 system-ui; cursor:default; user-select:text; }
+.real-places button { border:1px solid #b3a285; border-radius:6px; background:var(--panel-bg,#f3ead7); color:var(--text,#463b2b); padding:5px 9px; }
+.real-places button:disabled { opacity:.5; cursor:default; }
+.real-places-toggle { float:right; }
+.real-places-body { clear:both; padding:12px; max-height:calc(100dvh - 250px); overflow:auto; overscroll-behavior:contain; touch-action:pan-y; border:1px solid #b3a285; border-radius:8px; background:var(--surface,#f6efdf); color:var(--text,#463b2b); box-shadow:0 6px 25px #31241338; }
+.real-places p { margin:0 0 8px; }
+.real-places h3 { font-size:15px; margin:4px 0; }
+.real-places a { color:#506c54; text-decoration:underline; }
+.real-places small, .place-privacy { color:#746b5d; font-size:11px; }
+.real-place-detail { border-top:1px solid #b3a285; border-bottom:1px solid #b3a285; padding:9px 0; margin:9px 0; }
+.real-place-detail > button { display:block; margin-top:7px; }
+.real-place-list { display:flex; flex-direction:column; gap:5px; max-height:150px; overflow:auto; margin-bottom:10px; }
+.real-place-list button { text-align:left; }
+.osm-credit { display:block; margin-top:8px; }
+.schematic-credit { position:absolute; bottom:10px; right:18px; font:10px system-ui; color:var(--text-muted,#776b58); z-index:2; pointer-events:none; }
+@media (max-width:600px) { .real-places { right:8px; top:100px; max-width:min(280px,calc(100vw - 68px)); } }

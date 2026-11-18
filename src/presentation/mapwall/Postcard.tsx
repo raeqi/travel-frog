@@ -1,38 +1,8 @@
 import type { CSSProperties } from 'react';
 import { fnv1a, postcardTilt } from './geometry';
 import { formattedDay, isNewWish, type WallWish } from './model';
-import { scene, type PaletteName } from './photoArt';
-
-const STACK_PALETTES: readonly PaletteName[] = ['temple', 'city', 'sea', 'forest'];
-
-const filledStyle = (value: string): CSSProperties => ({ backgroundImage: `url("${value}")` });
-
-function StackCard({ wish, index }: { wish: WallWish; index: number }) {
-  const palette = STACK_PALETTES[(fnv1a(wish.id) + index) % STACK_PALETTES.length] ?? 'temple';
-  const image = scene(fnv1a(`${wish.id}:fp:${index}`), palette);
-  return (
-    <span
-      className="fp-card"
-      style={{
-        transform: `translate(-50%,-50%) rotate(${(index - 1) * 5 + 1}deg) translate(${index * 2 - 2}px,${index * 2 - 2}px)`,
-      }}
-    >
-      <span className="img" style={filledStyle(image)} />
-    </span>
-  );
-}
 
 export function PostcardBody({ wish, now }: { wish: WallWish; now: number }) {
-  if (wish.status === 'fulfilled') {
-    return (
-      <>
-        {[0, 1, 2].map((index) => (
-          <StackCard key={index} wish={wish} index={index} />
-        ))}
-        <span className="fp-label">{wish.name}</span>
-      </>
-    );
-  }
   if (wish.status === 'pending') {
     return (
       <>
@@ -48,8 +18,8 @@ export function PostcardBody({ wish, now }: { wish: WallWish; now: number }) {
       <span className="pc-note">{wish.note ?? ''}</span>
       <span className="pc-meta">{formattedDay(wish.deliveredAt ?? wish.createdAt)}</span>
       <span className="pc-ring" />
-      {wish.status === 'stamped' ? (
-        <><span className={`pc-stamp${olive ? ' olive' : ''}`} /><span className="pc-kept-stamp">想去</span></>
+      {wish.status === 'stamped' || wish.status === 'fulfilled' ? (
+        <><span className={`pc-stamp${olive ? ' olive' : ''}`} /><span className="pc-kept-stamp">{wish.status === 'fulfilled' ? '去过了' : '想去'}</span></>
       ) : null}
       {isNewWish(wish, now) ? <span className="pc-new" /> : null}
       {wish.status === 'received' ? <span className="pc-received-dot" /> : null}

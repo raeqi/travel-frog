@@ -6,7 +6,9 @@ import { FrogActions, FrogBubble, FrogNode, type FrogAction, type FrogMode } fro
 import { PostcardNode, type PlacedPostcard } from './Postcard';
 import type { WallPhoto, WallWish } from './model';
 import type { BubblePlacement } from './layout';
-import { tiltFor } from './geometry';
+import { tiltFor, projectWorld, projectCity, projectRegion, type Camera, type Metrics } from './geometry';
+import { useMapGestures, maxMapZoom } from './map-gestures';
+import { RealPlaces } from './RealPlaces';
 
 export interface CityPhotoMarker {
   readonly photo: WallPhoto;
@@ -28,6 +30,9 @@ export interface DestTagPlacement {
 export interface MapBoardProps {
   readonly boardRef: RefObject<HTMLDivElement | null>;
   readonly sheetRef: RefObject<HTMLDivElement | null>;
+  readonly camera: Camera;
+  readonly metrics: Metrics;
+  readonly onCamera: (camera: Camera) => void;
   readonly viewBox: string;
   readonly viewWidth: number;
   readonly viewHeight: number;
@@ -208,6 +213,8 @@ function FanCards({
 }
 
 export function MapBoard(props: MapBoardProps) {
+  useMapGestures(props.boardRef, props.camera, props.metrics, maxMapZoom(props.mode), props.onCamera);
+  const project = props.mode === 'city' ? projectCity : props.mode === 'region' ? projectRegion : projectWorld;
   const {
     boardRef,
     sheetRef,
@@ -244,7 +251,7 @@ export function MapBoard(props: MapBoardProps) {
 
   return (
     <div className="frame">
-      <div className="board" ref={boardRef} onClick={onBackgroundClick}>
+      <div className="board" ref={boardRef} onClick={onBackgroundClick} tabIndex={0} role="region" aria-label="旅行地图：拖动平移，滚轮缩放，触控板双指平移，捏合缩放；键盘方向键平移，加减号缩放">
         <div className="map-sheet" id="mapSheet" ref={sheetRef}>
           <WorldLayer viewBox={viewBox} visitedCountries={visitedCountries} />
           <CityLayer viewBox={viewBox} />
@@ -354,6 +361,8 @@ export function MapBoard(props: MapBoardProps) {
         </div>
 
         {frogActions ? <FrogActions x={frogActions.x} y={frogActions.y} below={frogActions.below} onAction={onFrogAction} /> : null}
+        <RealPlaces camera={props.camera} metrics={props.metrics} mode={props.mode} project={project} />
+        {props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
         {destHint ? <div className="entrust-hint">选一个没去过的地方 · 青蛙下次路过时替你寄一张</div> : null}
       </div>
     </div>

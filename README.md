@@ -8,6 +8,9 @@ travel-frog 是一个**本地优先的私人旅行档案**。它从照片的 EXI
 
 ## 文档与原型
 
+- 最新用户口径与空间成长：[`docs/PRD-v4-growth-space.md`](docs/PRD-v4-growth-space.md)
+- 本轮实现与验证：[`docs/implementation-v4.md`](docs/implementation-v4.md)
+
 - 当前素材与交互验收基线：[`docs/PRD-v4-reference.md`](docs/PRD-v4-reference.md)
 - 地图墙历史基线：[`docs/PRD-v3-map-first.md`](docs/PRD-v3-map-first.md)
 - v1 历史文档：[`docs/PRD.md`](docs/PRD.md)
@@ -53,20 +56,21 @@ npm run lint      # oxlint
 | 城市识别 | 内置城市坐标表 + 最近城市匹配，非在线地理编码 |
 | 世界地图 | 内嵌 Natural Earth 110m 简化数据，等距圆柱投影，离线 SVG |
 | 照片补位置 | 同日 GPS 均值 / 最近有时间照片回退，真实本地计算 |
-| 青蛙页元素映射 | 简化占位：按城市固定映射生成展示元素 |
-| 云同步 | 仅保存偏好，v1 不发起任何网络请求 |
-| 文件导入验证 | 已用合成 EXIF JPEG 验证真实文件导入，不涉及用户照片；HEIC 兼容性未完成 |
+| 青蛙与家 | 共用角色图集、绕障碍移动；三维几何第一阶段可环视，默认保留插画视角 |
+| 云同步 | 未提供；档案仍在本机 |
+| 真实地点 | 主动查询OSM，返回地点可点名称与来源；当前网络成功链路未验收 |
+| 文件导入验证 | 旧基底有合成JPEG导入验证；本轮文件夹预览/2048预览浏览器验收待上传确认，HEIC兼容未完成 |
 
 ## 隐私
 
-- 原图不复制或保存；最大边 480px 的缩略图、精确坐标与档案保存在本机浏览器（IndexedDB）。
-- v1 不上传照片，不接入分析 SDK，不做行为上报。
-- 云同步默认关闭；即使开启也只保存偏好，不联网。
+- 原图不复制或保存；新导入最大边2048px的缩略图（旧480px缓存不会自动升级）、精确坐标与档案保存在本机浏览器（IndexedDB）。
+- 不上传照片，不接入分析 SDK，不做行为上报。
+- 无云同步。真实地点仅在用户显式点击查询时发送舍入后的地图中心和半径至 overpass.private.coffee，服务会接收IP；面板与设置内提供隐私说明，不读取设备定位或发送照片。
 - 支持导出完整 JSON，以及一键删除全部本地数据。
 
 ## 技术栈
 
-Vite + React 19 + TypeScript，Vitest 单测，无运行时外部地图或网络依赖。
+Vite + React 19 + TypeScript，Vitest 单测；Three.js空间视图懒加载。核心档案和示意底图离线可用，真实POI发现依赖可选公共网络服务。
 
 ## 素材还原改动
 

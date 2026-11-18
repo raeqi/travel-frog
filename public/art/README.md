@@ -10,3 +10,7 @@ Derived with image generation from the user-approved references in `docs/prototy
 - `souvenirs.webp`: transparent 4×2 atlas: bookmark / marble tile / fan / spice pouch, stone / bronze figurine / indigo cloth / porcelain bowl. Generic city keepsakes use a decorative object; exact names and provenance come from the archive. Each atlas cell has its own visible-base compensation in `home.css`; four shelf heights use scene coordinates, with contact shadows and warm room shading. Empty slots remain visually empty.
 
 Reference files remain unchanged. These are a first production adaptation, not pixel-identical manual cutouts. Scene objects are rendered from domain state above the plate; the background does not count as archive data. Empty-state lighting, live photos, postcard choices and map restoration remain code-driven.
+
+## Spatial view
+
+The v4 spatial view reuses this exact frog atlas. Its furniture is procedural geometry, not a photoreal replacement of these plates. It shares room coordinates and walking plans with the illustration. WebGL is preferred; SVG projects the same geometry when WebGL is unavailable. The illustrated room stays available. See `docs/PRD-v4-growth-space.md` for implemented growth and remaining asset stages.
