@@ -41,6 +41,8 @@ import type { MapViewState } from '../../domain/home/map-view';
 import { SettingsPanel, type ThemeChoice } from './SettingsPanel';
 import { SearchPanel, type SearchItem } from './SearchPanel';
 import type { PlacedPostcard } from './Postcard';
+import { cityCamera } from './city-camera';
+import { boundCamera, maxMapZoom } from './map-gestures';
 import { POSTCARD_DELIVERY_MS } from '../../domain/wish/wish';
 
 type Mode = 'world' | 'city' | 'region';
@@ -324,7 +326,7 @@ export function MapWall() {
       observer.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, []);
+  }, [scene]);
 
   useEffect(() => {
     cameraRef.current = camera;
@@ -437,12 +439,20 @@ export function MapWall() {
     [animationInstant],
   );
 
+  const gestureCamera = useCallback((next: Camera) => {
+    if (cameraFrame.current !== null) cancelAnimationFrame(cameraFrame.current);
+    cameraFrame.current = null;
+    cameraRef.current = next;
+    setCamera(next);
+    setReplay(current => current?.playing ? { ...current, playing: false } : current);
+  }, []);
+
   const zoomBy = useCallback((factor: number) => {
     if (cameraFrame.current !== null) cancelAnimationFrame(cameraFrame.current);
     cameraFrame.current = null;
     const current = cameraRef.current;
-    setCamera({ ...current, zoom: clamp(current.zoom * factor, 0.8, 60) });
-  }, []);
+    gestureCamera(boundCamera({ ...current, zoom: current.zoom * factor }, metrics, maxMapZoom(mode)));
+  }, [mode, metrics, gestureCamera]);
 
   const focusCountry = useCallback(() => {
     const visits = activeTrip?.visits ?? [];
@@ -479,10 +489,10 @@ export function MapWall() {
         animateCamera({ cx: point.x, cy: point.y, zoom: 2.6 }, 'region', 'region');
         return;
       }
-      const point = projectWorld(city.lat, city.lng);
-      animateCamera({ cx: point.x, cy: point.y, zoom: Math.max(cameraRef.current.zoom, 28) }, 'world', 'city');
+      const aspect = metrics.sheetW > 0 ? metrics.sheetH / metrics.sheetW : .64;
+      animateCamera(cityCamera(model.photos.filter(photo => photo.cityKey === key), city, aspect), 'world', 'city');
     },
-    [animateCamera, model],
+    [animateCamera, model, metrics],
   );
 
   const focusWish = useCallback(
@@ -499,7 +509,7 @@ export function MapWall() {
   // ---------------------------------------------------------------- derived map
 
   const view = useMemo(() => viewRect(camera, metrics), [camera, metrics]);
-  const viewBox = `${view.vx.toFixed(2)} ${view.vy.toFixed(2)} ${view.viewW.toFixed(2)} ${view.viewH.toFixed(2)}`;
+  const viewBox = `${view.vx.toFixed(6)} ${view.vy.toFixed(6)} ${view.viewW.toFixed(6)} ${view.viewH.toFixed(6)}`;
   const piles = useMemo(() => computePiles(model, camera, metrics, level, mode), [model, camera, metrics, level, mode]);
   const routes = useMemo(
     () => buildRoutes(model, camera, metrics, level, mode, effectiveTripId),
@@ -575,13 +585,12 @@ export function MapWall() {
       : null;
     const seen = new Set<string>();
     for (const wish of model.wishes) {
-      if (wish.status === 'fulfilled' && model.cities.some((city) => city.key === wish.cityKey)) continue;
       if (seen.has(wish.cityKey)) continue;
       const anchor = toScreen(projectAt(mode, wish.lat, wish.lng), camera, metrics);
       if (!inBoard(anchor.x, anchor.y, metrics, 40)) continue;
       seen.add(wish.cityKey);
       const width = level === 'world' ? 64 : 120;
-      const height = wish.status === 'fulfilled' ? (level === 'world' ? 50 : 96) : level === 'world' ? 44 : 84;
+      const height = level === 'world' ? 44 : 84;
       const placement = placeWish({
         anchor,
         width,
@@ -906,6 +915,7 @@ export function MapWall() {
         await service.deliverDuePostcards();
         setNow(Date.now());
         setFrogMode('rest');
+        setBubbleText(null);
         notify('青蛙带回了一张明信片');
       });
     }, Math.max(0, deadline - Date.now()));
@@ -1270,6 +1280,9 @@ export function MapWall() {
       <MapBoard
         boardRef={boardRef}
         sheetRef={sheetRef}
+        camera={camera}
+        metrics={metrics}
+        onCamera={gestureCamera}
         viewBox={viewBox}
         viewWidth={metrics.boardW}
         viewHeight={metrics.boardH}
