@@ -1,0 +1,14 @@
+.wish.st-fulfilled { background: var(--pc-paper); border: 1px solid var(--pc-line); box-shadow: 0 2px 8px #33240f26; }
+body[data-level="world"] .wish.st-fulfilled { width: 64px; height: 44px; padding: 5px; }
+body:not([data-level="world"]) .wish.st-fulfilled { width: 120px; height: 84px; padding: 9px; }
+.wish.st-fulfilled .pc-kept-stamp { color: #426644; border-color: #426644; }
+.presult.is-active { background: #e5ecdf; outline: 1px solid #97ae90; }
+@media(prefers-reduced-motion:reduce){ .wish,.wish-focus,.wish-focus-card,.frog-actions,.drawer,.memory {animation:none!important;transition:none!important;} }
+.brand-mark .frog-sprite { width: 27px; }
+.empty-frog .frog-sprite { width: 82px; height: 82px; }
+.board { touch-action: none; cursor: grab; user-select: none; }
+.board.is-panning, .board.is-panning * { cursor: grabbing !important; }
+.board:focus-visible { outline: 3px solid var(--accent, #865739); outline-offset: -4px; }
+.board button, .board [role="button"], .board a { cursor: pointer; }
+.board img { -webkit-user-drag: none; }
+.schematic-credit { position:absolute; bottom:10px; right:18px; font:10px system-ui; color:var(--text-muted,#776b58); z-index:2; pointer-events:none; }
