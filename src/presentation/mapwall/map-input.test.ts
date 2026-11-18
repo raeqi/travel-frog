@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { boundCamera, panCamera, zoomCamera } from "./map-gestures";
+import { parsePois, poiArea, poiQuery } from "./real-pois";
 import { projectWorld, toScreen, type Metrics } from "./geometry";
 const metrics: Metrics = {
   boardW: 1200,
@@ -44,5 +45,61 @@ describe("direct map input", () => {
     );
     expect(edge).toEqual({ cx: 150, cy: 96, zoom: 2 });
     expect(zoomCamera(edge, 1e9, 500, 320, metrics, 60).zoom).toBe(60);
+  });
+});
+describe("source-backed real places", () => {
+  it("rounds only the selected map centre and blocks wide-area queries", () => {
+    expect(poiArea({ cx: 500, cy: 320, zoom: 1 }, metrics, "world")).toBeNull();
+    const p = projectWorld(48.8584123, 2.2945123);
+    expect(poiArea({ cx: p.x, cy: p.y, zoom: 3000 }, metrics, "world")).toEqual(
+      { lat: 48.858, lng: 2.295, radius: 1500 },
+    );
+    expect(poiArea({ cx: 500, cy: 320, zoom: 1 }, metrics, "city")?.lng).toBe(
+      135.768,
+    );
+  });
+  it("limits the API query, validates numbers and includes no archive data", () => {
+    const query = poiQuery({ lat: 48.858, lng: 2.295, radius: 1500 });
+    expect(query).toContain("out center qt 80");
+    expect(query).toContain("[timeout:20]");
+    expect(query).toContain("around:1500,48.858,2.295");
+    expect(() => poiQuery({ lat: NaN, lng: 0, radius: 1500 })).toThrow();
+    expect(() => poiQuery({ lat: 0, lng: 0, radius: 500000 })).toThrow();
+  });
+  it("uses returned names and coordinates, rejects malformed or fabricated fallbacks", () => {
+    const result = parsePois({
+      elements: [
+        {
+          type: "node",
+          id: 1,
+          lat: 48.85,
+          lon: 2.29,
+          tags: {
+            name: "Tour Eiffel",
+            "name:zh": "埃菲尔铁塔",
+            tourism: "attraction",
+          },
+        },
+        {
+          type: "way",
+          id: 2,
+          center: { lat: 48.86, lon: 2.3 },
+          tags: { name: "Museum", tourism: "museum" },
+        },
+        { type: "node", id: 3, lat: 48.85, lon: 2.29, tags: {} },
+        { type: "node", id: 4, lat: 999, lon: 2.29, tags: { name: "invalid" } },
+        {
+          type: "file",
+          id: 5,
+          lat: 48.85,
+          lon: 2.29,
+          tags: { name: "invalid" },
+        },
+      ],
+    });
+    expect(result.map((p) => p.name)).toEqual(["埃菲尔铁塔", "Museum"]);
+    expect(result[1]?.id).toBe("way/2");
+    expect(parsePois({ elements: [] })).toEqual([]);
+    expect(() => parsePois({ error: "overloaded" })).toThrow();
   });
 });
