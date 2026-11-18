@@ -4,19 +4,19 @@ import { domainError, err, ok, type Result } from '../common/result';
 import { isFiniteInstant, type Instant } from '../common/time';
 import type { DataOrigin } from '../photo/photo';
 
-/** PRD §13.2: the five states a postcard can be in. */
-export type WishStatus = 'pending' | 'received' | 'wished' | 'fulfilled' | 'declined';
+/** PRD §3.1: 托付 → 来信 → 掀开 → 盖戳 → 兑现. */
+export type WishStatus = 'pending' | 'received' | 'opened' | 'stamped' | 'fulfilled';
 /** `frog` = the frog brought it back; `user` = the user entrusted the frog with it. */
 export type WishSource = 'frog' | 'user';
 
-export const WISH_STATUSES: readonly WishStatus[] = ['pending', 'received', 'wished', 'fulfilled', 'declined'];
+export const WISH_STATUSES: readonly WishStatus[] = ['pending', 'received', 'opened', 'stamped', 'fulfilled'];
 
 const TRANSITIONS: Readonly<Record<WishStatus, readonly WishStatus[]>> = {
   pending: ['received'],
-  received: ['wished', 'declined'],
-  wished: ['received', 'fulfilled'],
+  received: ['opened'],
+  opened: ['stamped'],
+  stamped: ['fulfilled'],
   fulfilled: [],
-  declined: [],
 };
 
 export interface Wish {
@@ -71,7 +71,7 @@ export function createWish(input: CreateWishInput): Result<Wish> {
   if (input.cityRef.name.trim().length === 0) {
     return err(domainError('VALIDATION_FAILED', '明信片需要一个地点名称'));
   }
-  if ((status === 'received' || status === 'wished' || status === 'fulfilled') && note === null) {
+  if ((status === 'received' || status === 'opened' || status === 'stamped' || status === 'fulfilled') && note === null) {
     return err(domainError('WISH_STATE_INVALID', '已寄到的明信片必须有青蛙的留言'));
   }
   return ok({
@@ -147,27 +147,29 @@ export function validateWish(wish: Wish): Result<Wish> {
 }
 
 /**
- * One-time bridge for archives written before v3: old `wish`/`next` become `wished`,
- * old `visited` becomes `fulfilled`. Unknown values are rejected so data is never guessed.
+ * One-time bridge for archives written before the PRD states: old `wish`/`next`/`wished`
+ * become `opened`, old `visited` becomes `fulfilled`, and old `declined` falls back to
+ * `received` because the lifecycle no longer has a rejection branch.
  */
 export function migrateLegacyWishStatus(status: unknown): Result<WishStatus> {
   if (isWishStatus(status)) return ok(status);
-  if (status === 'wish' || status === 'next') return ok('wished');
+  if (status === 'wish' || status === 'next' || status === 'wished') return ok('opened');
   if (status === 'visited') return ok('fulfilled');
+  if (status === 'declined') return ok('received');
   return err(domainError('WISH_STATE_INVALID', '无法识别的旧愿望状态', { status: String(status) }));
 }
 
 export function wishStatusLabel(status: WishStatus): string {
   switch (status) {
     case 'pending':
-      return '待寄';
+      return '托付';
     case 'received':
-      return '已寄到';
-    case 'wished':
-      return '想去';
+      return '来信';
+    case 'opened':
+      return '掀开';
+    case 'stamped':
+      return '盖戳';
     case 'fulfilled':
       return '兑现';
-    case 'declined':
-      return '退回';
   }
 }

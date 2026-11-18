@@ -4,7 +4,7 @@ import { createTrip } from '../../../domain/trip/trip';
 import { makeTimeRange } from '../../../domain/common/time';
 import { DEFAULT_HOME_STATE } from '../../../domain/home/home';
 import type { MapViewState } from '../../../domain/home/map-view';
-import { DB_NAME, SCHEMA_V2, STORES } from './schema';
+import { DB_NAME, SCHEMA_V2, SCHEMA_V4, STORES } from './schema';
 import { openDatabase } from './database';
 import { IdbUnitOfWork } from './unit-of-work';
 
@@ -84,7 +84,7 @@ describe('IndexedDB migration', () => {
     expect(data.memories[0]?.text).toBe('第一次看见雪');
     expect(data.candidates).toHaveLength(1);
     expect(data.candidates[0]?.status).toBe('pending');
-    expect(data.wishes[0]?.status).toBe('wished');
+    expect(data.wishes[0]?.status).toBe('opened');
     expect(data.manualVisits[0]?.year).toBe(2024);
     expect(data.batches.some((batch) => batch.id === 'legacy')).toBe(true);
 
@@ -188,8 +188,35 @@ function createLegacyV3(factory: IDBFactory, trips: unknown[], wishes: unknown[]
   });
 }
 
-const SAVED_VIEW: MapViewState = {
-  camera: { cx: 820, cy: 410, zoom: 3.4 },
+function createLegacyV4(factory: IDBFactory, wishes: unknown[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const open = factory.open(DB_NAME, 4);
+    open.onupgradeneeded = () => {
+      const db = open.result;
+      for (const spec of [...SCHEMA_V2, ...SCHEMA_V4]) {
+        if (!db.objectStoreNames.contains(spec.name)) db.createObjectStore(spec.name, { keyPath: spec.keyPath });
+      }
+    };
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const tx = db.transaction([STORES.meta, STORES.wishes, STORES.migrations], 'readwrite');
+      tx.objectStore(STORES.meta).put({ key: 'schema', schemaVersion: 4, revision: 9, lastOpenedAt: NOW });
+      for (const row of wishes) tx.objectStore(STORES.wishes).put(row);
+      for (const version of [2, 3, 4]) {
+        tx.objectStore(STORES.migrations).put({ version, name: `m${version}`, appliedAt: NOW });
+      }
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error('legacy transaction aborted'));
+    };
+  });
+}
+
+const SAVED_VIEW: MapViewState = {  camera: { cx: 820, cy: 410, zoom: 3.4 },
   mode: 'world',
   level: 'country',
   poiScrollTop: 148,
@@ -237,12 +264,31 @@ describe('home and map view persistence', () => {
     expect(before.wishes.map((row) => row.id)).toEqual(['w-old']);
     expect(before.home).toEqual(DEFAULT_HOME_STATE);
     expect(before.mapView).toBeNull();
-    expect(await db.getMeta<{ schemaVersion: number }>('schema')).toMatchObject({ schemaVersion: 4 });
+    expect(await db.getMeta<{ schemaVersion: number }>('schema')).toMatchObject({ schemaVersion: 5 });
 
     await uow.run(async (repos) => repos.home.save({ ...DEFAULT_HOME_STATE, perch: 'suitcase', updatedAt: NOW }));
     const saved = await uow.read(async (repos) => repos.home.get());
     expect(saved.perch).toBe('suitcase');
 
+    db.close();
+  });
+
+  it('rewrites pre-five-state postcard statuses when upgrading a v4 database', async () => {
+    const factory = new IDBFactory();
+    await createLegacyV4(factory, [
+      { id: 'w-wished', status: 'wished', name: '金泽', country: '日本', note: '旧留言', createdAt: NOW },
+      { id: 'w-declined', status: 'declined', name: '首尔', country: '韩国', note: '另一次', createdAt: NOW },
+      { id: 'w-visited', status: 'visited', name: '京都', country: '日本', note: '去过了', createdAt: NOW },
+    ]);
+
+    const db = await openDatabase(factory, NOW);
+    const wishes = await new IdbUnitOfWork(db).read(async (repos) => repos.wishes.list());
+    const byId = new Map(wishes.map((wish) => [wish.id, wish.status]));
+
+    expect(byId.get('w-wished' as never)).toBe('opened');
+    expect(byId.get('w-declined' as never)).toBe('received');
+    expect(byId.get('w-visited' as never)).toBe('fulfilled');
+    expect(await db.getMeta<{ schemaVersion: number }>('schema')).toMatchObject({ schemaVersion: 5 });
     db.close();
   });
 });

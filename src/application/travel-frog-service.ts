@@ -266,10 +266,16 @@ export class TravelFrogService {
         await repos.candidates.save(markConfirmed(candidate, tripId, now));
         const wished = await repos.wishes.list();
         for (const wish of wished) {
-          if (wish.status !== 'wished') continue;
+          if (wish.status === 'fulfilled' || wish.status === 'pending') continue;
           if (!candidate.cityRefs.some((ref) => ref.key === wish.cityRef.key)) continue;
-          const fulfilled = changeWishStatus(wish, 'fulfilled', now);
-          if (fulfilled.ok) await repos.wishes.save(fulfilled.value);
+          let nextWish = wish;
+          const chain = ['received', 'opened', 'stamped', 'fulfilled'] as const;
+          for (const status of chain.slice(chain.indexOf(wish.status) + 1)) {
+            const step = changeWishStatus(nextWish, status, now);
+            if (!step.ok) break;
+            nextWish = step.value;
+          }
+          if (nextWish !== wish) await repos.wishes.save(nextWish);
         }
       });
     } catch (error) {
@@ -643,7 +649,7 @@ export class TravelFrogService {
 
   async saveMapView(view: MapViewState): Promise<void> {
     await this.deps.gateway.run((repos) => repos.mapView.save(view));
-    await this.refresh();
+    this.store.patch({ mapView: view });
   }
 
   async exportArchive(includeCoordinates: boolean): Promise<ArchiveExport> {

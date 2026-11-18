@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { fnv1a, postcardTilt } from './geometry';
+import type { WishStatus } from '../../domain/wish/wish';
 import { formattedDay, isNewWish, type WallWish } from './model';
 import { scene, type PaletteName } from './photoArt';
 
@@ -48,9 +49,11 @@ export function PostcardBody({ wish, now }: { wish: WallWish; now: number }) {
       <span className="pc-note">{wish.note ?? ''}</span>
       <span className="pc-meta">{formattedDay(wish.createdAt)}</span>
       <span className="pc-ring" />
-      <span className={`pc-stamp${olive ? ' olive' : ''}`} />
+      {wish.status === 'stamped' ? (
+        <span className={`pc-stamp${olive ? ' olive' : ''}`} />
+      ) : null}
       {isNewWish(wish, now) ? <span className="pc-new" /> : null}
-      {wish.status === 'wished' ? <span className="pc-wish-stamp">想去</span> : null}
+      {wish.status === 'received' ? <span className="pc-received-dot" /> : null}
     </>
   );
 }
@@ -63,7 +66,6 @@ export interface PlacedPostcard {
   readonly height: number;
   readonly arriving: boolean;
   readonly dropping: boolean;
-  readonly leaving: boolean;
   readonly flipping: boolean;
   readonly flyX: number;
   readonly flyY: number;
@@ -90,7 +92,6 @@ export function PostcardNode({ card, now, highlighted, onClick }: PostcardNodePr
     `st-${wish.status}`,
     card.arriving ? 'is-arriving' : '',
     card.dropping ? 'is-dropping' : '',
-    card.leaving ? 'is-leaving' : '',
     card.flipping ? 'is-flipping' : '',
     highlighted ? 'is-hl' : '',
   ]
@@ -125,9 +126,7 @@ export interface WishFocusProps {
   readonly top: number;
   readonly photos: readonly WishBackPhoto[];
   readonly photoImage: (photoId: string) => string | null;
-  readonly onKeep: () => void;
-  readonly onDecline: () => void;
-  readonly onCancelWished: () => void;
+  readonly onAdvance: (status: 'opened' | 'stamped' | 'fulfilled') => void;
   readonly onClose: () => void;
 }
 
@@ -135,17 +134,22 @@ export interface WishFocusProps {
  * The postcard lifted off the wall and turned over. Clicking anywhere on the card pins it
  * back; the only state changes are the explicit postcard transitions on the back side.
  */
+const NEXT_STEP: Partial<Record<WishStatus, { status: 'opened' | 'stamped' | 'fulfilled'; label: string }>> = {
+  received: { status: 'opened', label: '掀开' },
+  opened: { status: 'stamped', label: '盖戳' },
+  stamped: { status: 'fulfilled', label: '兑现' },
+};
+
 export function WishFocus({
   wish,
   left,
   top,
   photos,
   photoImage,
-  onKeep,
-  onDecline,
-  onCancelWished,
+  onAdvance,
   onClose,
 }: WishFocusProps) {
+  const step = NEXT_STEP[wish.status];
   return (
     <div className="wish-focus" role="dialog" aria-label={`${wish.name} 的明信片背面`} onClick={onClose}>
       <div
@@ -174,21 +178,11 @@ export function WishFocus({
           {wish.lat.toFixed(4)}, {wish.lng.toFixed(4)}
         </span>
         <span className="pc-ring" />
-        <span className="pc-stamp" />
-        {wish.status === 'received' ? (
+        {wish.status === 'stamped' || wish.status === 'fulfilled' ? <span className="pc-stamp" /> : null}
+        {step ? (
           <div className="wf-actions" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="primary" onClick={onKeep}>
-              留着
-            </button>
-            <button type="button" onClick={onDecline}>
-              这次不去
-            </button>
-          </div>
-        ) : null}
-        {wish.status === 'wished' ? (
-          <div className="wf-actions" onClick={(event) => event.stopPropagation()}>
-            <button type="button" onClick={onCancelWished}>
-              取消想去
+            <button type="button" className="primary" onClick={() => onAdvance(step.status)}>
+              {step.label}
             </button>
           </div>
         ) : null}

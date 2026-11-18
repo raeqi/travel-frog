@@ -324,7 +324,7 @@ export function buildDemoArchive(now: number): DemoArchive {
   const wishSpecs: {
     key: string;
     cityKey: string;
-    status: 'pending' | 'received' | 'wished' | 'fulfilled' | 'declined';
+    status: 'pending' | 'received' | 'opened' | 'stamped' | 'fulfilled';
     region: string;
     note: string | null;
     from: string | null;
@@ -341,7 +341,7 @@ export function buildDemoArchive(now: number): DemoArchive {
     {
       key: 'wish_demo_reykjavik',
       cityKey: 'reykjavik',
-      status: 'wished',
+      status: 'opened',
       region: '大西洋沿岸',
       note: '凌晨的港口只有灯塔亮着，替你站了一会儿。',
       from: 'paris',
@@ -357,7 +357,7 @@ export function buildDemoArchive(now: number): DemoArchive {
     {
       key: 'wish_demo_queenstown',
       cityKey: 'queenstown',
-      status: 'declined',
+      status: 'stamped',
       region: '南岛',
       note: '雪线退得很低，山谷里没有人。',
       from: 'osaka',

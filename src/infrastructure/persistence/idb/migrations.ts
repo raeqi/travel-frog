@@ -142,7 +142,30 @@ const migrationV4: Migration = {
   },
 };
 
-export const MIGRATIONS: readonly Migration[] = [migrationV2, migrationV3, migrationV4];
+const migrationV5: Migration = {
+  version: 5,
+  name: 'postcard-states-five',
+  up: ({ tx, now }) => {
+    const store = tx.objectStore(STORES.wishes);
+    const request = store.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const migrated = migrateWishRow(cursor.value as RawWish, now);
+      if (migrated) {
+        cursor.update(migrated);
+      } else {
+        cursor.delete();
+      }
+      cursor.continue();
+    };
+    const meta = tx.objectStore(STORES.meta);
+    meta.put({ key: 'schema', schemaVersion: 5, revision: 0, lastOpenedAt: now });
+    tx.objectStore(STORES.migrations).put({ version: 5, name: 'postcard-states-five', appliedAt: now });
+  },
+};
+
+export const MIGRATIONS: readonly Migration[] = [migrationV2, migrationV3, migrationV4, migrationV5];
 
 /** Runs every migration whose target version is newer than the database. */
 export function runMigrations(context: MigrationContext): void {

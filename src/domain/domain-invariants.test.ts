@@ -7,7 +7,14 @@ import { makeGeoPoint } from './geo/geo-point';
 import { createMemory, MEMORY_MAX_CODE_POINTS } from './memory/memory';
 import { createPhoto } from './photo/photo';
 import { createTrip, findOverlappingTrip, validateTripSet, validateTripPhotos } from './trip/trip';
-import { changeWishStatus, createWish, migrateLegacyWishStatus, validateWish } from './wish/wish';
+import {
+  changeWishStatus,
+  createWish,
+  migrateLegacyWishStatus,
+  validateWish,
+  WISH_STATUSES,
+  wishStatusLabel,
+} from './wish/wish';
 
 const NOW = Date.UTC(2026, 0, 10, 12, 0);
 const HOUR = 3_600_000;
@@ -193,39 +200,49 @@ describe('wish invariants (five postcard states)', () => {
     return made.value;
   };
 
-  it('walks pending -> received -> wished -> fulfilled', () => {
+  it('walks pending -> received -> opened -> stamped -> fulfilled', () => {
     const wish = buildWish();
     const received = changeWishStatus(wish, 'received', NOW + HOUR, { note: '替你看了一眼雪。', from: '京都' });
     if (!received.ok) throw new Error(received.error.message);
     expect(received.value.status).toBe('received');
     expect(received.value.note).toBe('替你看了一眼雪。');
-    const wished = changeWishStatus(received.value, 'wished', NOW + 2 * HOUR);
-    if (!wished.ok) throw new Error(wished.error.message);
-    const fulfilled = changeWishStatus(wished.value, 'fulfilled', NOW + 3 * HOUR);
-    expect(fulfilled.ok).toBe(true);
+    const opened = changeWishStatus(received.value, 'opened', NOW + 2 * HOUR);
+    if (!opened.ok) throw new Error(opened.error.message);
+    const stamped = changeWishStatus(opened.value, 'stamped', NOW + 3 * HOUR);
+    if (!stamped.ok) throw new Error(stamped.error.message);
+    const fulfilled = changeWishStatus(stamped.value, 'fulfilled', NOW + 4 * HOUR);
+    if (!fulfilled.ok) throw new Error(fulfilled.error.message);
+    expect(fulfilled.value.status).toBe('fulfilled');
+    expect(WISH_STATUSES).toEqual(['pending', 'received', 'opened', 'stamped', 'fulfilled']);
   });
 
   it('rejects illegal transitions instead of passing silently', () => {
     const wish = buildWish();
-    expect(changeWishStatus(wish, 'wished', NOW + HOUR).ok).toBe(false);
+    expect(changeWishStatus(wish, 'opened', NOW + HOUR).ok).toBe(false);
+    expect(changeWishStatus(wish, 'stamped', NOW + HOUR).ok).toBe(false);
     expect(changeWishStatus(wish, 'fulfilled', NOW + HOUR).ok).toBe(false);
     expect(changeWishStatus(wish, 'pending', NOW + HOUR).ok).toBe(false);
 
     const received = changeWishStatus(wish, 'received', NOW + HOUR, { note: '到了。' });
     if (!received.ok) throw new Error(received.error.message);
     expect(changeWishStatus(received.value, 'pending', NOW + 2 * HOUR).ok).toBe(false);
+    expect(changeWishStatus(received.value, 'stamped', NOW + 2 * HOUR).ok).toBe(false);
+    expect(changeWishStatus(received.value, 'fulfilled', NOW + 2 * HOUR).ok).toBe(false);
 
-    const wished = changeWishStatus(received.value, 'wished', NOW + 2 * HOUR);
-    if (!wished.ok) throw new Error(wished.error.message);
-    expect(changeWishStatus(wished.value, 'declined', NOW + 3 * HOUR).ok).toBe(false);
-    const fulfilled = changeWishStatus(wished.value, 'fulfilled', NOW + 3 * HOUR);
+    const opened = changeWishStatus(received.value, 'opened', NOW + 2 * HOUR);
+    if (!opened.ok) throw new Error(opened.error.message);
+    expect(changeWishStatus(opened.value, 'fulfilled', NOW + 3 * HOUR).ok).toBe(false);
+    const stamped = changeWishStatus(opened.value, 'stamped', NOW + 3 * HOUR);
+    if (!stamped.ok) throw new Error(stamped.error.message);
+    const fulfilled = changeWishStatus(stamped.value, 'fulfilled', NOW + 4 * HOUR);
     if (!fulfilled.ok) throw new Error(fulfilled.error.message);
-    expect(changeWishStatus(fulfilled.value, 'received', NOW + 4 * HOUR).ok).toBe(false);
-    expect(changeWishStatus(fulfilled.value, 'fulfilled', NOW + 4 * HOUR).ok).toBe(false);
+    expect(changeWishStatus(fulfilled.value, 'received', NOW + 5 * HOUR).ok).toBe(false);
+    expect(changeWishStatus(fulfilled.value, 'stamped', NOW + 5 * HOUR).ok).toBe(false);
+    expect(changeWishStatus(fulfilled.value, 'fulfilled', NOW + 5 * HOUR).ok).toBe(false);
+  });
 
-    const declined = changeWishStatus(received.value, 'declined', NOW + 2 * HOUR);
-    if (!declined.ok) throw new Error(declined.error.message);
-    expect(changeWishStatus(declined.value, 'wished', NOW + 3 * HOUR).ok).toBe(false);
+  it('labels every state with the PRD wording', () => {
+    expect(WISH_STATUSES.map((status) => wishStatusLabel(status))).toEqual(['托付', '来信', '掀开', '盖戳', '兑现']);
   });
 
   it('requires a sentence once the postcard has been written', () => {
@@ -247,8 +264,10 @@ describe('wish invariants (five postcard states)', () => {
   });
 
   it('bridges legacy statuses to the five-state model', () => {
-    expect(migrateLegacyWishStatus('wish')).toEqual({ ok: true, value: 'wished' });
-    expect(migrateLegacyWishStatus('next')).toEqual({ ok: true, value: 'wished' });
+    expect(migrateLegacyWishStatus('wish')).toEqual({ ok: true, value: 'opened' });
+    expect(migrateLegacyWishStatus('next')).toEqual({ ok: true, value: 'opened' });
+    expect(migrateLegacyWishStatus('wished')).toEqual({ ok: true, value: 'opened' });
+    expect(migrateLegacyWishStatus('declined')).toEqual({ ok: true, value: 'received' });
     expect(migrateLegacyWishStatus('visited')).toEqual({ ok: true, value: 'fulfilled' });
     expect(migrateLegacyWishStatus('received')).toEqual({ ok: true, value: 'received' });
     expect(migrateLegacyWishStatus('unknown').ok).toBe(false);

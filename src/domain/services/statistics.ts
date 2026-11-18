@@ -177,7 +177,7 @@ export function computeGaps(input: {
     missingTime: input.photos.filter((photo) => photo.capturedAtSource === 'missing').length,
     tripsWithoutMemory: input.trips.filter((trip) => !memoryTrips.has(trip.id)),
     tripsWithoutVisits: input.trips.filter((trip) => !visitsByTrip.has(trip.id)),
-    wishesOpen: input.wishes.filter((wish) => wish.status === 'wished').length,
+    wishesOpen: input.wishes.filter((wish) => wish.status === 'stamped').length,
     wishesNext: input.wishes.filter((wish) => wish.status === 'received').length,
     citiesWithoutPhotos: 0,
   };

@@ -18,16 +18,17 @@ function legacyRow(overrides: Record<string, unknown> = {}): Record<string, unkn
 }
 
 describe('migrateWishRow', () => {
-  it('maps the legacy "wish" state to "wished"', () => {
+  it('maps the legacy "wish" state to "opened"', () => {
     const wish = migrateWishRow(legacyRow(), NOW);
-    expect(wish?.status).toBe('wished');
+    expect(wish?.status).toBe('opened');
     expect(wish?.cityRef.key).toBe('JPN:金泽');
     expect(wish?.note).toBe('想去看看兼六园。');
   });
 
-  it('maps the legacy "next" state to "wished" and "visited" to "fulfilled"', () => {
-    expect(migrateWishRow(legacyRow({ status: 'next' }), NOW)?.status).toBe('wished');
+  it('maps the legacy "next" state to "opened", "visited" to "fulfilled", and "declined" to "received"', () => {
+    expect(migrateWishRow(legacyRow({ status: 'next' }), NOW)?.status).toBe('opened');
     expect(migrateWishRow(legacyRow({ status: 'visited' }), NOW)?.status).toBe('fulfilled');
+    expect(migrateWishRow(legacyRow({ status: 'declined' }), NOW)?.status).toBe('received');
   });
 
   it('keeps rows that already use the five-state model', () => {
@@ -58,7 +59,7 @@ describe('migrateWishRow', () => {
 
   it('defaults a missing note when the legacy status needs one', () => {
     const wish = migrateWishRow(legacyRow({ note: undefined }), NOW);
-    expect(wish?.status).toBe('wished');
+    expect(wish?.status).toBe('opened');
     expect(wish?.note).toBeTruthy();
   });
 });

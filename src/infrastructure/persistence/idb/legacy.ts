@@ -1,3 +1,4 @@
+import { migrateLegacyWishStatus } from '../../../domain/wish/wish';
 import { STORES } from './schema';
 
 /** Shape of the v1 single-document archive. Only used for the one-time migration. */
@@ -297,7 +298,8 @@ export function migrateLegacyArchive(tx: IDBTransaction, now: number): void {
       const id = str(wish.id);
       if (!id) continue;
       const geo = cityRef(str(wish.name, '未命名地点'), str(wish.country));
-      const legacyStatus = wish.status === 'visited' ? 'fulfilled' : 'wished';
+      const status = migrateLegacyWishStatus(wish.status ?? 'wished');
+      const legacyStatus = status.ok ? status.value : 'opened';
       wishStore.put({
         id,
         cityRef: geo,
