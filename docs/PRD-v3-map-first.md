@@ -397,9 +397,14 @@ travel-frog 是一个**以地图为主视角的旅行回忆载体**。
 原型图为设计依据，实现中视觉皮肤尚未替换。图片目录与清单见 `prototypes/README.md`。
 
 - 角色：`prototypes/character/35-青蛙形象规范-1440.png`（三视图、六姿态、色号，1/4 椅高比例）
+- 背包三档：`prototypes/growth/29-backpack-three-tiers.png`
+- 家的三个阶段：`prototypes/growth/31-home-three-stages.png`
 - 行李三档：`prototypes/growth/32-行李三档-1440.png`
-- 地图墙基准：`prototypes/map/00-地图墙-基准.png`
+- 地图墙基准：`prototypes/map/00-地图墙-基准.png`；世界地图合成稿 `prototypes/map/world-map-paper.png` 只作构成与配色参考，9.1 已排除重纸纹改版
 - 家的场景原型：`prototypes/home/27-青蛙的家-1440.png`（定稿：写实暗调，世界地图为真实数据合成，另附 `27-青蛙的家-1200.png`）
+- 多宝阁与特产：`prototypes/collection/30-eight-souvenirs.png`
+- 明信片五态、故事板与动作条：`prototypes/wish/` 下的 `postcards-five-states.png`、`postcard-storyboard.png`、`frog-action-bar-2.5x.png`，演示视频见 `assets/frog-postcard-demo.mp4`
+- 整条流程：`prototypes/screens/`（01–26、28，1440px）
 
 ---
 
