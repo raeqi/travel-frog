@@ -49,6 +49,8 @@ const CITIES: Record<string, CitySeed> = {
   lisbon: { name: '里斯本', countryName: '葡萄牙', countryCode: 'PRT', lat: 38.7223, lng: -9.1393 },
   naoshima: { name: '直岛', countryName: '日本', countryCode: 'JPN', lat: 34.4597, lng: 133.9957 },
   queenstown: { name: '皇后镇', countryName: '新西兰', countryCode: 'NZL', lat: -45.0312, lng: 168.6626 },
+  kanazawa: { name: '金泽', countryName: '日本', countryCode: 'JPN', lat: 36.5613, lng: 136.6562 },
+  seoul: { name: '首尔', countryName: '韩国', countryCode: 'KOR', lat: 37.5665, lng: 126.978 },
 };
 
 function city(key: string): CityRef {
@@ -319,24 +321,59 @@ export function buildDemoArchive(now: number): DemoArchive {
     });
   }
 
-  const wishSpecs: { key: string; cityKey: string; status: 'wish' | 'next'; region: string }[] = [
-    { key: 'wish_demo_island', cityKey: 'reykjavik', status: 'wish', region: '大西洋沿岸' },
-    { key: 'wish_demo_cappadocia', cityKey: 'cappadocia', status: 'next', region: '安纳托利亚' },
-    { key: 'wish_demo_lisbon', cityKey: 'lisbon', status: 'wish', region: '伊比利亚半岛' },
-    { key: 'wish_demo_naoshima', cityKey: 'naoshima', status: 'next', region: '濑户内海' },
-    { key: 'wish_demo_queenstown', cityKey: 'queenstown', status: 'wish', region: '南岛' },
+  const wishSpecs: {
+    key: string;
+    cityKey: string;
+    status: 'pending' | 'received' | 'wished' | 'fulfilled' | 'declined';
+    region: string;
+    note: string | null;
+    from: string | null;
+  }[] = [
+    { key: 'wish_demo_kanazawa', cityKey: 'kanazawa', status: 'pending', region: '北陆', note: null, from: null },
+    {
+      key: 'wish_demo_seoul',
+      cityKey: 'seoul',
+      status: 'received',
+      region: '汉江边',
+      note: '替你走到南山塔下，风把围巾吹得很响。',
+      from: 'kyoto',
+    },
+    {
+      key: 'wish_demo_reykjavik',
+      cityKey: 'reykjavik',
+      status: 'wished',
+      region: '大西洋沿岸',
+      note: '凌晨的港口只有灯塔亮着，替你站了一会儿。',
+      from: 'paris',
+    },
+    {
+      key: 'wish_demo_naoshima',
+      cityKey: 'naoshima',
+      status: 'fulfilled',
+      region: '濑户内海',
+      note: '南瓜还坐在海边，替你数了来往的船。',
+      from: 'kyoto',
+    },
+    {
+      key: 'wish_demo_queenstown',
+      cityKey: 'queenstown',
+      status: 'declined',
+      region: '南岛',
+      note: '雪线退得很低，山谷里没有人。',
+      from: 'osaka',
+    },
   ];
   const wishes: Wish[] = wishSpecs.map((spec) => ({
     id: asWishId(spec.key),
     cityRef: city(spec.cityKey),
     region: spec.region,
-    notes: null,
+    note: spec.note,
     status: spec.status,
-    source: 'demo',
+    source: 'frog',
+    from: spec.from,
     origin: 'demo',
     createdAt: at(2025, 8, 1),
     updatedAt: now,
-    visitedAt: null,
   }));
 
   const manualVisits: ManualVisit[] = [

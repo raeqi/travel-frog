@@ -83,7 +83,7 @@ describe('IndexedDB migration', () => {
     expect(data.memories[0]?.text).toBe('第一次看见雪');
     expect(data.candidates).toHaveLength(1);
     expect(data.candidates[0]?.status).toBe('pending');
-    expect(data.wishes[0]?.status).toBe('next');
+    expect(data.wishes[0]?.status).toBe('wished');
     expect(data.manualVisits[0]?.year).toBe(2024);
     expect(data.batches.some((batch) => batch.id === 'legacy')).toBe(true);
 

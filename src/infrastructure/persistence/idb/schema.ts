@@ -1,5 +1,5 @@
 export const DB_NAME = 'travel-frog';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export interface IndexSpec {
   readonly name: string;

@@ -297,17 +297,18 @@ export function migrateLegacyArchive(tx: IDBTransaction, now: number): void {
       const id = str(wish.id);
       if (!id) continue;
       const geo = cityRef(str(wish.name, '未命名地点'), str(wish.country));
+      const legacyStatus = wish.status === 'visited' ? 'fulfilled' : 'wished';
       wishStore.put({
         id,
         cityRef: geo,
         region: str(wish.region) || null,
-        notes: null,
-        status: wish.status === 'next' ? 'next' : 'wish',
-        source: 'manual',
+        note: '从旧档案带过来的一个想去的地方。',
+        status: legacyStatus,
+        source: 'user',
+        from: null,
         origin: 'user',
         createdAt: now,
         updatedAt: now,
-        visitedAt: null,
       });
     }
 
