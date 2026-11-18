@@ -8,7 +8,7 @@ import {
 } from '../../domain/home/collection';
 import { PERCH_LABELS, type FrogPerch, type HomeDisplay } from '../../domain/home/perch';
 import type { WishStatus } from '../../domain/wish/wish';
-import { FrogFigure } from './Frog';
+import { FrogPerchFigure } from './Frog';
 
 /** A postcard on the home board: the same object the map renders, no home-only state. */
 export interface HomePostcard {
@@ -107,9 +107,7 @@ export function HomeRoom({
         </div>
       </header>
 
-      <div className="home-wall" aria-hidden="true">
-        <span className="home-window" />
-      </div>
+      <div className="home-wall" aria-hidden="true" />
 
       <button
         type="button"
@@ -167,19 +165,24 @@ export function HomeRoom({
         aria-label="明信片板"
         onClick={() => onDisplay('postcard-wall')}
       >
+        <span className="home-board-rope" aria-hidden="true" />
+        {['a', 'b', 'c', 'd'].map((nail) => (
+          <span key={nail} className={`home-board-nail nail-${nail}`} aria-hidden="true" />
+        ))}
         {pinned.map((card, index) => (
           <button
             key={card.id}
             type="button"
-            className={`home-postcard st-${card.status} slot-${index % 5}`}
-            aria-label={`${card.name} · ${card.status === 'pending' ? '待寄出' : card.status === 'wished' ? '已盖戳' : '来信'}`}
-            title={card.name}
+            className={`home-postcard st-${card.status} slot-${index % 8}`}
+            aria-label={`${card.name} · ${POSTCARD_STATE_LABELS[card.status]}`}
+            title={`${card.name} · ${POSTCARD_STATE_LABELS[card.status]}`}
             onClick={(event) => {
               event.stopPropagation();
               onPostcard(card.id);
             }}
           >
-            {card.status === 'wished' ? <span className="home-postcard-stamp" aria-hidden="true" /> : null}
+            <span className="home-postcard-clip" aria-hidden="true" />
+            {card.status === 'stamped' ? <span className="home-postcard-stamp" aria-hidden="true" /> : null}
           </button>
         ))}
         {archived.length > 0 ? (
@@ -202,7 +205,12 @@ export function HomeRoom({
         ) : null}
       </div>
 
-      <div className="home-curio" role="group" aria-label="多宝阁" onClick={() => onDisplay('curio')}>
+      <div
+        className={`home-curio${furniture.curioFilled ? ' is-filled' : ''}`}
+        role="group"
+        aria-label="多宝阁"
+        onClick={() => onDisplay('curio')}
+      >
         <div className="home-curio-shelves">
           {curioSlots(home.specialties).map((slot) =>
             slot.specialty ? (
@@ -256,7 +264,10 @@ export function HomeRoom({
         aria-label="敞开的行李箱"
         title="敞开的行李箱"
         onClick={() => onDisplay('suitcase')}
-      />
+      >
+        <span className="home-suitcase-strap" aria-hidden="true" />
+        <span className="home-suitcase-sticker" aria-hidden="true" />
+      </button>
 
       <button
         type="button"
@@ -268,11 +279,19 @@ export function HomeRoom({
           onFrog();
         }}
       >
-        <FrogFigure mode="rest" charmCount={0} />
+        <FrogPerchFigure perch={home.perch} />
       </button>
     </div>
   );
 }
+
+const POSTCARD_STATE_LABELS: Readonly<Record<WishStatus, string>> = {
+  pending: '托付中',
+  received: '来信',
+  opened: '已掀开',
+  stamped: '已盖戳',
+  fulfilled: '已兑现',
+};
 
 export interface SpecialtyProvenance {
   readonly award: SpecialtyAward;

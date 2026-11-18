@@ -1,4 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
+import type { FrogPerch } from '../../domain/home/perch';
+import { PERCH_LABELS } from '../../domain/home/perch';
 import type { BubblePlacement } from './layout';
 
 export type FrogMode = 'rest' | 'postcard' | 'packing';
@@ -210,6 +212,96 @@ export function ReplayBar({
       <button className="replay-close" type="button" onClick={onClose}>
         结束回放
       </button>
+    </div>
+  );
+}
+
+const HOME_FROG = {
+  body: '#B3BB97',
+  belly: '#F3E4C3',
+  scarf: '#376445',
+  outline: '#706537',
+} as const;
+
+const PERCH_POSE: Readonly<Record<FrogPerch, 'sit' | 'stand' | 'look-up' | 'read' | 'walk' | 'doze'>> = {
+  armchair: 'sit',
+  'fireplace-rug': 'stand',
+  curio: 'look-up',
+  bookshelf: 'read',
+  suitcase: 'walk',
+  footstool: 'doze',
+};
+
+/** Simplified home frog: same palette as the character sheet, one static pose per perch. */
+export function FrogPerchFigure({ perch }: { readonly perch: FrogPerch }) {
+  const pose = PERCH_POSE[perch];
+  const doze = pose === 'doze';
+  const lookUp = pose === 'look-up';
+  const walk = pose === 'walk';
+  const read = pose === 'read';
+  return (
+    <div className={`frog-figure frog-pose-${pose}`}>
+      <svg viewBox="0 0 64 64" role="img" aria-label={`青蛙 · ${PERCH_LABELS[perch]}`}>
+        <ellipse cx="32" cy="57" rx="15" ry="3" fill="rgba(0,0,0,.32)" />
+        <path
+          d={doze ? 'M15 47c0-8 7.4-13 17-13s17 5 17 13-7.4 8-17 8-17 0-17-8z' : 'M14 45c0-9.4 8-16 18-16s18 6.6 18 16-8 12-18 12-18-2.6-18-12z'}
+          fill={HOME_FROG.body}
+          stroke={HOME_FROG.outline}
+          strokeWidth="1.3"
+        />
+        <ellipse cx="32" cy={doze ? 48 : 46} rx="11" ry={doze ? 6 : 7} fill={HOME_FROG.belly} />
+        <circle cx="24" cy={lookUp ? 25 : 23} r="6" fill={HOME_FROG.body} stroke={HOME_FROG.outline} strokeWidth="1.3" />
+        <circle cx="40" cy={lookUp ? 25 : 23} r="6" fill={HOME_FROG.body} stroke={HOME_FROG.outline} strokeWidth="1.3" />
+        {doze ? (
+          <>
+            <path d="M20.5 26c2-1.6 5-1.6 7 0" stroke={HOME_FROG.outline} strokeWidth="1.4" fill="none" strokeLinecap="round" />
+            <path d="M36.5 26c2-1.6 5-1.6 7 0" stroke={HOME_FROG.outline} strokeWidth="1.4" fill="none" strokeLinecap="round" />
+          </>
+        ) : (
+          <>
+            <circle cx={lookUp ? 25 : 24} cy={lookUp ? 23 : 23.5} r="2.6" fill="#26301F" />
+            <circle cx={lookUp ? 41 : 40} cy={lookUp ? 23 : 23.5} r="2.6" fill="#26301F" />
+            <circle cx={lookUp ? 25.8 : 24.8} cy={lookUp ? 22 : 22.5} r=".8" fill="#FFFDF8" />
+            <circle cx={lookUp ? 41.8 : 40.8} cy={lookUp ? 22 : 22.5} r=".8" fill="#FFFDF8" />
+          </>
+        )}
+        <path
+          d={lookUp ? 'M27.5 32c2.5 2.6 6.5 2.6 9 0' : 'M28 31.5c2.2 1.8 5.8 1.8 8 0'}
+          stroke={HOME_FROG.outline}
+          strokeWidth="1.3"
+          fill="none"
+          strokeLinecap="round"
+        />
+        <path d="M22 36c6 3.2 14 3.2 20 0" stroke={HOME_FROG.scarf} strokeWidth="5" fill="none" strokeLinecap="round" />
+        <path d="M30 38c1 3.6 1.4 6 1 8" stroke={HOME_FROG.scarf} strokeWidth="4" fill="none" strokeLinecap="round" />
+        {pose === 'sit' ? (
+          <path d="M20 52c2.6 2 6.4 3 12 3s9.4-1 12-3" stroke={HOME_FROG.outline} strokeWidth="1.2" fill="none" />
+        ) : null}
+        {pose === 'stand' ? (
+          <>
+            <path d="M17 41c-4 1-5 5-3 7" stroke={HOME_FROG.body} strokeWidth="4" fill="none" strokeLinecap="round" />
+            <path d="M47 41c4 1 5 5 3 7" stroke={HOME_FROG.body} strokeWidth="4" fill="none" strokeLinecap="round" />
+          </>
+        ) : null}
+        {walk ? (
+          <>
+            <path d="M24 53l-4 6" stroke={HOME_FROG.outline} strokeWidth="3" strokeLinecap="round" />
+            <path d="M42 53l5 5" stroke={HOME_FROG.outline} strokeWidth="3" strokeLinecap="round" />
+          </>
+        ) : (
+          <>
+            <path d="M24 54l-2 4" stroke={HOME_FROG.outline} strokeWidth="3" strokeLinecap="round" />
+            <path d="M40 54l2 4" stroke={HOME_FROG.outline} strokeWidth="3" strokeLinecap="round" />
+          </>
+        )}
+        {read ? (
+          <g transform="rotate(-6 32 43)">
+            <rect x="24" y="39" width="16" height="10" rx="1" fill="#FAF3E4" stroke={HOME_FROG.outline} strokeWidth=".9" />
+            <path d="M32 40v8" stroke={HOME_FROG.outline} strokeWidth=".7" />
+          </g>
+        ) : null}
+        {lookUp ? <path d="M49 17c2.4 1.6 3.4 3.4 3.4 5.2" stroke={HOME_FROG.outline} strokeWidth="1" fill="none" strokeLinecap="round" /> : null}
+      </svg>
     </div>
   );
 }

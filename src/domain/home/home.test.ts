@@ -178,6 +178,30 @@ describe('home state', () => {
     expect(validateHomeState(next.value).ok).toBe(true);
   });
 
+  it('carries no economy, social or time-simulation fields', () => {
+    expect(Object.keys(DEFAULT_HOME_STATE).sort()).toEqual(['city', 'marker', 'perch', 'specialties', 'updatedAt']);
+    const serialized = JSON.stringify(DEFAULT_HOME_STATE).toLowerCase();
+    for (const absent of [
+      'currency',
+      'coin',
+      'experience',
+      'level',
+      'stamina',
+      'energy',
+      'cooldown',
+      'streak',
+      'friend',
+      'visitor',
+      'affinity',
+      'comfort',
+      'inventory',
+      'capacity',
+      'elapsed',
+    ]) {
+      expect(serialized).not.toContain(absent);
+    }
+  });
+
   it('builds evidence only for non-home visits with located photos', () => {
     const evidence = collectCityVisitEvidence({
       trips: [trip('t1', [KYOTO, BEIJING])],

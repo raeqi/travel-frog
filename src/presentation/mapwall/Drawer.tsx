@@ -5,7 +5,7 @@ import type { LocationSuggestion } from '../../domain/services/fill-locations';
 import { ISSUE_LABELS } from '../../domain/import/import-issue';
 import type { Photo } from '../../domain/photo/photo';
 import type { ImportProgress, ImportSummary } from '../../application/import-photos';
-import { fmtDate, fmtMonthDay } from '../format';
+import { fmtDate, fmtLocalDate, fmtMonthDay } from '../format';
 
 export type DrawerTab = 'import' | 'candidates' | 'fill' | 'progress';
 
@@ -55,6 +55,7 @@ export function Drawer(props: DrawerProps) {
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [importResult, setImportResult] = useState<string | null>(null);
+  const [fileLog, setFileLog] = useState<readonly string[]>([]);
 
   if (!props.open) return null;
   const pending = props.candidates.filter((candidate) => candidate.status === 'pending');
@@ -66,10 +67,15 @@ export function Drawer(props: DrawerProps) {
   const runImport = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setImporting(true);
+    setFileLog([]);
     setProgress({ done: 0, total: files.length, fileName: '' });
     setImportResult(null);
     try {
-      const summary = await props.onImportFiles(files, setProgress);
+      const summary = await props.onImportFiles(files, (next) => {
+        setProgress(next);
+        if (!next.fileName) return;
+        setFileLog((current) => (current.includes(next.fileName) ? current : [...current, next.fileName].slice(-8)));
+      });
       setImportResult(
         `已导入 ${summary.imported} 张 · 重复 ${summary.duplicates} · 失败 ${summary.failed} · 新候选 ${summary.candidateCount}`,
       );
@@ -79,6 +85,31 @@ export function Drawer(props: DrawerProps) {
       setImporting(false);
       setProgress(null);
     }
+  };
+
+  const fillGroups = new Map<string, typeof props.suggestions>();
+  for (const suggestion of props.suggestions) {
+    const photo = props.photosById.get(suggestion.photoId);
+    const day = photo ? fmtLocalDate(photo.capturedAt, photo.captureOffsetMinutes) : '未知日期';
+    const list = fillGroups.get(day) ?? [];
+    fillGroups.set(day, [...list, suggestion]);
+  }
+
+  const exportIssues = () => {
+    if (props.issues.length === 0) return;
+    const payload = props.issues.map((issue) => ({
+      file: issue.fileName,
+      code: issue.code,
+      label: ISSUE_LABELS[issue.code] ?? issue.code,
+      detail: issue.message,
+    }));
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `travel-frog-import-issues-${fmtDate(Date.now())}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -106,6 +137,17 @@ export function Drawer(props: DrawerProps) {
           进度
         </button>
       </div>
+      <input
+        id="wall-file-input"
+        type="file"
+        accept=".jpg,.jpeg,.png,.webp,.heic,.heif"
+        multiple
+        hidden
+        onChange={(event) => {
+          void runImport(event.target.files);
+          event.target.value = '';
+        }}
+      />
       <div className="drawer-body">
         {props.tab === 'import' ? (
           <div className="panel">
@@ -132,17 +174,6 @@ export function Drawer(props: DrawerProps) {
               <strong>把照片拖到这里</strong>
               <span>或点击选择文件 · JPG、PNG、WebP、HEIC</span>
             </div>
-            <input
-              id="wall-file-input"
-              type="file"
-              accept=".jpg,.jpeg,.png,.webp,.heic,.heif"
-              multiple
-              hidden
-              onChange={(event) => {
-                void runImport(event.target.files);
-                event.target.value = '';
-              }}
-            />
             {progress ? (
               <div className="card">
                 <div className="panel-title">
@@ -156,6 +187,13 @@ export function Drawer(props: DrawerProps) {
                 </div>
                 <p className="note">{progress.fileName}</p>
               </div>
+            ) : null}
+            {fileLog.length > 0 ? (
+              <ul className="file-log">
+                {fileLog.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
             ) : null}
             {importResult ? <p className="note">{importResult}</p> : null}
             <p className="note">照片只在本机解析；原图不会被复制进浏览器。导入完成后先生成候选，确认后才成为旅行。</p>
@@ -282,29 +320,47 @@ export function Drawer(props: DrawerProps) {
                 </button>
               </div>
             ) : null}
-            <div className="card">
-              {props.suggestions.map((suggestion) => {
-                const photo = props.photosById.get(suggestion.photoId);
-                const checked = selectedSuggestions.includes(suggestion.photoId);
-                return (
-                  <div className="fill-row" key={suggestion.photoId}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => setSelectedSuggestions((current) => toggle(current, suggestion.photoId))}
-                    />
-                    <span className="meta">
-                      <strong>{photo?.fileName ?? suggestion.photoId}</strong>
-                      <span>
-                        → {suggestion.cityRef.name} · {suggestion.reason === 'same-day-gps' ? '同日 GPS' : '时间最近'} ·{' '}
-                        {suggestion.confidence === 'high' ? '高' : suggestion.confidence === 'medium' ? '中' : '低'}
+            <div className="fill-groups">
+              {Array.from(fillGroups.entries()).map(([day, suggestions]) => (
+              <div className="card" key={day}>
+                <div className="panel-title">
+                  <h3>{day}</h3>
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={async () => {
+                      const ids = suggestions.map((item) => item.photoId);
+                      setSelectedSuggestions((current) => current.filter((id) => !ids.includes(id)));
+                      await props.onApplySuggestions(ids);
+                    }}
+                  >
+                    按天套用 {suggestions.length} 张
+                  </button>
+                </div>
+                {suggestions.map((suggestion) => {
+                  const photo = props.photosById.get(suggestion.photoId);
+                  const checked = selectedSuggestions.includes(suggestion.photoId);
+                  return (
+                    <div className="fill-row" key={suggestion.photoId}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setSelectedSuggestions((current) => toggle(current, suggestion.photoId))}
+                      />
+                      <span className="meta">
+                        <strong>{photo?.fileName ?? suggestion.photoId}</strong>
+                        <span>
+                          → {suggestion.cityRef.name} · {suggestion.reason === 'same-day-gps' ? '同日 GPS' : '时间最近'} ·{' '}
+                          {suggestion.confidence === 'high' ? '高' : suggestion.confidence === 'medium' ? '中' : '低'}
+                        </span>
                       </span>
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
             <p className="note">候选来自本机照片的同日位置，不会自动写入。套用后照片会出现在地图上，并标记为「推断」。</p>
+            </div>
           </div>
         ) : null}
 
@@ -328,6 +384,15 @@ export function Drawer(props: DrawerProps) {
                     </span>
                   </span>
                   {batch.issueCount > 0 ? <span className="hint">{batch.issueCount} 个问题</span> : null}
+                  {batch.status === 'failed' ? (
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      onClick={() => document.getElementById('wall-file-input')?.click()}
+                    >
+                      重新选择文件重试
+                    </button>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -336,6 +401,11 @@ export function Drawer(props: DrawerProps) {
                 <h3>问题文件</h3>
                 <span>{props.issues.length} 个</span>
               </div>
+              {props.issues.length > 0 ? (
+                <button className="btn ghost" type="button" onClick={exportIssues}>
+                  导出问题清单
+                </button>
+              ) : null}
               {props.issues.length === 0 ? <p className="note">没有需要处理的问题文件。</p> : null}
               {props.issues.map((issue) => (
                 <div className="file-row" key={issue.id}>
