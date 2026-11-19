@@ -30,6 +30,7 @@ import { usePhotoImages, photoImage } from './usePhotoImages';
 import { MapBoard, type CityPhotoMarker, type DestTagPlacement, type RoutePath } from './MapBoard';
 import { PoiList } from './PoiList';
 import { PhotoLocationPicker } from './PhotoLocationPicker';
+import { photoLocationCamera } from './photo-location-camera';
 import type { ManualLocationInput } from './ManualLocationForm';
 import { namedMapPoint } from './waypoint-names';
 import { EntrustChooser } from './EntrustChooser';
@@ -346,6 +347,7 @@ export function MapWall() {
     if (!board) return;
     const observer = new ResizeObserver(measure);
     observer.observe(board);
+    if (sheetRef.current) observer.observe(sheetRef.current);
     window.addEventListener('resize', measure);
     return () => {
       observer.disconnect();
@@ -536,11 +538,14 @@ export function MapWall() {
       }
     }finally{photoSaving.current=false;}
   },[photoPick,service,animateCamera,metrics,notify,setActiveTripId,setCityKey]);
+  const revealPhotoPin=useCallback((point:{lat:number;lng:number})=>{
+    if(window.matchMedia('(max-width: 700px)').matches)animateCamera(photoLocationCamera(point,cameraRef.current,metrics,mode),mode,level);
+  },[animateCamera,metrics,mode,level]);
   const pickMapPoint=useCallback((point:{lat:number;lng:number})=>{
     if(photoSaving.current)return;
-    if(photoPick){setPhotoPick(current=>current?{...current,draft:namedMapPoint(point)}:current);return;}
+    if(photoPick){setPhotoPick(current=>current?{...current,draft:namedMapPoint(point)}:current);revealPhotoPin(point);return;}
     setWaypointDraft(namedMapPoint(point));setWaypointsOpen(true);setSelecting(false);
-  },[photoPick]);
+  },[photoPick,revealPhotoPin]);
   const beginFollowing=useCallback(()=>{
     if(following){followingRef.current=false;setFollowing(false);return;}
     if(cameraFrame.current!==null)cancelAnimationFrame(cameraFrame.current);
@@ -1400,7 +1405,7 @@ export function MapWall() {
         selecting={selecting||!!photoPick}
         photoPicking={!!photoPick}
         onMapPick={pickMapPoint}
-        onPoiPick={poi=>{if(photoPick){if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:{name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'}}:current);return;}setFan(null);setFrogActionsOpen(false);followingRef.current=false;setFollowing(false);setWaypointDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'});setWaypointsOpen(true);setSelecting(false);}}
+        onPoiPick={poi=>{if(photoPick){if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:{name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'}}:current);revealPhotoPin(poi);return;}setFan(null);setFrogActionsOpen(false);followingRef.current=false;setFollowing(false);setWaypointDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'});setWaypointsOpen(true);setSelecting(false);}}
         waypointPins={(photoPick?[]:travel.waypoints??[]).map(point=>{const p=toScreen(projectAt(mode,point.lat,point.lng),camera,metrics);return {...point,x:p.x,y:p.y};}).filter(p=>inBoard(p.x,p.y,metrics,24))}
         draftPin={photoPick?.draft?toScreen(projectAt(mode,photoPick.draft.lat,photoPick.draft.lng),camera,metrics):waypointDraft?toScreen(projectAt(mode,waypointDraft.lat,waypointDraft.lng),camera,metrics):null}
         onWaypointClick={id=>{const point=travel.waypoints?.find(p=>p.id===id);if(point){setWaypointDraft({...point});setWaypointsOpen(true);}}}

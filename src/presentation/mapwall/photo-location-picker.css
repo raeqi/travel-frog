@@ -140,3 +140,13 @@
     flex: 1;
   }
 }
+
+@media (max-width: 700px) {
+  .photo-picking .map-sheet {
+    inset: 20px 14px 18px;
+  }
+  .photo-picking .real-places {
+    top: 30px;
+    right: 18px;
+  }
+}
