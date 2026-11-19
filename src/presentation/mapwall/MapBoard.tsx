@@ -377,7 +377,7 @@ export function MapBoard(props: MapBoardProps) {
         </div>
 
         {frogActions ? <FrogActions x={frogActions.x} y={frogActions.y} below={frogActions.below} onAction={onFrogAction} /> : null}
-        <RealPlaces camera={props.camera} metrics={props.metrics} mode={props.mode} project={project} {...(props.onPoiPick?{onSave:props.onPoiPick}:{})} />
+        <RealPlaces saveLabel={props.photoPicking?'选为照片位置':'加入旅行清单'} camera={props.camera} metrics={props.metrics} mode={props.mode} project={project} {...(props.onPoiPick?{onSave:props.onPoiPick}:{})} />
         {props.selecting&&!props.photoPicking&&<div className="pick-hint">选点模式 · 轻点地图后确认保存；可拖动、缩放 · 键盘回车选择视野中心</div>}
         {props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
         {destHint ? <div className="entrust-hint">给下一趟留个方向 · 蛙蛙也会自己安排旅行</div> : null}
