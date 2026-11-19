@@ -28,6 +28,7 @@ import { availableDestinations, type DestinationCandidate } from './candidates';
 import { usePhotoImages, photoImage } from './usePhotoImages';
 import { MapBoard, type CityPhotoMarker, type DestTagPlacement, type RoutePath } from './MapBoard';
 import { PoiList } from './PoiList';
+import { namedMapPoint } from './waypoint-names';
 import { EntrustChooser } from './EntrustChooser';
 import { Crumb, EmptyCard, TopBar, Toast, Tray, ZoomControls } from './Chrome';
 import { MemoryOverlay } from './MemoryOverlay';
@@ -492,7 +493,7 @@ export function MapWall() {
     setScene('wall');setReplay(null);setFan(null);animateCamera({cx:projectWorld(point.lat,point.lng).x,cy:projectWorld(point.lat,point.lng).y,zoom:3600},'world','world');
   },[animateCamera,setReplay]);
   const pickMapPoint=useCallback((point:{lat:number;lng:number})=>{
-    const land=landAt(point);setWaypointDraft({name:`地图选点 ${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`,country:land?.name??'未命名地区',...point,source:'map'});setWaypointsOpen(true);setSelecting(false);
+    setWaypointDraft(namedMapPoint(point));setWaypointsOpen(true);setSelecting(false);
   },[]);
   const beginFollowing=useCallback(()=>{
     if(following){followingRef.current=false;setFollowing(false);return;}
@@ -1406,7 +1407,7 @@ export function MapWall() {
           onSave={async(point,next)=>{const id=await service.saveTravelWaypoint(point);if(next)await service.setFrogNextWaypoint(id);}}
           onNext={id=>service.setFrogNextWaypoint(id)} onLocate={locateWaypoint} onRemove={id=>service.removeTravelWaypoint(id)}/>
         <aside className="roaming-tools" data-map-controls aria-label="蛙蛙漫游控制">
-          {frogLocation&&<output aria-label="蛙蛙模拟位置" aria-live="off" data-frog-lat={frogLocation.lat} data-frog-lng={frogLocation.lng} data-motion-kind={movement}>模拟位置 {frogLocation.lat.toFixed(5)}, {frogLocation.lng.toFixed(5)} · {travel.motionPausedAt!==undefined?'已暂停':movement==='walk'?'落脚点附近漫游':movement==='transit'?'交通转场（可能过海）':'在家'}</output>}
+          {frogLocation&&<output aria-label="蛙蛙模拟位置" aria-live="off" data-frog-lat={frogLocation.lat} data-frog-lng={frogLocation.lng} data-motion-kind={movement}>蛙蛙 · {travel.motionPausedAt!==undefined?'已暂停':movement==='walk'?'落脚点附近漫游':movement==='transit'?'交通转场（可能过海）':'在家'}</output>}
           <div><button type="button" aria-pressed={following} onClick={beginFollowing}>{following?'停止跟随':'跟随蛙蛙'}</button><button type="button" onClick={()=>void guard(()=>service.pauseFrogMotion(travel.motionPausedAt===undefined))}>{travel.motionPausedAt!==undefined?'继续漫游':'暂停漫游'}</button>{!frogAway&&travel.current?<button type="button" onClick={()=>void guard(()=>service.startFrogJourneyNow())}>现在出发</button>:frogAway?<button type="button" onClick={()=>void guard(()=>service.returnFrogHome())}>让蛙蛙回家</button>:null}</div>
         </aside>
       </>}
