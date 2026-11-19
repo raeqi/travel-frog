@@ -1465,7 +1465,7 @@ export function MapWall() {
         onImportFiles={(files, onProgress) => service.importFiles(Array.from(files), onProgress)}
         onThumbnail={loadThumbnail}
         onRetryPhoto={(id,file)=>service.retryPhotoPreview(id,file)}
-        onPhotoTime={(id,at)=>service.setPhotoCaptureTime(id,at)}
+        onPhotoTime={async(id,at)=>{await service.setPhotoCaptureTime(id,at);if(at!==null)setDrawerTab('candidates');}}
         onSetPhotoLocations={(ids,input)=>service.setPhotoLocations(ids,input)}
         onConfirmCandidate={async id => {
           await guard(async()=>{

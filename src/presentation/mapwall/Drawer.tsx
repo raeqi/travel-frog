@@ -425,9 +425,13 @@ export function Drawer(props: DrawerProps) {
                 <button
                   type="button"
                   className="btn primary"
-                  onClick={() => props.onTab("candidates")}
+                  onClick={() =>
+                    props.onTab(repairPhotos.length ? "progress" : "candidates")
+                  }
                 >
-                  下一步：查看候选并定位
+                  {repairPhotos.length
+                    ? "下一步：修复照片或补拍摄时间"
+                    : "下一步：确认照片并在地图查看"}
                 </button>
               </>
             ) : null}

@@ -50,8 +50,7 @@ export function RepairPhoto({
   onRetry: (id: string, file?: File) => Promise<void>;
   onTime: (id: string, at: number | null) => Promise<void>;
 }) {
-  const [date, setDate] = useState(""),
-    [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [status, setStatus] = useState("");
   const run = async (task: () => Promise<void>, success: string) => {
@@ -128,6 +127,11 @@ export function RepairPhoto({
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              const FormDataClass =
+                e.currentTarget.ownerDocument.defaultView!.FormData;
+              const date = String(
+                new FormDataClass(e.currentTarget).get("capturedAt") ?? "",
+              );
               void run(async () => {
                 if (!date) throw new Error("请选择拍摄时间");
                 const at = new Date(date).getTime();
@@ -141,8 +145,7 @@ export function RepairPhoto({
                 required
                 type="datetime-local"
                 aria-label={`拍摄时间 ${photo.fileName}`}
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
+                name="capturedAt"
               />
             </label>
             <button className="btn primary" type="submit">

@@ -14,11 +14,7 @@ export function ManualLocationForm({
   onSave: (input: ManualLocationInput) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [name, setName] = useState(""),
-    [country, setCountry] = useState(""),
-    [lat, setLat] = useState(""),
-    [lng, setLng] = useState(""),
-    [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
     <form
@@ -26,6 +22,13 @@ export function ManualLocationForm({
       aria-label="手动补位置"
       onSubmit={async (e) => {
         e.preventDefault();
+        const FormDataClass =
+          e.currentTarget.ownerDocument.defaultView!.FormData;
+        const fields = new FormDataClass(e.currentTarget);
+        const name = String(fields.get("name") ?? ""),
+          country = String(fields.get("country") ?? ""),
+          lat = String(fields.get("lat") ?? ""),
+          lng = String(fields.get("lng") ?? "");
         setBusy(true);
         setError("");
         try {
@@ -55,8 +58,7 @@ export function ManualLocationForm({
             required
             maxLength={100}
             aria-label="地点名"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            name="name"
             placeholder="例如：巴黎 / 我的小镇"
           />
         </label>
@@ -66,8 +68,7 @@ export function ManualLocationForm({
             required
             maxLength={100}
             aria-label="国家或地区"
-            value={country}
-            onChange={(e) => setCountry(e.target.value)}
+            name="country"
             placeholder="例如：法国"
           />
         </label>
@@ -80,8 +81,7 @@ export function ManualLocationForm({
             max={90}
             step="any"
             aria-label="纬度"
-            value={lat}
-            onChange={(e) => setLat(e.target.value)}
+            name="lat"
             placeholder="例如：48.858"
           />
         </label>
@@ -94,8 +94,7 @@ export function ManualLocationForm({
             max={180}
             step="any"
             aria-label="经度"
-            value={lng}
-            onChange={(e) => setLng(e.target.value)}
+            name="lng"
             placeholder="例如：2.295"
           />
         </label>
