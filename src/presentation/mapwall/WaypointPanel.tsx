@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { nearbyWaypointCity } from "./waypoint-names";
 import type { FrogTravelState } from "../../domain/frog/journey";
 import type { TravelWaypoint } from "../../domain/frog/roaming";
 export interface WaypointDraft {
   id?: string;
+  coordinateEntry?: boolean;
   name: string;
   country: string;
   lat: number;
@@ -50,6 +52,9 @@ export function WaypointPanel({
       setBusy(false);
     }
   };
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (draft) bodyRef.current?.scrollTo?.({ top: 0 }); }, [draft]);
+  const nearby = draft ? nearbyWaypointCity(draft) : null;
   return (
     <aside
       className={`waypoint-tools${open ? " is-open" : ""}`}
@@ -77,7 +82,7 @@ export function WaypointPanel({
         </button>
       </div>
       {open && (
-        <div className="waypoint-body">
+        <div className="waypoint-body" ref={bodyRef}>
           <header>
             <h2>想去的地方</h2>
             <button
@@ -96,14 +101,6 @@ export function WaypointPanel({
               ? "轻点地图选位置，再确认保存；拖动不会添加。"
               : "地点先存清单；设为下一站后，蛙蛙才会按这个方向出发。"}
           </p>
-          <button
-            type="button"
-            onClick={() =>
-              onDraft({ name: "", country: "", lat: 0, lng: 0, source: "map" })
-            }
-          >
-            直接填写坐标
-          </button>
           {draft && (
             <form
               key={`${draft.lat}:${draft.lng}:${draft.name}`}
@@ -119,13 +116,18 @@ export function WaypointPanel({
                 const point: WaypointDraft = {
                   ...(draft.id ? { id: draft.id } : {}),
                   name: String(data.get("name") ?? ""),
-                  country: String(data.get("country") ?? ""),
-                  lat: Number(data.get("lat")),
-                  lng: Number(data.get("lng")),
+                  country: String(data.get("country") ?? draft.country),
+                  lat: data.has("lat") ? Number(data.get("lat")) : draft.lat,
+                  lng: data.has("lng") ? Number(data.get("lng")) : draft.lng,
                   source: draft.source,
                 };
                 void run(
                   async () => {
+                    if (
+                      (data.has("lat") && !String(data.get("lat")).trim()) ||
+                      (data.has("lng") && !String(data.get("lng")).trim())
+                    )
+                      throw new Error("请填写有效的位置，0也是有效坐标");
                     await onSave(point, next);
                     onDraft(null);
                     onSelecting(false);
@@ -135,8 +137,13 @@ export function WaypointPanel({
               }}
             >
               <h3>给这个位置取个名字</h3>
-              <p>
-                保留真实坐标，名称可自行填写；无需联网反查。海岸和小岛以你确认的位置为准。
+              <p className="waypoint-context">
+                {draft.coordinateEntry
+                  ? "请在高级设置中填写位置。"
+                  : nearby
+                    ? `这个位置在${nearby.name}附近。`
+                    : "已经选好了地图上的位置。"}
+                名称可以自由修改，位置会保留在你选的地方。
               </p>
               <fieldset disabled={busy}>
                 <label>
@@ -150,41 +157,48 @@ export function WaypointPanel({
                     placeholder="例如：我想去的海边"
                   />
                 </label>
-                <label>
-                  国家或地区
-                  <input
-                    name="country"
-                    aria-label="清单国家或地区"
-                    maxLength={100}
-                    defaultValue={draft.country}
-                  />
-                </label>
-                <label>
-                  纬度
-                  <input
-                    name="lat"
-                    aria-label="清单纬度"
-                    required
-                    type="number"
-                    min={-90}
-                    max={90}
-                    step="any"
-                    defaultValue={draft.lat}
-                  />
-                </label>
-                <label>
-                  经度
-                  <input
-                    name="lng"
-                    aria-label="清单经度"
-                    required
-                    type="number"
-                    min={-180}
-                    max={180}
-                    step="any"
-                    defaultValue={draft.lng}
-                  />
-                </label>
+                <details
+                  className="waypoint-advanced"
+                  open={draft.coordinateEntry || undefined}
+                >
+                  <summary>高级：调整位置</summary>
+                  <p>仅在需要时修改；普通保存和改名不需要填写。</p>
+                  <label>
+                    国家或地区
+                    <input
+                      name="country"
+                      aria-label="清单国家或地区"
+                      maxLength={100}
+                      defaultValue={draft.country}
+                    />
+                  </label>
+                  <label>
+                    纬度
+                    <input
+                      name="lat"
+                      aria-label="清单纬度"
+                      required={draft.coordinateEntry}
+                      type="number"
+                      min={-90}
+                      max={90}
+                      step="any"
+                      defaultValue={draft.coordinateEntry ? "" : draft.lat}
+                    />
+                  </label>
+                  <label>
+                    经度
+                    <input
+                      name="lng"
+                      aria-label="清单经度"
+                      required={draft.coordinateEntry}
+                      type="number"
+                      min={-180}
+                      max={180}
+                      step="any"
+                      defaultValue={draft.coordinateEntry ? "" : draft.lng}
+                    />
+                  </label>
+                </details>
                 <div className="waypoint-buttons">
                   <button type="submit" value="save">
                     保存到旅行清单
@@ -205,9 +219,7 @@ export function WaypointPanel({
             {(state.waypoints ?? []).map((p) => (
               <li key={p.id}>
                 <strong>{p.name}</strong>
-                <span>
-                  {p.country} · {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
-                </span>
+                <span>{p.country}</span>
                 <div className="waypoint-buttons">
                   <button
                     type="button"
@@ -233,7 +245,7 @@ export function WaypointPanel({
                     disabled={busy}
                     onClick={() => onDraft({ ...p })}
                   >
-                    改名或坐标
+                    改名
                   </button>
                   <button
                     type="button"
@@ -254,6 +266,24 @@ export function WaypointPanel({
           {!state.waypoints?.length && (
             <p>清单还是空的。可在地图点任意位置，或从真实地点详情添加。</p>
           )}
+          <details className="waypoint-advanced">
+            <summary>高级定位</summary>
+            <button
+              type="button"
+              onClick={() =>
+                onDraft({
+                  name: "想去的地方",
+                  country: "",
+                  lat: 0,
+                  lng: 0,
+                  source: "map",
+                  coordinateEntry: true,
+                })
+              }
+            >
+              手动填写经纬度
+            </button>
+          </details>
           <small>
             设为下一站会替换尚未出发的方向；在途行程先走完。清单不会增加你的真实到访统计，也不会自动发出真实通信。
           </small>

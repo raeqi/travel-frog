@@ -286,3 +286,38 @@
     transition: none;
   }
 }
+
+.waypoint-advanced {
+  margin: 12px 0;
+  font-size: 13px;
+  color: #746a59;
+}
+.waypoint-advanced summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+.waypoint-advanced[open] {
+  display: block;
+}
+.waypoint-advanced label {
+  margin: 8px 0;
+}
+.waypoint-context {
+  color: #5b674e;
+}
+.waypoint-body {
+  box-sizing: border-box;
+}
+@media (max-width: 700px) {
+  .waypoint-body {
+    width: min(345px, calc(100vw - 24px));
+    max-height: calc(100dvh - 320px);
+  }
+  .waypoint-body input {
+    font-size: 16px;
+    min-height: 42px;
+  }
+  .waypoint-buttons button {
+    min-height: 42px;
+  }
+}

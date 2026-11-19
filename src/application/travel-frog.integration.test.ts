@@ -182,6 +182,23 @@ async function createService(
 }
 
 describe('arbitrary saved points and durable movement',()=>{
+ it('keeps exact named and unmatched points through rename, reopen and next-stop planning',async()=>{
+  const factory=new IDBFactory(),first=await createService(new TestClock(),factory,thumbnails,OFFLINE_FROG_LANDSCAPE),s=first.service;
+  await s.configureFrogTravel({enabled:false});
+  const point={name:'巴黎附近',country:'法国',lat:48.858222,lng:2.2945,source:'map' as const};
+  const id=await s.saveTravelWaypoint(point);
+  const unmatched=await s.saveTravelWaypoint({name:'我想去的小角落',country:'未命名地区',lat:0,lng:-140,source:'map'});
+  await s.saveTravelWaypoint({...point,id,name:'自己的铁塔角落'});
+  first.db.close();
+  const restored=await createService(new TestClock(),factory,thumbnails,OFFLINE_FROG_LANDSCAPE);
+  expect(restored.service.getSnapshot().frogTravel?.waypoints).toHaveLength(2);
+  expect(restored.service.getSnapshot().frogTravel?.waypoints?.find(p=>p.id===id)).toMatchObject({...point,name:'自己的铁塔角落'});
+  await restored.service.setFrogNextWaypoint(id);
+  expect(restored.service.getSnapshot().frogTravel?.current?.destination.centroid).toMatchObject({lat:point.lat,lng:point.lng});
+  await restored.service.setFrogNextWaypoint(unmatched);
+  expect(restored.service.getSnapshot().frogTravel?.current?.destination.centroid).toMatchObject({lat:0,lng:-140});
+  restored.db.close();
+ });
  it('saves, edits without duplication, reloads and travels to an exact nonpreset point while auto is off',async()=>{
   let now=NOW;const clock:Clock={now:()=>now,localOffsetMinutes:()=>0},factory=new IDBFactory();
   const first=await createService(clock,factory,thumbnails,OFFLINE_FROG_LANDSCAPE),s=first.service;

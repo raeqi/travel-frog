@@ -12,6 +12,77 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 describe("editable native coordinate form", () => {
+  it("shows only the name by default, hides saved coordinates and renames without moving the point", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+    const save = vi.fn(async () => {}),
+      noop = () => {},
+      point = {
+        id: "saved",
+        name: "巴黎附近",
+        country: "法国",
+        lat: 48.858222,
+        lng: 2.2945,
+        source: "map" as const,
+        createdAt: 1,
+      };
+    await act(async () =>
+      root!.render(
+        <WaypointPanel
+          state={{ ...EMPTY_FROG_TRAVEL, waypoints: [point] }}
+          open
+          selecting={false}
+          draft={point}
+          onOpen={noop}
+          onSelecting={noop}
+          onDraft={noop}
+          onSave={save}
+          onNext={async () => {}}
+          onLocate={noop}
+          onRemove={async () => {}}
+        />,
+      ),
+    );
+    expect(host.querySelector("form")!.textContent).toContain("巴黎附近");
+    expect([...host.querySelectorAll("details")].every((d) => !d.open)).toBe(
+      true,
+    );
+    expect(
+      [...host.querySelectorAll("input")]
+        .filter((e) => !e.closest("details"))
+        .map((e) => e.name),
+    ).toEqual(["name"]);
+    expect(host.querySelector("ol")!.textContent).not.toContain("48.858");
+    expect(host.querySelector("ol")!.textContent).not.toContain("2.294");
+    host.querySelector<HTMLInputElement>('input[name="name"]')!.value =
+      "我自己的铁塔角落";
+    const submitter = host.querySelector<HTMLButtonElement>(
+      'button[value="next"]',
+    )!;
+    await act(async () =>
+      host
+        .querySelector("form")!
+        .dispatchEvent(
+          new SubmitEvent("submit", {
+            bubbles: true,
+            cancelable: true,
+            submitter,
+          }),
+        ),
+    );
+    expect(save).toHaveBeenCalledWith(
+      {
+        id: "saved",
+        name: "我自己的铁塔角落",
+        country: "法国",
+        lat: 48.858222,
+        lng: 2.2945,
+        source: "map",
+      },
+      true,
+    );
+  });
   it("submits actual coordinates and the selected next-stop action, preserving the record being edited", async () => {
     const host = document.createElement("div");
     document.body.append(host);
@@ -54,15 +125,13 @@ describe("editable native coordinate form", () => {
       'button[value="next"]',
     )!;
     await act(async () =>
-      host
-        .querySelector("form")!
-        .dispatchEvent(
-          new SubmitEvent("submit", {
-            bubbles: true,
-            cancelable: true,
-            submitter,
-          }),
-        ),
+      host.querySelector("form")!.dispatchEvent(
+        new SubmitEvent("submit", {
+          bubbles: true,
+          cancelable: true,
+          submitter,
+        }),
+      ),
     );
     expect(save).toHaveBeenCalledWith(
       {
