@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { boundCamera, panCamera, zoomCamera } from "./map-gestures";
 import { parsePois, poiArea, poiQuery } from "./real-pois";
-import { projectWorld, toScreen, type Metrics } from "./geometry";
+import { mapCoordinate, projectCity, projectRegion, projectWorld, toScreen, type Metrics } from "./geometry";
 const metrics: Metrics = {
   boardW: 1200,
   boardH: 800,
@@ -11,6 +11,17 @@ const metrics: Metrics = {
   offY: 80,
 };
 describe("direct map input", () => {
+  it('recovers arbitrary coordinates from the visible layer, including margins and high zoom',()=>{
+    const point={lat:35.017263,lng:135.769123};
+    for(const [mode,project] of [['world',projectWorld],['city',projectCity],['region',projectRegion]] as const) {
+      const p=project(point.lat,point.lng),camera={cx:p.x,cy:p.y,zoom:3600};
+      const screen=toScreen(p,camera,metrics);
+      const restored=mapCoordinate(screen.x,screen.y,camera,metrics,mode)!;
+      expect(restored.lat).toBeCloseTo(point.lat,9);
+      expect(restored.lng).toBeCloseTo(point.lng,9);
+    }
+    expect(mapCoordinate(0,0,{cx:500,cy:-1000,zoom:1},metrics,'world')).toBeNull();
+  });
   it("moves geographical features exactly with the finger", () => {
     const camera = { cx: 500, cy: 320, zoom: 4 },
       point = projectWorld(10, 20);

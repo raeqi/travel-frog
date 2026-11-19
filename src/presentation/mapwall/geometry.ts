@@ -103,3 +103,12 @@ export function tiltFor(id: string, base = 6): string {
 export function postcardTilt(id: string): string {
   return `${((fnv1a(`pc:${id}`) % 91) / 10 - 4).toFixed(1)}deg`;
 }
+
+/** Inverse of the visible projection. Board coordinates include the sheet margins. */
+export function mapCoordinate(x:number,y:number,camera:Camera,metrics:Metrics,mode:'world'|'city'|'region'):{lat:number;lng:number}|null {
+ const view=viewRect(camera,metrics),k=metrics.sheetW/view.viewW;if(!(k>0))return null;
+ const px=view.vx+(x-metrics.offX)/k,py=view.vy+(y-metrics.offY)/k;
+ const lng=mode==='city'?135.7681+(px-500)/CITY_SCALE:mode==='region'?135.55+(px-500)/REGION_SCALE:px/1000*360-180;
+ const lat=mode==='city'?35.0116-(py-320)/CITY_SCALE:mode==='region'?34.85-(py-320)/REGION_SCALE:90-py/640*180;
+ return Number.isFinite(lat)&&Math.abs(lat)<=90&&Number.isFinite(lng)&&Math.abs(lng)<=180?{lat,lng}:null;
+}

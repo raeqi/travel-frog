@@ -86,6 +86,8 @@ import {
   type FrogPace,
   type FrogTravelState,
 } from "../domain/frog/journey";
+import {waypointCity,shiftJourney,type FrogLandscape,type TravelWaypoint} from '../domain/frog/roaming';
+import {frogJourneyLocation} from '../domain/frog/journey';
 import { FROG_DESTINATIONS } from "../domain/frog/destinations";
 
 export interface ServiceDeps {
@@ -97,6 +99,7 @@ export interface ServiceDeps {
   readonly fingerprints: FingerprintReader;
   readonly cityResolver: CityResolver;
   readonly logger: Logger;
+  readonly landscape?: FrogLandscape;
 }
 
 export interface ArchiveExport {
@@ -254,6 +257,16 @@ export class TravelFrogService {
     return this.deps.clock.localOffsetMinutes(this.deps.clock.now());
   }
 
+  private landscapeCities(state:FrogTravelState,home:CityRef):readonly CityRef[] {
+    const point=this.deps.landscape?.destination(home,state.sequence+1);
+    return point?[point]:FROG_DESTINATIONS;
+  }
+  private withRoamingRoute(state:FrogTravelState):FrogTravelState {
+    if(!state.current || state.current.route || !this.deps.landscape)return state;
+    const route=this.deps.landscape.route(state.current);
+    return route.length>1?{...state,current:{...state.current,route}}:state;
+  }
+
   /** Each itinerary and its letter commit together. A stale tab retries a guarded write. */
   private async writeFrogTravel<T>(
     change: (
@@ -277,16 +290,18 @@ export class TravelFrogService {
               )
               .map((w) => w.cityRef.key),
           );
-          const eligible = FROG_DESTINATIONS.filter(
+          const available=this.landscapeCities(stored??EMPTY_FROG_TRAVEL,home.city);
+          const eligible = available.filter(
             (city) => !active.has(city.key),
           );
-          const cities = eligible.length ? eligible : FROG_DESTINATIONS;
-          const advanced = advanceFrogJourney(
+          const cities = eligible.length ? eligible : available;
+          const base = advanceFrogJourney(
             stored ?? EMPTY_FROG_TRAVEL,
             home.city,
             cities,
             now,
           );
+          const advanced={...base,state:this.withRoamingRoute(base.state)};
           const journey = advanced.letter;
           if (journey?.wishId) {
             let wish = await repos.wishes.get(asWishId(journey.wishId));
@@ -315,8 +330,8 @@ export class TravelFrogService {
               await repos.wishes.save(delivered.value);
             }
           }
-          const changed = await change(advanced.state, home, repos, now);
-          const next = changed?.state ?? advanced.state;
+          const changed = await change(advanced.state, home, repos, stored?.motionPausedAt??now);
+          const next = this.withRoamingRoute(changed?.state ?? advanced.state);
           if (stored === null || next !== stored)
             await repos.frogTravel.save(next);
           return changed?.value;
@@ -332,6 +347,67 @@ export class TravelFrogService {
       }
     }
     return undefined;
+  }
+
+  async saveTravelWaypoint(input:{id?:string;name:string;country:string;lat:number;lng:number;source:'map'|'poi'}):Promise<string> {
+    const name=input.name.trim(),country=input.country.trim()||'未命名地区';
+    if(!name||name.length>100||country.length>100||!Number.isFinite(input.lat)||Math.abs(input.lat)>90||!Number.isFinite(input.lng)||Math.abs(input.lng)>180||(input.source!=='map'&&input.source!=='poi'))throw new AppError('INVALID_INPUT','请填写地点名及有效的真实经纬度');
+    const lat=Number(input.lat.toFixed(6)),lng=Number(input.lng.toFixed(6));let id=`point:${lat.toFixed(6)}:${lng.toFixed(6)}`;
+    await this.writeFrogTravel(async state=>{
+      const points=state.waypoints??[];const previous=input.id?points.find(p=>p.id===input.id):points.find(p=>p.lat===lat&&p.lng===lng);
+      if(input.id&&!previous)throw new AppError('INVALID_INPUT','这个地点已不在清单中');
+      if(previous)id=previous.id;
+      if(points.some(p=>p.id!==id&&p.lat===lat&&p.lng===lng))throw new AppError('INVALID_INPUT','相同坐标已在清单中，请编辑已有地点');
+      if(!previous&&points.length>=500)throw new AppError('INVALID_INPUT','清单已满500个地点，请先移除一些');
+      const waypoint:TravelWaypoint={id,name,country,lat,lng,source:input.source,createdAt:previous?.createdAt??this.deps.clock.now()};
+      return {state:{...state,waypoints:previous?points.map(p=>p.id===id?waypoint:p):[...points,waypoint]},value:undefined};
+    });await this.refresh();return id;
+  }
+
+  async removeTravelWaypoint(id:string):Promise<void> {
+    await this.writeFrogTravel(async state=>({state:{...state,waypoints:(state.waypoints??[]).filter(p=>p.id!==id)},value:undefined}));await this.refresh();
+  }
+
+  async setFrogNextWaypoint(id:string):Promise<void> {
+    await this.writeFrogTravel(async(state,home,repos,now)=>{
+      const point=state.waypoints?.find(p=>p.id===id);if(!point)throw new AppError('INVALID_INPUT','这个地点已不在清单中');
+      const city=waypointCity(point),away=journeyAway(state.current,now);
+      const previous=state.direction?.wishId??(!away&&state.current?.source==='directed'?state.current.wishId:null);
+      if(previous){const wish=await repos.wishes.get(asWishId(previous));if(wish?.status==='pending')await repos.wishes.delete(wish.id);}
+      const wishId=this.deps.ids.newWishId();const wish=createWish({id:wishId,cityRef:city,region:point.country,note:null,source:'user',from:home.city.key,origin:'user',now:this.deps.clock.now(),status:'pending'});
+      if(!wish.ok)throw new DomainViolation(wish.error);await repos.wishes.save({...wish.value,delivery:'journey'});
+      let next:FrogTravelState={...state,direction:{destination:city,wishId,requestedAt:this.deps.clock.now()}};
+      if(!away)next=planFrogJourney({...next,current:null},home.city,this.landscapeCities(next,home.city),now,true);
+      return {state:next,value:undefined};
+    });await this.refresh();
+  }
+
+  async pauseFrogMotion(paused:boolean):Promise<void> {
+    await this.writeFrogTravel(async state=>{
+      const actual=this.deps.clock.now();
+      if(paused){if(state.motionPausedAt!==undefined)return undefined;return {state:{...state,motionPausedAt:actual},value:undefined};}
+      if(state.motionPausedAt===undefined)return undefined;
+      return {state:{...state,motionPausedAt:undefined,current:state.current?shiftJourney(state.current,Math.max(0,actual-state.motionPausedAt)):null},value:undefined};
+    });await this.refresh();
+  }
+
+  async startFrogJourneyNow():Promise<void> {
+    await this.writeFrogTravel(async(state,_home,_repos,now)=>{
+      if(state.motionPausedAt!==undefined)throw new AppError('INVALID_INPUT','先继续漫游，再让蛙蛙出发');
+      if(!state.current)throw new AppError('INVALID_INPUT','请先设定下一站或开启自动出门');
+      if(journeyAway(state.current,now))return undefined;
+      return {state:{...state,current:shiftJourney(state.current,now-state.current.departAt)},value:undefined};
+    });await this.refresh();
+  }
+
+  async returnFrogHome():Promise<void> {
+    await this.writeFrogTravel(async(state,home,repos,frozen)=>{
+      const j=state.current;if(!j||!journeyAway(j,frozen))return undefined;
+      const location=frogJourneyLocation(j,home.city,frozen);if(!location||!home.city.centroid)throw new AppError('INVALID_INPUT','缺少回家坐标');
+      const actual=this.deps.clock.now(),arriveAt=Math.max(j.departAt+1,Math.min(j.arriveAt,actual-1)),returnAt=Math.max(arriveAt+1,actual,j.letterRecorded&&j.letterAt!==null?j.letterAt+1:0),homeAt=returnAt+(j.pace==='preview'?8000:120000);
+      if(!j.letterRecorded&&j.wishId){const wish=await repos.wishes.get(asWishId(j.wishId));if(wish?.status==='pending')await repos.wishes.delete(wish.id);}
+      return {state:{...state,motionPausedAt:undefined,current:{...j,arriveAt,returnAt,homeAt,letterAt:j.letterRecorded?j.letterAt:null,wishId:j.letterRecorded?j.wishId:null,route:[{...location,at:j.departAt,kind:'transit'},{...location,at:returnAt,kind:'transit'},{lat:home.city.centroid.lat,lng:home.city.centroid.lng,at:homeAt,kind:'transit'}]}},value:undefined};
+    });await this.refresh();
   }
 
   async advanceFrogTravel(): Promise<void> {
@@ -371,7 +447,7 @@ export class TravelFrogService {
         next = planFrogJourney(
           { ...next, current: null, direction },
           home.city,
-          FROG_DESTINATIONS,
+          this.landscapeCities(state,home.city),
           now,
           true,
         );
@@ -448,7 +524,7 @@ export class TravelFrogService {
         next = planFrogJourney(
           { ...next, current: null },
           home.city,
-          FROG_DESTINATIONS,
+          this.landscapeCities(state,home.city),
           now,
           true,
         );
@@ -482,7 +558,7 @@ export class TravelFrogService {
         current: plannedDirection ? null : current,
       };
       return {
-        state: planFrogJourney(next, home.city, FROG_DESTINATIONS, now),
+        state: planFrogJourney(next, home.city, this.landscapeCities(state,home.city), now),
         value: undefined,
       };
     });
@@ -1309,7 +1385,7 @@ export class TravelFrogService {
         state: planFrogJourney(
           { ...state, current: null, direction },
           home.city,
-          FROG_DESTINATIONS,
+          this.landscapeCities(state,home.city),
           now,
         ),
         value: undefined,

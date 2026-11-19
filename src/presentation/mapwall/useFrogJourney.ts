@@ -32,7 +32,7 @@ export function useFrogJourney(
     if (!ready) return;
     const interval = window.setInterval(() => {
       if (!document.hidden) setNow(Date.now());
-    }, 1000);
+    }, 100);
     const wake = () => {
       if (!document.hidden) void reconcile();
     };
@@ -54,5 +54,5 @@ export function useFrogJourney(
     );
     return () => window.clearTimeout(timer);
   }, [ready, state, reconcile]);
-  return { journeyNow: now, journeyError: error, reconcile };
+  return { journeyNow: state?.motionPausedAt ?? now, journeyError: error, reconcile };
 }

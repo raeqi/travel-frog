@@ -1,3 +1,6 @@
+import { OFFLINE_FROG_LANDSCAPE } from '../infrastructure/geo/frog-landscape';
+import { frogJourneyLocation, validFrogTravel } from '../domain/frog/journey';
+import type { FrogLandscape } from '../domain/frog/roaming';
 import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it } from "vitest";
 import { openDatabase } from "../infrastructure/persistence/idb/database";
@@ -160,6 +163,7 @@ async function createService(
   clock: Clock = new TestClock(),
   factory = new IDBFactory(),
   preview: ThumbnailGenerator = thumbnails,
+  landscape?: FrogLandscape,
 ) {
   const db = await openDatabase(factory, NOW);
   const service = new TravelFrogService({
@@ -171,10 +175,70 @@ async function createService(
     fingerprints,
     cityResolver,
     logger,
+    ...(landscape?{landscape}:{}),
   });
   await service.load();
   return { service, db };
 }
+
+describe('arbitrary saved points and durable movement',()=>{
+ it('saves, edits without duplication, reloads and travels to an exact nonpreset point while auto is off',async()=>{
+  let now=NOW;const clock:Clock={now:()=>now,localOffsetMinutes:()=>0},factory=new IDBFactory();
+  const first=await createService(clock,factory,thumbnails,OFFLINE_FROG_LANDSCAPE),s=first.service;
+  await s.configureFrogTravel({enabled:false,pace:'preview'});
+  const id=await s.saveTravelWaypoint({name:'手填山间停靠点',country:'法国',lat:47.123456,lng:3.654321,source:'map'});
+  await s.saveTravelWaypoint({id,name:'修改后的位置',country:'法国',lat:47.123457,lng:3.654322,source:'map'});
+  expect(s.getSnapshot().frogTravel?.waypoints).toHaveLength(1);
+  expect(s.getSnapshot().trips).toHaveLength(0);
+  await s.setFrogNextWaypoint(id);
+  expect(s.getSnapshot().frogTravel?.enabled).toBe(false);
+  expect(s.getSnapshot().frogTravel?.current?.destination.centroid).toMatchObject({lat:47.123457,lng:3.654322});
+  await s.startFrogJourneyNow();
+  const j=s.getSnapshot().frogTravel!.current!;
+  now=j.departAt+(j.arriveAt-j.departAt)/3;await s.advanceFrogTravel();
+  const moving=frogJourneyLocation(s.getSnapshot().frogTravel!.current,s.getSnapshot().home.city,now);
+  expect(moving).not.toEqual(j.from.centroid);expect(moving).not.toEqual(j.destination.centroid);
+  await s.pauseFrogMotion(true);first.db.close();now+=90*86400_000;
+  const reopened=await createService(clock,factory,thumbnails,OFFLINE_FROG_LANDSCAPE),state=reopened.service.getSnapshot().frogTravel!;
+  expect(state.waypoints?.[0]).toMatchObject({id,name:'修改后的位置',lat:47.123457,lng:3.654322});
+  expect(frogJourneyLocation(state.current,reopened.service.getSnapshot().home.city,state.motionPausedAt!)).toEqual(moving);
+  await reopened.service.pauseFrogMotion(false);
+  const resumed=reopened.service.getSnapshot().frogTravel!;
+  expect(frogJourneyLocation(resumed.current,reopened.service.getSnapshot().home.city,now)).toEqual(moving);
+  expect(validFrogTravel(resumed)).toBe(true);
+  reopened.db.close();
+ });
+ it('retains photos, photo bytes and both postcard types while queuing a different next point and returning',async()=>{
+  let now=NOW;const clock:Clock={now:()=>now,localOffsetMinutes:()=>0};
+  const {service:s,db}=await createService(clock,new IDBFactory(),{create:async()=>new Blob(['synthetic image bytes'],{type:'image/jpeg'})},OFFLINE_FROG_LANDSCAPE);
+  await s.importFiles([file('a.jpg')]);await s.confirmCandidate(s.getSnapshot().candidates[0]!.id);
+  const photos=s.getSnapshot().photos,visits=s.getSnapshot().visits;
+  await s.configureFrogTravel({pace:'preview'});await s.startFrogJourneyNow();
+  const initial=s.getSnapshot().frogTravel!.current!;
+  now=initial.letterAt!;await s.advanceFrogTravel();
+  const received=s.getSnapshot().wishes.find(w=>w.source==='frog')!;expect(received.status).toBe('received');
+  const id=await s.saveTravelWaypoint({name:'非预设落脚点',country:'法国',lat:47.123456,lng:3.654321,source:'poi'});
+  await s.setFrogNextWaypoint(id);
+  expect(s.getSnapshot().frogTravel?.current?.id).toBe(initial.id);
+  expect(s.getSnapshot().frogTravel?.direction?.destination.centroid).toMatchObject({lat:47.123456,lng:3.654321});
+  expect(s.getSnapshot().wishes.some(w=>w.source==='user'&&w.delivery==='journey')).toBe(true);
+  await s.returnFrogHome();const returning=s.getSnapshot().frogTravel!;
+  expect(validFrogTravel(returning)).toBe(true);
+  now=returning.current!.homeAt+1;await s.advanceFrogTravel();
+  expect(s.getSnapshot().frogTravel?.current?.destination.name).toBe('非预设落脚点');
+  expect(s.getSnapshot().wishes.find(w=>w.id===received.id)?.status).toBe('received');
+  expect(s.getSnapshot().photos).toEqual(photos);expect(s.getSnapshot().visits).toEqual(visits);
+  const blob=await new IdbUnitOfWork(db).run(repos=>repos.thumbnails.get(photos[0]!.thumbRef!));
+  expect(blob).not.toBeNull();db.close();
+ });
+ it('rejects invalid points atomically and merges writes from stale tabs',async()=>{
+  const factory=new IDBFactory(),a=await createService(new TestClock(),factory,thumbnails,OFFLINE_FROG_LANDSCAPE),b=await createService(new TestClock(),factory,thumbnails,OFFLINE_FROG_LANDSCAPE);
+  await expect(a.service.saveTravelWaypoint({name:'无效点',country:'',lat:91,lng:0,source:'map'})).rejects.toThrow();
+  await Promise.all([a.service.saveTravelWaypoint({name:'点一',country:'',lat:48,lng:3,source:'map'}),b.service.saveTravelWaypoint({name:'点二',country:'',lat:49,lng:4,source:'map'})]);
+  await a.service.load();expect(a.service.getSnapshot().frogTravel?.waypoints).toHaveLength(2);
+  a.db.close();b.db.close();
+ });
+});
 
 describe("travel-frog application flow", () => {
   let service: TravelFrogService;

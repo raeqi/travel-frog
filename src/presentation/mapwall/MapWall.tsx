@@ -47,6 +47,10 @@ import { POSTCARD_DELIVERY_MS } from '../../domain/wish/wish';
 import { EMPTY_FROG_TRAVEL, frogJourneyLocation, journeyAway, journeyPhase } from '../../domain/frog/journey';
 import { useFrogJourney } from './useFrogJourney';
 import { FrogJourneyPanel } from './FrogJourneyPanel';
+import {WaypointPanel,type WaypointDraft} from './WaypointPanel';
+import {routeActivity,type TravelWaypoint} from '../../domain/frog/roaming';
+import {landAt} from '../../infrastructure/geo/frog-landscape';
+import './waypoints.css';
 
 type Mode = 'world' | 'city' | 'region';
 type Level = 'world' | 'country' | 'city' | 'region';
@@ -229,6 +233,11 @@ export function MapWall() {
   const empty = wallModelIsEmpty(model);
 
   const [scene, setScene] = useState<'wall' | 'home'>('wall');
+  const [waypointsOpen,setWaypointsOpen]=useState(false),[selecting,setSelecting]=useState(false),[waypointDraft,setWaypointDraft]=useState<WaypointDraft|null>(null);
+  const [following,setFollowing]=useState(false);
+  const followingRef=useRef(false);
+  const frogLocation=frogJourneyLocation(travel.current,snapshot.home.city,journeyNow);
+  const movement=routeActivity(travel.current,journeyNow);
 
   const [mode, setMode] = useState<Mode>('world');
   const [level, setLevel] = useState<Level>('world');
@@ -400,8 +409,8 @@ export function MapWall() {
     document.body.classList.toggle('drawer-open', drawerOpen);
     document.body.classList.toggle('is-entrusting', entrusting);
     document.body.dataset.level = level;
-    document.body.dataset.scene = scene === 'home' ? 'home' : empty ? 'empty' : 'wall';
-  }, [resolvedTheme, mode, level, listOpen, drawerOpen, entrusting, empty, scene]);
+    document.body.dataset.scene = scene === 'home' ? 'home' : empty&&!waypointsOpen&&!selecting&&!(travel.waypoints?.length)&&!frogAway ? 'empty' : 'wall';
+  }, [resolvedTheme, mode, level, listOpen, drawerOpen, entrusting, empty, scene,waypointsOpen,selecting,travel.waypoints?.length,frogAway]);
 
   useEffect(
     () => () => {
@@ -417,6 +426,7 @@ export function MapWall() {
 
   const animateCamera = useCallback(
     (target: Camera, nextMode: Mode, nextLevel: Level, instant = false) => {
+      followingRef.current=false;setFollowing(false);
       if (cameraFrame.current !== null) {
         cancelAnimationFrame(cameraFrame.current);
         cameraFrame.current = null;
@@ -449,12 +459,46 @@ export function MapWall() {
   );
 
   const gestureCamera = useCallback((next: Camera) => {
+    followingRef.current=false;setFollowing(false);
     if (cameraFrame.current !== null) cancelAnimationFrame(cameraFrame.current);
     cameraFrame.current = null;
     cameraRef.current = next;
     setCamera(next);
     setReplay(current => current?.playing ? { ...current, playing: false } : current);
-  }, []);
+  }, [setReplay]);
+
+  useEffect(()=>{
+    if(!following||scene!=='wall'||metrics.sheetW<=0)return;
+    let frame=0,last=performance.now();
+    const step=(at:number)=>{
+      if(!followingRef.current)return;
+      if(at-last>=40){
+        const t=travel.motionPausedAt??Date.now(),location=frogJourneyLocation(travel.current,snapshot.home.city,t);
+        if(location){
+          const p=projectWorld(location.lat,location.lng),current=cameraRef.current;
+          const activity=routeActivity(travel.current,t),desired=activity==='walk'?3500:activity==='home'?Math.min(current.zoom,60):35;
+          const alpha=animationInstant?1:Math.min(1,(at-last||40)/200);
+          const next=boundCamera({cx:current.cx+(p.x-current.cx)*alpha,cy:current.cy+(p.y-current.cy)*alpha,zoom:current.zoom+(desired-current.zoom)*alpha},metrics,maxMapZoom('world'));
+          if(Math.abs(next.cx-current.cx)+Math.abs(next.cy-current.cy)+Math.abs(next.zoom-current.zoom)>.000001){cameraRef.current=next;setCamera(next);}
+        }
+        last=at;
+      }
+      frame=requestAnimationFrame(step);
+    };
+    frame=requestAnimationFrame(step);return()=>cancelAnimationFrame(frame);
+  },[following,scene,metrics,travel,snapshot.home.city,animationInstant]);
+
+  const locateWaypoint=useCallback((point:TravelWaypoint)=>{
+    setScene('wall');setReplay(null);setFan(null);animateCamera({cx:projectWorld(point.lat,point.lng).x,cy:projectWorld(point.lat,point.lng).y,zoom:3600},'world','world');
+  },[animateCamera,setReplay]);
+  const pickMapPoint=useCallback((point:{lat:number;lng:number})=>{
+    const land=landAt(point);setWaypointDraft({name:`地图选点 ${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`,country:land?.name??'未命名地区',...point,source:'map'});setWaypointsOpen(true);setSelecting(false);
+  },[]);
+  const beginFollowing=useCallback(()=>{
+    if(following){followingRef.current=false;setFollowing(false);return;}
+    if(cameraFrame.current!==null)cancelAnimationFrame(cameraFrame.current);
+    cameraFrame.current=null;setScene('wall');setReplay(null);setMode('world');setLevel('world');setSelecting(false);setWaypointsOpen(false);setJourneyPanelOpen(false);followingRef.current=true;setFollowing(true);
+  },[following,setReplay]);
 
   const zoomBy = useCallback((factor: number) => {
     if (cameraFrame.current !== null) cancelAnimationFrame(cameraFrame.current);
@@ -588,8 +632,9 @@ export function MapWall() {
       anchor = { x: point.x, y: point.y };
     }
     if (!Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return null;
+    if(frogAway&&!replay)return anchor;
     return placeFrog({ anchor, piles, photoPoints, level, mode, metrics });
-  }, [model, replayPoints, replay, mode, effectiveCityKey, activeTrip, camera, metrics, piles, photoPoints, level,travel,snapshot.home.city,journeyNow]);
+  }, [model, replayPoints, replay, mode, effectiveCityKey, activeTrip, camera, metrics, piles, photoPoints, level,travel,snapshot.home.city,journeyNow,frogAway]);
 
   const wishPlacement = useMemo(() => {
     const cards: Array<{ wish: WallWish; cx: number; cy: number; width: number; height: number }> = [];
@@ -916,9 +961,8 @@ export function MapWall() {
     setFan(null);
     setListOpen(false);
     setWishFocus(null);
-    animateCamera(WORLD_CAMERA, 'world', 'world');
-    setEntrusting(true);
-  }, [animateCamera]);
+    followingRef.current=false;setFollowing(false);setSelecting(true);setWaypointsOpen(true);setEntrusting(false);setWaypointDraft(null);
+  }, []);
 
   // Rebuild the next delivery from durable postcards, including after reload.
   useEffect(() => {
@@ -1131,6 +1175,7 @@ export function MapWall() {
   // ---------------------------------------------------------------- home
 
   const openHome = useCallback(() => {
+    followingRef.current=false;setFollowing(false);setWaypointsOpen(false);setSelecting(false);
     const view: MapViewState = {
       cityKey,
       activeTripId,
@@ -1303,13 +1348,23 @@ export function MapWall() {
         camera={camera}
         metrics={metrics}
         onCamera={gestureCamera}
+        selecting={selecting}
+        onMapPick={pickMapPoint}
+        onPoiPick={poi=>{setFan(null);setFrogActionsOpen(false);followingRef.current=false;setFollowing(false);setWaypointDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'});setWaypointsOpen(true);setSelecting(false);}}
+        waypointPins={(travel.waypoints??[]).map(point=>{const p=toScreen(projectAt(mode,point.lat,point.lng),camera,metrics);return {...point,x:p.x,y:p.y};}).filter(p=>inBoard(p.x,p.y,metrics,24))}
+        draftPin={waypointDraft?toScreen(projectAt(mode,waypointDraft.lat,waypointDraft.lng),camera,metrics):null}
+        onWaypointClick={id=>{const point=travel.waypoints?.find(p=>p.id===id);if(point){setWaypointDraft({...point});setWaypointsOpen(true);}}}
         viewBox={viewBox}
         viewWidth={metrics.boardW}
         viewHeight={metrics.boardH}
         mode={mode}
         level={level}
         visitedCountries={visitedCountries}
-        routes={routes}
+        routes={routes.concat(mode==='world'&&frogAway&&travel.current?.route?travel.current.route.slice(1).flatMap((point,index)=>{
+          const previous=travel.current!.route![index]!;const a=toScreen(projectWorld(previous.lat,previous.lng),camera,metrics),b=toScreen(projectWorld(point.lat,point.lng),camera,metrics);
+          if(Math.abs(projectWorld(previous.lat,previous.lng).x-projectWorld(point.lat,point.lng).x)>500)return [];
+          return [{d:pathD([a,b]),className:`route-line frog-${point.kind}`}];
+        }):[])}
         piles={piles}
         cityPhotos={cityPhotos}
         labels={labels}
@@ -1346,7 +1401,17 @@ export function MapWall() {
       />
       )}
 
+      {scene==='wall'&&snapshot.status==='ready'&&<>
+        <WaypointPanel state={travel} open={waypointsOpen} selecting={selecting} draft={waypointDraft} onOpen={setWaypointsOpen} onSelecting={value=>{setSelecting(value);if(value){followingRef.current=false;setFollowing(false);setFan(null);setFrogActionsOpen(false);}}} onDraft={setWaypointDraft}
+          onSave={async(point,next)=>{const id=await service.saveTravelWaypoint(point);if(next)await service.setFrogNextWaypoint(id);}}
+          onNext={id=>service.setFrogNextWaypoint(id)} onLocate={locateWaypoint} onRemove={id=>service.removeTravelWaypoint(id)}/>
+        <aside className="roaming-tools" data-map-controls aria-label="蛙蛙漫游控制">
+          {frogLocation&&<output aria-label="蛙蛙模拟位置" aria-live="off" data-frog-lat={frogLocation.lat} data-frog-lng={frogLocation.lng} data-motion-kind={movement}>模拟位置 {frogLocation.lat.toFixed(5)}, {frogLocation.lng.toFixed(5)} · {travel.motionPausedAt!==undefined?'已暂停':movement==='walk'?'落脚点附近漫游':movement==='transit'?'交通转场（可能过海）':'在家'}</output>}
+          <div><button type="button" aria-pressed={following} onClick={beginFollowing}>{following?'停止跟随':'跟随蛙蛙'}</button><button type="button" onClick={()=>void guard(()=>service.pauseFrogMotion(travel.motionPausedAt===undefined))}>{travel.motionPausedAt!==undefined?'继续漫游':'暂停漫游'}</button>{!frogAway&&travel.current?<button type="button" onClick={()=>void guard(()=>service.startFrogJourneyNow())}>现在出发</button>:frogAway?<button type="button" onClick={()=>void guard(()=>service.returnFrogHome())}>让蛙蛙回家</button>:null}</div>
+        </aside>
+      </>}
       <TopBar
+        onHome={openHome}
         onImport={() => {
           setDrawerTab('import');
           setDrawerOpen(true);
@@ -1379,7 +1444,7 @@ export function MapWall() {
         />
       ) : null}
 
-      {!empty && scene === 'wall' ? (
+      {(!empty||!!travel.waypoints?.length||selecting||waypointsOpen) && scene === 'wall' ? (
         <>
           <PoiList
             groups={groups}
@@ -1402,8 +1467,8 @@ export function MapWall() {
           />
           <Crumb
             level={level}
-            countryName={countryName}
-            cityName={cityName}
+            countryName={following?'世界':countryName}
+            cityName={following?'漫游中':cityName}
             onWorld={() => animateCamera(WORLD_CAMERA, 'world', 'world')}
             onCountry={focusCountry}
             onCity={() => zoomToCity(effectiveCityKey)}
@@ -1423,7 +1488,7 @@ export function MapWall() {
         </>
       ) : null}
 
-      {empty && scene === 'wall' && !entrusting ? (
+      {empty && scene === 'wall' && !entrusting && !waypointsOpen && !selecting && !travel.waypoints?.length && !frogAway ? (
         <EmptyCard
           onFrog={() => setJourneyPanelOpen(true)}
           onImport={() => {

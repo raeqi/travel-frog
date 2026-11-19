@@ -1,0 +1,288 @@
+.waypoint-tools {
+  position: fixed;
+  left: 42px;
+  top: 100px;
+  z-index: 29;
+  max-width: calc(100vw - 84px);
+  font-size: 14px;
+  color: var(--color-text, #453b2e);
+}
+.waypoint-toolbar {
+  display: flex;
+  gap: 8px;
+}
+.waypoint-tools button,
+.roaming-tools button,
+.frame-home {
+  border: 1px solid #b2a58d;
+  border-radius: 9px;
+  padding: 9px 12px;
+  background: #fffaf0;
+  color: #35543c;
+  font: inherit;
+  cursor: pointer;
+  min-height: 38px;
+}
+.waypoint-tools button[aria-pressed="true"],
+.roaming-tools button[aria-pressed="true"] {
+  background: #285a40;
+  color: #fff;
+}
+.waypoint-body {
+  margin-top: 8px;
+  background: #fffaf0;
+  box-shadow: 0 8px 24px #34271533;
+  border: 1px solid #cfc1a5;
+  border-radius: 14px;
+  padding: 16px;
+  width: 345px;
+  max-width: calc(100vw - 24px);
+  max-height: 60vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.waypoint-body header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.waypoint-body h2 {
+  font-size: 19px;
+  margin: 0;
+}
+.waypoint-body h3 {
+  font-size: 16px;
+}
+.waypoint-body p {
+  margin: 12px 0;
+  line-height: 1.55;
+}
+.waypoint-body fieldset {
+  border: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.waypoint-body label {
+  display: grid;
+  gap: 4px;
+}
+.waypoint-body input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #bdaf93;
+  border-radius: 5px;
+  padding: 8px;
+  background: white;
+  color: #302e28;
+  font: inherit;
+}
+.waypoint-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.waypoint-list {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+}
+.waypoint-list li {
+  border-top: 1px dashed #cabda4;
+  padding: 12px 0;
+}
+.waypoint-list strong,
+.waypoint-list span {
+  display: block;
+}
+.waypoint-list span {
+  font-size: 13px;
+  margin-top: 5px;
+}
+.waypoint-list button {
+  font-size: 13px;
+  padding: 6px 8px;
+}
+.waypoint-body small {
+  font-size: 13px;
+  line-height: 1.5;
+  display: block;
+}
+.waypoint-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.waypoint-pin {
+  pointer-events: auto;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: 2px solid #fefbf2;
+  border-radius: 50%;
+  background: #62784b;
+  color: white;
+  width: 24px;
+  height: 24px;
+  box-shadow: 0 0 0 1px #4f6144;
+  cursor: pointer;
+  font-size: 12px;
+}
+.waypoint-draft {
+  background: #bc6b42;
+}
+.board.is-selecting {
+  cursor: crosshair;
+}
+.pick-hint {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fffaf0e8;
+  border: 1px dashed #9d9279;
+  border-radius: 10px;
+  padding: 8px 14px;
+  pointer-events: none;
+  z-index: 11;
+  font-size: 14px;
+  max-width: 70%;
+  text-align: center;
+}
+.roaming-tools {
+  position: fixed;
+  left: 42px;
+  bottom: 92px;
+  z-index: 27;
+  background: #fffaf0ed;
+  border: 1px solid #c8bba2;
+  padding: 10px;
+  border-radius: 12px;
+  max-width: calc(100vw - 84px);
+  font-size: 14px;
+  box-shadow: 0 2px 10px #34271522;
+}
+.roaming-tools output {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.roaming-tools > div {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.route-line.frog-transit {
+  stroke: #658574;
+  stroke-width: 1.6;
+  stroke-dasharray: 6 6;
+  opacity: 0.7;
+}
+.route-line.frog-walk {
+  stroke: #2d6041;
+  stroke-width: 2.2;
+}
+.frog {
+  transition:
+    left 0.12s linear,
+    top 0.12s linear;
+}
+.board.is-panning .frog {
+  transition: none;
+}
+.map-house-art {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 2px 1px #4b351e33);
+}
+.house-marker {
+  width: 36px;
+  height: 36px;
+}
+.frame-home {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: auto;
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: #fffaf0;
+}
+.frame-home svg {
+  width: 23px;
+  height: 23px;
+}
+.frame-home:hover {
+  background: #f4ead5;
+}
+.journey-coordinate {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+@media (max-width: 700px) {
+  .waypoint-tools {
+    left: 12px;
+    top: 82px;
+    max-width: calc(100vw - 24px);
+  }
+  .waypoint-body {
+    width: 310px;
+    max-height: 45vh;
+  }
+  .roaming-tools {
+    left: 12px;
+    bottom: 115px;
+    max-width: calc(100vw - 24px);
+    padding: 7px;
+  }
+  .roaming-tools output {
+    font-size: 12px;
+  }
+  .roaming-tools button {
+    padding: 6px 8px;
+    min-height: 36px;
+  }
+  .pick-hint {
+    bottom: 165px;
+  }
+  .topbar {
+    left: 12px;
+    right: 12px;
+    top: 16px;
+    gap: 6px;
+  }
+  .brand {
+    padding: 4px;
+    gap: 5px;
+  }
+  .brand-text {
+    display: none;
+  }
+  .actions {
+    gap: 4px;
+  }
+  .tbtn {
+    padding: 0 7px;
+    height: 34px;
+  }
+  .tbtn.icon-only {
+    width: 28px;
+  }
+  .frame-home {
+    padding: 4px 6px;
+  }
+  .frame-home svg {
+    width: 19px;
+    height: 19px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .frog {
+    transition: none;
+  }
+}
