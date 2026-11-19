@@ -1350,7 +1350,7 @@ export function MapWall() {
         onCamera={gestureCamera}
         selecting={selecting}
         onMapPick={pickMapPoint}
-        onPoiPick={poi=>{followingRef.current=false;setFollowing(false);setWaypointDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'});setWaypointsOpen(true);setSelecting(false);}}
+        onPoiPick={poi=>{setFan(null);setFrogActionsOpen(false);followingRef.current=false;setFollowing(false);setWaypointDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'});setWaypointsOpen(true);setSelecting(false);}}
         waypointPins={(travel.waypoints??[]).map(point=>{const p=toScreen(projectAt(mode,point.lat,point.lng),camera,metrics);return {...point,x:p.x,y:p.y};}).filter(p=>inBoard(p.x,p.y,metrics,24))}
         draftPin={waypointDraft?toScreen(projectAt(mode,waypointDraft.lat,waypointDraft.lng),camera,metrics):null}
         onWaypointClick={id=>{const point=travel.waypoints?.find(p=>p.id===id);if(point){setWaypointDraft({...point});setWaypointsOpen(true);}}}
