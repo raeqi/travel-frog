@@ -14,7 +14,7 @@ import { openDatabase } from "../../infrastructure/persistence/idb/database";
 import { IdbUnitOfWork } from "../../infrastructure/persistence/idb/unit-of-work";
 import { BrowserExifReader } from "../../infrastructure/exif/exif-reader.browser";
 import { BrowserFingerprintReader } from "../../infrastructure/media/fingerprint.browser";
-import { CanvasThumbnailGenerator } from "../../infrastructure/media/thumbnail-generator.browser";
+
 import { GazetteerCityResolver } from "../../infrastructure/geo/city-resolver";
 import { CryptoIdGenerator } from "../../infrastructure/crypto-id-generator";
 import { RingBufferLogger } from "../../infrastructure/logging/ring-buffer-logger";
@@ -117,7 +117,9 @@ describe("file preview, explicit import, candidate confirmation and remount", ()
         clock: { now: () => now, localOffsetMinutes: () => 0 },
         ids: new CryptoIdGenerator(),
         exif: new BrowserExifReader(),
-        thumbnails: new CanvasThumbnailGenerator(),
+        // jsdom has no image decoder. Supply a real fixture Blob for this DOM/service test;
+        // native decoding and visible pixels are checked separately in Chromium.
+        thumbnails: {create:async file=>new Blob([new Uint8Array(await file.arrayBuffer())],{type:'image/jpeg'})},
         fingerprints: new BrowserFingerprintReader(),
         cityResolver: new GazetteerCityResolver(),
         logger: new RingBufferLogger(),
@@ -197,7 +199,7 @@ describe("file preview, explicit import, candidate confirmation and remount", ()
     });
     await act(async () => {
       const confirm = [...host.querySelectorAll("button")].find(
-        (b) => b.textContent?.trim() === "确认",
+        (b) => b.textContent?.trim() === "确认并在地图查看",
       );
       expect(confirm).toBeTruthy();
       confirm!.click();

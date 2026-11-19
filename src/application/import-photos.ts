@@ -1,13 +1,33 @@
-import { candidateIdFor, DEFAULT_SPLIT_CONFIG, splitPhotosIntoTrips } from '../domain/services/split-trips';
-import { createCandidate, type Candidate } from '../domain/candidate/candidate';
-import { createPhoto, type Photo, type PhotoIssue } from '../domain/photo/photo';
-import { makeGeoPoint } from '../domain/geo/geo-point';
-import type { ImportBatch, ImportIssue, ImportIssueCode } from '../domain/import/import-issue';
-import { ISSUE_LABELS } from '../domain/import/import-issue';
-import { DomainViolation } from '../domain/common/result';
-import { asImportBatchId, asImportIssueId } from '../domain/common/ids';
-import type { Clock, ExifReader, FingerprintReader, IdGenerator, Logger, ThumbnailGenerator, CityResolver } from '../domain/ports';
-import { AppError, type ArchiveGateway } from './ports';
+import {
+  candidateIdFor,
+  DEFAULT_SPLIT_CONFIG,
+  splitPhotosIntoTrips,
+} from "../domain/services/split-trips";
+import { createCandidate, type Candidate } from "../domain/candidate/candidate";
+import {
+  createPhoto,
+  type Photo,
+  type PhotoIssue,
+} from "../domain/photo/photo";
+import { makeGeoPoint } from "../domain/geo/geo-point";
+import type {
+  ImportBatch,
+  ImportIssue,
+  ImportIssueCode,
+} from "../domain/import/import-issue";
+import { ISSUE_LABELS } from "../domain/import/import-issue";
+import { DomainViolation } from "../domain/common/result";
+import { asImportBatchId, asImportIssueId } from "../domain/common/ids";
+import type {
+  Clock,
+  ExifReader,
+  FingerprintReader,
+  IdGenerator,
+  Logger,
+  ThumbnailGenerator,
+  CityResolver,
+} from "../domain/ports";
+import { AppError, type ArchiveGateway } from "./ports";
 
 export interface ImportDeps {
   readonly gateway: ArchiveGateway;
@@ -26,6 +46,9 @@ export interface ImportSummary {
   readonly duplicates: number;
   readonly failed: number;
   readonly candidateCount: number;
+  readonly ready?: number;
+  readonly needsRepair?: number;
+  readonly repaired?: number;
   readonly issues: readonly ImportIssue[];
 }
 
@@ -33,25 +56,37 @@ export interface ImportProgress {
   readonly done: number;
   readonly total: number;
   readonly fileName: string;
-  readonly stage?: 'metadata' | 'preview' | 'candidates' | 'saving' | 'completed';
+  readonly stage?:
+    | "metadata"
+    | "preview"
+    | "candidates"
+    | "saving"
+    | "completed";
 }
 
 const SUPPORTED = /\.(jpe?g|png|webp|heic|heif)$/i;
 
-function severityOf(code: ImportIssueCode): 'info' | 'warning' | 'error' {
+function severityOf(code: ImportIssueCode): "info" | "warning" | "error" {
   switch (code) {
-    case 'unsupported-format':
-    case 'storage-failed':
-      return 'error';
-    case 'duplicate':
-    case 'thumbnail-failed':
-      return 'info';
+    case "unsupported-format":
+    case "storage-failed":
+      return "error";
+    case "duplicate":
+      return "info";
+    case "thumbnail-failed":
+      return "error";
     default:
-      return 'warning';
+      return "warning";
   }
 }
 
-function issue(deps: ImportDeps, batchId: string, fileName: string, code: ImportIssueCode, detail: string): ImportIssue {
+function issue(
+  deps: ImportDeps,
+  batchId: string,
+  fileName: string,
+  code: ImportIssueCode,
+  detail: string,
+): ImportIssue {
   return {
     id: asImportIssueId(deps.ids.newImportIssueId()),
     batchId: asImportBatchId(batchId),
@@ -64,7 +99,11 @@ function issue(deps: ImportDeps, batchId: string, fileName: string, code: Import
 }
 
 function photoIssue(code: ImportIssueCode, detail: string): PhotoIssue {
-  return { code, severity: severityOf(code), message: `${ISSUE_LABELS[code]}：${detail}` };
+  return {
+    code,
+    severity: severityOf(code),
+    message: `${ISSUE_LABELS[code]}：${detail}`,
+  };
 }
 
 function isFuture(capturedAt: number, now: number): boolean {
@@ -81,83 +120,157 @@ async function toPhoto(
   batchId: string,
   existingHashes: ReadonlyMap<string, string>,
   batchHashes: Set<string>,
+  broken: ReadonlyMap<string, Photo>,
   onPreview: () => void,
-): Promise<{ photo: Photo; issues: ImportIssue[]; thumbnail: Blob | null } | { duplicate: ImportIssue }> {
+): Promise<
+  | { photo: Photo; issues: ImportIssue[]; thumbnail: Blob | null }
+  | { duplicate: ImportIssue }
+> {
   const now = deps.clock.now();
   const issues: ImportIssue[] = [];
 
-  if (!SUPPORTED.test(file.name) && !file.type.startsWith('image/')) {
-    issues.push(issue(deps, batchId, file.name, 'unsupported-format', '仅支持 JPG / PNG / WebP / HEIC'));
+  if (!SUPPORTED.test(file.name) && !file.type.startsWith("image/")) {
+    issues.push(
+      issue(
+        deps,
+        batchId,
+        file.name,
+        "unsupported-format",
+        "仅支持 JPG / PNG / WebP / HEIC",
+      ),
+    );
   }
 
   const exif = await deps.exif.read(file);
-  if (exif.error === 'exif-unreadable' || exif.error === 'unreadable-file') {
-    issues.push(issue(deps, batchId, file.name, 'exif-unreadable', '元数据损坏，已按文件时间导入'));
+  if (exif.error === "exif-unreadable" || exif.error === "unreadable-file") {
+    issues.push(
+      issue(
+        deps,
+        batchId,
+        file.name,
+        "exif-unreadable",
+        "元数据损坏，已按文件时间导入",
+      ),
+    );
   }
 
   const fingerprint = await deps.fingerprints.hash(file);
-  if (existingHashes.has(fingerprint.hash) || batchHashes.has(fingerprint.hash)) {
-    return { duplicate: issue(deps, batchId, file.name, 'duplicate', '与已导入照片内容相同，已跳过') };
+  if (
+    (existingHashes.has(fingerprint.hash) &&
+      !broken.has(existingHashes.get(fingerprint.hash)!)) ||
+    batchHashes.has(fingerprint.hash)
+  ) {
+    return {
+      duplicate: issue(
+        deps,
+        batchId,
+        file.name,
+        "duplicate",
+        "与已导入照片内容相同，已跳过",
+      ),
+    };
   }
   batchHashes.add(fingerprint.hash);
   if (fingerprint.weak) {
-    deps.logger.warn('import.weak-fingerprint', { fileName: file.name });
+    deps.logger.warn("import.weak-fingerprint", { fileName: file.name });
   }
 
-  const id = deps.ids.newPhotoId();
+  const previous = broken.get(existingHashes.get(fingerprint.hash) ?? "");
+  const id = previous?.id ?? deps.ids.newPhotoId();
   let capturedAt: number;
-  let capturedAtSource: Photo['capturedAtSource'];
+  let capturedAtSource: Photo["capturedAtSource"];
   let offsetMinutes: number | null;
-  let offsetSource: Photo['offsetSource'];
+  let offsetSource: Photo["offsetSource"];
   let originalCapturedAt: number | null = null;
 
   if (exif.capturedAt !== null) {
-    capturedAtSource = exif.capturedAtSource ?? 'exif-original';
+    capturedAtSource = exif.capturedAtSource ?? "exif-original";
     if (exif.offsetMinutes !== null) {
       capturedAt = exif.capturedAt;
       offsetMinutes = exif.offsetMinutes;
-      offsetSource = 'exif';
+      offsetSource = "exif";
     } else {
       offsetMinutes = deps.clock.localOffsetMinutes(exif.capturedAt);
       originalCapturedAt = exif.capturedAt;
       capturedAt = exif.capturedAt - offsetMinutes * 60_000;
-      offsetSource = 'device';
+      offsetSource = "device";
     }
   } else {
-    const fallback = Number.isFinite(file.lastModified) && file.lastModified > 0 ? file.lastModified : now;
+    const fallback =
+      Number.isFinite(file.lastModified) && file.lastModified > 0
+        ? file.lastModified
+        : now;
     capturedAt = fallback;
-    capturedAtSource = 'file-mtime';
+    capturedAtSource = "missing";
     offsetMinutes = deps.clock.localOffsetMinutes(fallback);
-    offsetSource = 'device';
-    issues.push(issue(deps, batchId, file.name, 'no-timestamp', '没有 EXIF 拍摄时间，改用文件修改时间'));
+    offsetSource = "device";
+    issues.push(
+      issue(
+        deps,
+        batchId,
+        file.name,
+        "no-timestamp",
+        "没有 EXIF 拍摄时间，暂记未知；请手动填写后再生成旅行",
+      ),
+    );
   }
 
   if (isFuture(capturedAt, now)) {
-    issues.push(issue(deps, batchId, file.name, 'future-clock', '拍摄时间在未来，已导入但不会自动切分'));
+    issues.push(
+      issue(
+        deps,
+        batchId,
+        file.name,
+        "future-clock",
+        "拍摄时间在未来，已导入但不会自动切分",
+      ),
+    );
   }
 
   let geo = null;
-  let locationSource: Photo['locationSource'] = 'none';
+  let locationSource: Photo["locationSource"] = "none";
   if (exif.geo) {
-    const point = makeGeoPoint({ lat: exif.geo.lat, lng: exif.geo.lng, source: 'exif', approximate: false });
+    const point = makeGeoPoint({
+      lat: exif.geo.lat,
+      lng: exif.geo.lng,
+      source: "exif",
+      approximate: false,
+    });
     if (point.ok) {
       geo = point.value;
-      locationSource = 'exif';
+      locationSource = "exif";
     } else {
-      issues.push(issue(deps, batchId, file.name, 'invalid-geo', 'GPS 坐标无效，照片已保留'));
+      issues.push(
+        issue(
+          deps,
+          batchId,
+          file.name,
+          "invalid-geo",
+          "GPS 坐标无效，照片已保留",
+        ),
+      );
     }
   }
 
   onPreview();
   const thumbnail = await deps.thumbnails.create(file, 2048);
   const thumbRef = thumbnail ? `thumb_${id}` : null;
-  if (!thumbnail) issues.push(issue(deps, batchId, file.name, 'thumbnail-failed', '缩略图生成失败，将显示占位'));
+  if (!thumbnail)
+    issues.push(
+      issue(
+        deps,
+        batchId,
+        file.name,
+        "thumbnail-failed",
+        "无法生成真实照片预览；记录已保留，需重试解码，不能视为照片已就绪",
+      ),
+    );
 
   const created = createPhoto({
     id,
     importBatchId: asImportBatchId(batchId),
     fileName: file.name,
-    mimeType: file.type || 'image/jpeg',
+    mimeType: file.type || "image/jpeg",
     byteSize: Math.max(1, file.size),
     contentHash: fingerprint.hash,
     capturedAt,
@@ -168,14 +281,24 @@ async function toPhoto(
     geo,
     locationSource,
     thumbRef,
-    origin: 'user',
+    origin: "user",
     importedAt: now,
     issues: issues.map((item) => photoIssue(item.code, item.message)),
   });
   if (!created.ok) {
     throw new DomainViolation(created.error);
   }
-  return { photo: created.value, issues, thumbnail };
+  const photo = previous
+    ? {
+        ...previous,
+        thumbRef: thumbnail ? `thumb_${previous.id}` : null,
+        issues: thumbnail
+          ? previous.issues.filter((i) => i.code !== "thumbnail-failed")
+          : previous.issues,
+        updatedAt: now,
+      }
+    : created.value;
+  return { photo, issues, thumbnail };
 }
 
 export async function importPhotos(
@@ -188,7 +311,7 @@ export async function importPhotos(
   const startedAt = now;
 
   if (files.length === 0) {
-    throw new AppError('INVALID_INPUT', '请先选择照片');
+    throw new AppError("INVALID_INPUT", "请先选择照片");
   }
 
   const existingHashes = await deps.gateway.read(async (repos) => {
@@ -198,9 +321,17 @@ export async function importPhotos(
     return out;
   });
 
+  const broken = await deps.gateway.read(async (repos) => {
+    const found = new Map<string, Photo>();
+    for (const photo of await repos.photos.listAll())
+      if (!photo.thumbRef || !(await repos.thumbnails.get(photo.thumbRef)))
+        found.set(photo.id, photo);
+    return found;
+  });
   const batchHashes = new Set<string>();
   const photos: Photo[] = [];
   const thumbnails: { key: string; blob: Blob }[] = [];
+  let repaired = 0;
   const issues: ImportIssue[] = [];
   let duplicates = 0;
   let failed = 0;
@@ -208,29 +339,72 @@ export async function importPhotos(
   for (let index = 0; index < files.length; index += 1) {
     const file = files[index];
     if (!file) continue;
-    onProgress?.({ done: index, total: files.length, fileName: file.name, stage: 'metadata' });
+    onProgress?.({
+      done: index,
+      total: files.length,
+      fileName: file.name,
+      stage: "metadata",
+    });
     try {
-      const result = await toPhoto(deps, file, batchId, existingHashes, batchHashes, () => onProgress?.({done:index,total:files.length,fileName:file.name,stage:'preview'}));
-      if ('duplicate' in result) {
+      const result = await toPhoto(
+        deps,
+        file,
+        batchId,
+        existingHashes,
+        batchHashes,
+        broken,
+        () =>
+          onProgress?.({
+            done: index,
+            total: files.length,
+            fileName: file.name,
+            stage: "preview",
+          }),
+      );
+      if ("duplicate" in result) {
         duplicates += 1;
         issues.push(result.duplicate);
         continue;
       }
-      photos.push(result.photo);
+      const existing = broken.has(result.photo.id);
+      if (existing && result.thumbnail) repaired++;
+      const photo =
+        !result.thumbnail && file.size <= 25 * 1024 * 1024
+          ? { ...result.photo, sourceRef: `source_${result.photo.id}` }
+          : result.photo;
+      photos.push(photo);
+      if (!result.thumbnail && photo.sourceRef)
+        thumbnails.push({ key: photo.sourceRef, blob: file });
       issues.push(...result.issues);
       if (result.thumbnail && result.photo.thumbRef) {
         thumbnails.push({ key: result.photo.thumbRef, blob: result.thumbnail });
       }
     } catch (error) {
       failed += 1;
-      deps.logger.error('import.file-failed', error, { fileName: file.name });
-      issues.push(issue(deps, batchId, file.name, 'storage-failed', '无法解析或缩略图生成失败'));
+      deps.logger.error("import.file-failed", error, { fileName: file.name });
+      issues.push(
+        issue(
+          deps,
+          batchId,
+          file.name,
+          "storage-failed",
+          "无法解析或缩略图生成失败",
+        ),
+      );
     }
   }
 
-  onProgress?.({done:files.length,total:files.length,fileName:'',stage:'candidates'});
+  onProgress?.({
+    done: files.length,
+    total: files.length,
+    fileName: "",
+    stage: "candidates",
+  });
   const resolvable = photos.filter(
-    (photo) => photo.capturedAtSource !== 'missing' && !isFuture(photo.capturedAt, now),
+    (photo) =>
+      !existingHashes.has(photo.contentHash ?? "") &&
+      photo.capturedAtSource !== "missing" &&
+      !isFuture(photo.capturedAt, now),
   );
   const splitResult = splitPhotosIntoTrips({
     photos: resolvable,
@@ -259,7 +433,7 @@ export async function importPhotos(
       splitReasons: draft.splitReasons,
       confidence: draft.confidence,
       derivedFrom: [],
-      origin: 'user',
+      origin: "user",
       createdAt: now,
     });
     if (!created.ok) throw new DomainViolation(created.error);
@@ -275,11 +449,20 @@ export async function importPhotos(
     photoCount: photos.length,
     issueCount: issues.length,
     candidateCount: candidates.length,
-    status: 'completed',
-    origin: 'user',
+    status:
+      photos.some((p) => !p.thumbRef || p.capturedAtSource === "missing") ||
+      failed > 0
+        ? "needs-attention"
+        : "completed",
+    origin: "user",
   };
 
-  onProgress?.({done:files.length,total:files.length,fileName:'',stage:'saving'});
+  onProgress?.({
+    done: files.length,
+    total: files.length,
+    fileName: "",
+    stage: "saving",
+  });
   try {
     await deps.gateway.run(async (repos) => {
       await repos.batches.save(batch);
@@ -290,13 +473,35 @@ export async function importPhotos(
       });
       await repos.photos.saveMany(linked);
       if (candidates.length > 0) await repos.candidates.saveMany(candidates);
-      for (const item of thumbnails) await repos.thumbnails.put(item.key, item.blob);
+      for (const item of thumbnails)
+        await repos.thumbnails.put(item.key, item.blob);
     });
   } catch (error) {
-    deps.logger.error('import.commit-failed', error, { batchId });
-    throw new AppError('STORAGE_FAILED', '这次导入没有写入本地数据库，照片没有被添加。请检查存储空间后重试。');
+    deps.logger.error("import.commit-failed", error, { batchId });
+    throw new AppError(
+      "STORAGE_FAILED",
+      "这次导入没有写入本地数据库，照片没有被添加。请检查存储空间后重试。",
+    );
   }
 
-  onProgress?.({ done: files.length, total: files.length, fileName: '', stage:'completed' });
-  return { batchId, imported: photos.length, duplicates, failed, candidateCount: candidates.length, issues };
+  onProgress?.({
+    done: files.length,
+    total: files.length,
+    fileName: "",
+    stage: "completed",
+  });
+  return {
+    batchId,
+    imported: photos.filter((p) => !existingHashes.has(p.contentHash ?? ""))
+      .length,
+    duplicates,
+    failed,
+    ready: photos.filter((p) => p.thumbRef).length,
+    needsRepair: photos.filter(
+      (p) => !p.thumbRef || p.capturedAtSource === "missing",
+    ).length,
+    repaired,
+    candidateCount: candidates.length,
+    issues,
+  };
 }

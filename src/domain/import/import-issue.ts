@@ -23,7 +23,7 @@ export interface ImportIssue {
   readonly createdAt: Instant;
 }
 
-export type ImportBatchStatus = 'importing' | 'completed' | 'cancelled' | 'failed';
+export type ImportBatchStatus = 'importing' | 'completed' | 'cancelled' | 'failed' | 'needs-attention';
 
 export interface ImportBatch {
   readonly id: ImportBatchId;

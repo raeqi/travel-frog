@@ -12,6 +12,7 @@ export interface WallPhoto {
   readonly lat: number;
   readonly lng: number;
   readonly capturedAt: number;
+  readonly importedAt?: number;
   readonly palette: PaletteName;
   readonly thumbRef: string | null;
   readonly origin?: 'user' | 'demo';
@@ -199,6 +200,7 @@ export function buildWallModel(snapshot: ArchiveSnapshot, homeCityKey: string | 
       lat: photo.geo.lat,
       lng: photo.geo.lng,
       capturedAt: photo.capturedAt,
+      importedAt:photo.importedAt,
       palette: paletteOf(photo.id),
       thumbRef: photo.thumbRef,
       origin: photo.origin,

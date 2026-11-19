@@ -95,7 +95,7 @@ function computePiles(model: WallModel, camera: Camera, metrics: Metrics, level:
     if (!inBoard(point.x, point.y, metrics, 90)) continue;
     raw.push({
       cityKey: city.key,
-      photoIds: [...city.photoIds],
+      photoIds: [...city.photoIds].sort((a,b)=>(model.photoById.get(b)?.importedAt??0)-(model.photoById.get(a)?.importedAt??0)),
       sx: point.x,
       sy: point.y,
       year: city.year,
@@ -219,6 +219,7 @@ const HIGHLIGHT_MS = 1500;
 export function MapWall() {
   const service = useService();
   const snapshot = useArchive();
+  const loadThumbnail=useCallback((id:string)=>service.thumbnail(id),[service]);
   const travel = snapshot.frogTravel ?? EMPTY_FROG_TRAVEL;
   const { journeyNow,journeyError,reconcile } = useFrogJourney(service,snapshot.frogTravel,snapshot.status==='ready');
   const [journeyPanelOpen,setJourneyPanelOpen] = useState(false);
@@ -1462,14 +1463,20 @@ export function MapWall() {
         suggestions={suggestions}
         photosById={photosById}
         onImportFiles={(files, onProgress) => service.importFiles(Array.from(files), onProgress)}
-        onConfirmCandidate={(id) =>
-          guard(() => service.confirmCandidate(id)).then((ok) => {
-            if (ok) {
-              setDrawerOpen(false);
-              notify('候选已确认，照片已钉上地图');
-            }
-          })
-        }
+        onThumbnail={loadThumbnail}
+        onRetryPhoto={(id,file)=>service.retryPhotoPreview(id,file)}
+        onPhotoTime={async(id,at)=>{await service.setPhotoCaptureTime(id,at);if(at!==null)setDrawerTab('candidates');}}
+        onSetPhotoLocations={(ids,input)=>service.setPhotoLocations(ids,input)}
+        onConfirmCandidate={async id => {
+          await guard(async()=>{
+            const tripId=await service.confirmCandidate(id);
+            const fresh=buildWallModel(service.getSnapshot(),snapshot.home.city.key);
+            const city=fresh.cities.find(c=>c.tripIds.includes(tripId));
+            setActiveTripId(tripId);setDrawerOpen(false);
+            if(city){setCityKey(city.key);animateCamera(cityCamera(fresh.photos.filter(p=>p.cityKey===city.key),city,metrics.sheetW>0?metrics.sheetH/metrics.sheetW:.64),'world','city');notify('已确认，正在地图查看这组照片');}
+            else notify('已存入档案；缺位置的照片补好后才能上地图');
+          });
+        }}
         onIgnoreCandidate={async (id) => {
           await guard(() => service.ignoreCandidate(id), '已忽略，可稍后恢复');
         }}
