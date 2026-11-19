@@ -8,6 +8,7 @@ import {
 import type { CityRef } from '../../domain/city/city-ref';
 import './frog-journey.css';
 
+import {frogJourneyLocation} from '../../domain/frog/journey';
 const PHASES = {
   resting: '在家休息',
   packing: '收拾行李',
@@ -147,7 +148,7 @@ export function FrogJourneyPanel({
               </button>
             </header>
             <p className="journey-current" role="status">
-              {activity}
+              {activity}{state.motionPausedAt!==undefined?' · 漫游已暂停':''}
             </p>
             {current && (
               <>
@@ -159,6 +160,7 @@ export function FrogJourneyPanel({
                       : '按你留的方向'}
                   </span>
                 </p>
+                <p className="journey-coordinate">模拟坐标：{frogJourneyLocation(current,home,now)?.lat.toFixed(5)}, {frogJourneyLocation(current,home,now)?.lng.toFixed(5)}。交通转场可能过海；落脚后在附近陆地漫游。</p>
                 <ol className="journey-stages" aria-label="这一趟的阶段">
                   {Object.entries(PHASES).map(([key, label]) => (
                     <li

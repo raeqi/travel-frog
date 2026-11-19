@@ -15,6 +15,7 @@ import { BrowserFingerprintReader } from './infrastructure/media/fingerprint.bro
 import { CanvasThumbnailGenerator } from './infrastructure/media/thumbnail-generator.browser';
 import { CryptoIdGenerator } from './infrastructure/crypto-id-generator';
 import { SystemClock } from './infrastructure/system-clock';
+import {OFFLINE_FROG_LANDSCAPE} from './infrastructure/geo/frog-landscape';
 import { App } from './presentation/App';
 
 const container = document.getElementById('root');
@@ -54,6 +55,7 @@ async function start(): Promise<void> {
     fingerprints: new BrowserFingerprintReader(),
     cityResolver: new GazetteerCityResolver(),
     logger,
+    landscape:OFFLINE_FROG_LANDSCAPE,
   });
   root.render(
     <StrictMode>

@@ -1,5 +1,6 @@
 import type { CityRef } from "../city/city-ref";
 
+import {interpolateRoute,type FrogRoutePoint,type TravelWaypoint} from './roaming';
 export type FrogPace = "natural" | "preview";
 export type JourneyPhase =
   | "resting"
@@ -23,6 +24,7 @@ export interface FrogJourney {
   readonly wishId: string | null;
   readonly letterRecorded: boolean;
   readonly note: string;
+  readonly route?: readonly FrogRoutePoint[];
 }
 export interface FrogDirection {
   readonly destination: CityRef;
@@ -36,6 +38,8 @@ export interface FrogTravelState {
   readonly current: FrogJourney | null;
   readonly direction: FrogDirection | null;
   readonly history: readonly FrogJourney[];
+  readonly waypoints?: readonly TravelWaypoint[];
+  readonly motionPausedAt?: number | undefined;
 }
 export const EMPTY_FROG_TRAVEL: FrogTravelState = {
   enabled: true,
@@ -166,6 +170,7 @@ export function advanceFrogJourney(
   cities: readonly CityRef[],
   now: number,
 ): { state: FrogTravelState; letter: FrogJourney | null; returned: boolean } {
+  if(state.motionPausedAt!==undefined)now=state.motionPausedAt;
   let current = state.current;
   let letter: FrogJourney | null = null;
   if (
@@ -194,7 +199,7 @@ export function nextJourneyWake(
   now: number,
 ): number | null {
   const j = state.current;
-  if (!j) return null;
+  if (!j || state.motionPausedAt!==undefined) return null;
   const times = [j.prepareAt, j.departAt, j.arriveAt, j.returnAt, j.homeAt];
   if (!j.letterRecorded && j.letterAt !== null) times.push(j.letterAt);
   return Math.min(...times.filter((at) => at > now), now + 60_000);
@@ -206,6 +211,7 @@ export function frogJourneyLocation(
 ): { lat: number; lng: number } | null {
   if (!journey || now < journey.departAt || now >= journey.homeAt)
     return home.centroid;
+  if(journey.route?.length) return interpolateRoute(journey.route,now,home);
   const from = journey.from.centroid,
     destination = journey.destination.centroid;
   if (!from || !destination) return null;
@@ -261,10 +267,13 @@ export function validFrogTravel(state: FrogTravelState): boolean {
         j.letterAt < j.returnAt)) &&
     typeof j.letterRecorded === "boolean" &&
     typeof j.note === "string" &&
-    j.note.length <= 200;
+    j.note.length <= 200 &&
+    (j.route===undefined || (Array.isArray(j.route)&&j.route.length>=2&&j.route.length<=100&&j.route.every((p,i)=>Number.isFinite(p.at)&&Number.isFinite(p.lat)&&Math.abs(p.lat)<=90&&Number.isFinite(p.lng)&&Math.abs(p.lng)<=180&&(p.kind==='walk'||p.kind==='transit')&&(i===0||p.at>j.route![i-1]!.at))&&j.route[0]!.at===j.departAt&&j.route.at(-1)!.at===j.homeAt));
   return (
     !!state &&
     typeof state.enabled === "boolean" &&
+    (state.motionPausedAt===undefined||Number.isFinite(state.motionPausedAt)) &&
+    (state.waypoints===undefined||(Array.isArray(state.waypoints)&&state.waypoints.length<=500&&state.waypoints.every(p=>typeof p.id==='string'&&typeof p.name==='string'&&p.name.trim().length>0&&p.name.length<=100&&typeof p.country==='string'&&p.country.length<=100&&Number.isFinite(p.createdAt)&&Number.isFinite(p.lat)&&Math.abs(p.lat)<=90&&Number.isFinite(p.lng)&&Math.abs(p.lng)<=180&&(p.source==='map'||p.source==='poi')))) &&
     (state.pace === "natural" || state.pace === "preview") &&
     Number.isSafeInteger(state.sequence) &&
     state.sequence >= 0 &&

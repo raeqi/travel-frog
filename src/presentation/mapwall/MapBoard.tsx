@@ -8,6 +8,9 @@ import type { WallPhoto, WallWish } from './model';
 import type { BubblePlacement } from './layout';
 import { tiltFor, projectWorld, projectCity, projectRegion, type Camera, type Metrics } from './geometry';
 import { useMapGestures, maxMapZoom } from './map-gestures';
+import {HouseIcon} from './HouseIcon';
+import {mapCoordinate} from './geometry';
+import type {RealPoi} from './real-pois';
 import { RealPlaces } from './RealPlaces';
 
 export interface CityPhotoMarker {
@@ -28,6 +31,12 @@ export interface DestTagPlacement {
 }
 
 export interface MapBoardProps {
+  readonly selecting?:boolean;
+  readonly onMapPick?:(point:{lat:number;lng:number})=>void;
+  readonly onPoiPick?:(point:RealPoi)=>void;
+  readonly waypointPins?:readonly {id:string;name:string;x:number;y:number}[];
+  readonly onWaypointClick?:(id:string)=>void;
+  readonly draftPin?:{x:number;y:number}|null;
   readonly boardRef: RefObject<HTMLDivElement | null>;
   readonly sheetRef: RefObject<HTMLDivElement | null>;
   readonly camera: Camera;
@@ -251,7 +260,11 @@ export function MapBoard(props: MapBoardProps) {
 
   return (
     <div className="frame">
-      <div className="board" ref={boardRef} onClick={onBackgroundClick} tabIndex={0} role="region" aria-label="旅行地图：拖动平移，滚轮缩放，触控板双指平移，捏合缩放；键盘方向键平移，加减号缩放">
+      <div className={`board${props.selecting?' is-selecting':''}`} ref={boardRef} onClick={event=>{
+        if(props.selecting && !(event.target as Element).closest('button,a,input,select,textarea,[role="button"],[data-map-controls]')){
+          const rect=event.currentTarget.getBoundingClientRect();const point=mapCoordinate(event.clientX-rect.left,event.clientY-rect.top,props.camera,props.metrics,props.mode);if(point)props.onMapPick?.(point);
+        }else onBackgroundClick();
+      }} onKeyDown={event=>{if(props.selecting&&event.target===event.currentTarget&&event.key==='Enter'){event.preventDefault();const point=mapCoordinate(props.metrics.offX+props.metrics.sheetW/2,props.metrics.offY+props.metrics.sheetH/2,props.camera,props.metrics,props.mode);if(point)props.onMapPick?.(point);}}} tabIndex={0} role="region" aria-label="旅行地图：拖动平移，滚轮缩放，触控板双指平移，捏合缩放；键盘方向键平移，加减号缩放">
         <div className="map-sheet" id="mapSheet" ref={sheetRef}>
           <WorldLayer viewBox={viewBox} visitedCountries={visitedCountries} />
           <CityLayer viewBox={viewBox} />
@@ -268,6 +281,7 @@ export function MapBoard(props: MapBoardProps) {
           ))}
         </svg>
 
+        <div className="waypoint-layer" aria-label="清单地点标记">{props.waypointPins?.map((pin,index)=><button type="button" className="waypoint-pin" key={pin.id} style={{left:pin.x,top:pin.y}} aria-label={`清单地点：${pin.name}`} onClick={event=>{event.stopPropagation();props.onWaypointClick?.(pin.id);}}>{index+1}</button>)}{props.draftPin&&<span className="waypoint-pin waypoint-draft" style={{left:props.draftPin.x,top:props.draftPin.y}} aria-label="待保存位置">＋</span>}</div>
         <div className="marker-layer" id="markerLayer">
           {level === 'city' || level === 'region' ? (
             <CityPhotoPins
@@ -299,8 +313,7 @@ export function MapBoard(props: MapBoardProps) {
                 onHouseClick();
               }}
             >
-              <span className="house-roof" aria-hidden="true" />
-              <span className="house-body" aria-hidden="true" />
+              <HouseIcon/>
             </button>
           ) : null}
         </div>
@@ -361,7 +374,8 @@ export function MapBoard(props: MapBoardProps) {
         </div>
 
         {frogActions ? <FrogActions x={frogActions.x} y={frogActions.y} below={frogActions.below} onAction={onFrogAction} /> : null}
-        <RealPlaces camera={props.camera} metrics={props.metrics} mode={props.mode} project={project} />
+        <RealPlaces camera={props.camera} metrics={props.metrics} mode={props.mode} project={project} {...(props.onPoiPick?{onSave:props.onPoiPick}:{})} />
+        {props.selecting&&<div className="pick-hint">选点模式 · 轻点地图后确认保存；可拖动、缩放 · 键盘回车选择视野中心</div>}
         {props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
         {destHint ? <div className="entrust-hint">给下一趟留个方向 · 蛙蛙也会自己安排旅行</div> : null}
       </div>

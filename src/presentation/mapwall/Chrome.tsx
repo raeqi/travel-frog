@@ -1,15 +1,18 @@
+import {HouseIcon} from './HouseIcon';
 export function TopBar({
   onImport,
   onDrawer,
   onSearch,
   onTheme,
   onSettings,
+  onHome,
 }: {
   readonly onImport: () => void;
   readonly onDrawer: () => void;
   readonly onSearch: () => void;
   readonly onTheme: () => void;
   readonly onSettings: () => void;
+  readonly onHome?: () => void;
 }) {
   return (
     <header className="topbar">
@@ -21,6 +24,7 @@ export function TopBar({
           <strong>旅行青蛙</strong>
           <em>TRAVEL FROG · 地图墙</em>
         </span>
+        {onHome&&<button type="button" className="frame-home" onClick={onHome} aria-label="回家"><HouseIcon/>回家</button>}
       </div>
       <nav className="actions" aria-label="主操作">
         <button className="tbtn primary" type="button" onClick={onImport}>

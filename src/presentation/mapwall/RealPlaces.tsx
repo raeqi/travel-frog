@@ -9,6 +9,7 @@ import {
 } from "./real-pois";
 
 interface Props {
+  onSave?:(point:RealPoi)=>void;
   camera: Camera;
   metrics: Metrics;
   mode: "world" | "city" | "region";
@@ -28,7 +29,7 @@ const KINDS: Record<string, string> = {
   castle: "城堡",
   zoo: "动物园",
 };
-export function RealPlaces({ camera, metrics, mode, project }: Props) {
+export function RealPlaces({ camera, metrics, mode, project,onSave }: Props) {
   const [open, setOpen] = useState(false),
     [pois, setPois] = useState<RealPoi[]>([]),
     [selected, setSelected] = useState<RealPoi | null>(null);
@@ -206,6 +207,7 @@ export function RealPlaces({ camera, metrics, mode, project }: Props) {
                 >
                   查看来源与完整信息 ↗
                 </a>
+                {onSave&&<button type="button" onClick={()=>{onSave(selected);setOpen(false);}}>加入旅行清单</button>}
                 <button type="button" onClick={() => setSelected(null)}>
                   收起详情
                 </button>

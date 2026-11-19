@@ -34,13 +34,11 @@ export function PoiList({
   linked,
   highlightCity,
   highlightWish,
-  homeCityName,
   scrollRef,
   imageForPhoto,
   onToggle,
   onCity,
   onWish,
-  onHome,
   onScroll,
 }: PoiListProps) {
   return (
@@ -117,21 +115,7 @@ export function PoiList({
               ))}
             </div>
           ) : null}
-          <div className="poi-home-entry">
-            <button
-              type="button"
-              className="poi-home"
-              title={`回家 · ${homeCityName}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onHome();
-              }}
-            >
-              <span className="poi-home-icon" aria-hidden="true" />
-              <span className="poi-home-name">回家</span>
-              <em>{homeCityName}</em>
-            </button>
-          </div>
+
         </div>
       </aside>
       <button
