@@ -1,4 +1,5 @@
 import {
+  createCandidate,
   assertPending,
   markConfirmed,
   markIgnored,
@@ -8,32 +9,84 @@ import {
   mergeCandidateRecords,
   splitCandidateRecord,
   type Candidate,
-} from '../domain/candidate/candidate';
-import { makeCityRef, type CityRef } from '../domain/city/city-ref';
-import { asCandidateId, asMemoryId, asTripId, asVisitId, asWishId } from '../domain/common/ids';
-import { DomainViolation, type DomainError, type DomainErrorCode } from '../domain/common/result';
-import { localYear } from '../domain/common/time';
-import { createMemory } from '../domain/memory/memory';
-import type { Memory } from '../domain/memory/memory';
-import { DEFAULT_SPLIT_CONFIG } from '../domain/services/split-trips';
-import { resolveVisits } from '../domain/services/build-visits';
-import { suggestLocations } from '../domain/services/fill-locations';
-import { normalizeSettings, type Settings } from '../domain/settings/settings';
-import { moveHome as moveHomeState, setHomePerch, syncHomeSpecialties, type HomeState } from '../domain/home/home';
-import type { MapViewState } from '../domain/home/map-view';
-import type { FrogPerch } from '../domain/home/perch';
-import { createTrip, findOverlappingTrip, tripTitleFrom, validateTripPhotos } from '../domain/trip/trip';
-import type { Trip } from '../domain/trip/trip';
-import type { Visit } from '../domain/visit/visit';
-import { changeWishStatus, createWish, postcardNote, POSTCARD_DELIVERY_MS, type Wish, type WishStatus } from '../domain/wish/wish';
-import { makeGeoPoint } from '../domain/geo/geo-point';
-import type { Clock, CityResolver, ExifReader, FingerprintReader, IdGenerator, Logger, Repositories, ThumbnailGenerator } from '../domain/ports';
-import { ArchiveStore } from './archive-store';
-import { importPhotos, type ImportProgress, type ImportSummary } from './import-photos';
-import { AppError, toAppError, type ArchiveGateway } from './ports';
-import { INITIAL_SNAPSHOT, type ArchiveSnapshot } from './snapshot';
-import { advanceFrogJourney, EMPTY_FROG_TRAVEL, journeyAway, planFrogJourney, type FrogPace, type FrogTravelState } from '../domain/frog/journey';
-import { FROG_DESTINATIONS } from '../domain/frog/destinations';
+} from "../domain/candidate/candidate";
+import {
+  makeCityRef,
+  dedupeCities,
+  type CityRef,
+} from "../domain/city/city-ref";
+import {
+  asCandidateId,
+  asMemoryId,
+  asTripId,
+  asVisitId,
+  asWishId,
+} from "../domain/common/ids";
+import {
+  DomainViolation,
+  type DomainError,
+  type DomainErrorCode,
+} from "../domain/common/result";
+import { localYear } from "../domain/common/time";
+import { createMemory } from "../domain/memory/memory";
+import type { Memory } from "../domain/memory/memory";
+import { DEFAULT_SPLIT_CONFIG } from "../domain/services/split-trips";
+import { resolveVisits } from "../domain/services/build-visits";
+import { suggestLocations } from "../domain/services/fill-locations";
+import { normalizeSettings, type Settings } from "../domain/settings/settings";
+import {
+  moveHome as moveHomeState,
+  setHomePerch,
+  syncHomeSpecialties,
+  type HomeState,
+} from "../domain/home/home";
+import type { MapViewState } from "../domain/home/map-view";
+import type { FrogPerch } from "../domain/home/perch";
+import {
+  createTrip,
+  findOverlappingTrip,
+  tripTitleFrom,
+  validateTripPhotos,
+} from "../domain/trip/trip";
+import type { Trip } from "../domain/trip/trip";
+import type { Visit } from "../domain/visit/visit";
+import {
+  changeWishStatus,
+  createWish,
+  postcardNote,
+  POSTCARD_DELIVERY_MS,
+  type Wish,
+  type WishStatus,
+} from "../domain/wish/wish";
+import { summarizePhotos } from "../domain/candidate/summarize";
+import { makeGeoPoint, type GeoPoint } from "../domain/geo/geo-point";
+import type {
+  Clock,
+  CityResolver,
+  ExifReader,
+  FingerprintReader,
+  IdGenerator,
+  Logger,
+  Repositories,
+  ThumbnailGenerator,
+} from "../domain/ports";
+import { ArchiveStore } from "./archive-store";
+import {
+  importPhotos,
+  type ImportProgress,
+  type ImportSummary,
+} from "./import-photos";
+import { AppError, toAppError, type ArchiveGateway } from "./ports";
+import { INITIAL_SNAPSHOT, type ArchiveSnapshot } from "./snapshot";
+import {
+  advanceFrogJourney,
+  EMPTY_FROG_TRAVEL,
+  journeyAway,
+  planFrogJourney,
+  type FrogPace,
+  type FrogTravelState,
+} from "../domain/frog/journey";
+import { FROG_DESTINATIONS } from "../domain/frog/destinations";
 
 export interface ServiceDeps {
   readonly gateway: ArchiveGateway;
@@ -87,29 +140,46 @@ export class TravelFrogService {
     return this.store.subscribe(listener);
   }
 
-  private async readAll(): Promise<Omit<ArchiveSnapshot, 'status' | 'error' | 'revision' | 'loadedAt'>> {
+  private async readAll(): Promise<
+    Omit<ArchiveSnapshot, "status" | "error" | "revision" | "loadedAt">
+  > {
     return this.deps.gateway.read(async (repos) => {
-      const [trips, photos, visits, candidates, memories, wishes, manualVisits, settings, home, mapView, batches, issues, frogTravel] =
-        await Promise.all([
-          repos.trips.listAll(),
-          repos.photos.listAll(),
-          repos.visits.listAll(),
-          repos.candidates.listAll(),
-          repos.memories.listAll(),
-          repos.wishes.list(),
-          repos.manualVisits.list(),
-          repos.settings.get(),
-          repos.home.get(),
-          repos.mapView.get(),
-          repos.batches.listRecent(20),
-          repos.issues.listRecent(100),
-          repos.frogTravel.get(),
-        ]);
+      const [
+        trips,
+        photos,
+        visits,
+        candidates,
+        memories,
+        wishes,
+        manualVisits,
+        settings,
+        home,
+        mapView,
+        batches,
+        issues,
+        frogTravel,
+      ] = await Promise.all([
+        repos.trips.listAll(),
+        repos.photos.listAll(),
+        repos.visits.listAll(),
+        repos.candidates.listAll(),
+        repos.memories.listAll(),
+        repos.wishes.list(),
+        repos.manualVisits.list(),
+        repos.settings.get(),
+        repos.home.get(),
+        repos.mapView.get(),
+        repos.batches.listRecent(20),
+        repos.issues.listRecent(100),
+        repos.frogTravel.get(),
+      ]);
       return {
         trips: trips.sort((a, b) => b.timeRange.end - a.timeRange.end),
         photos,
         visits: visits.sort((a, b) => a.timeRange.start - b.timeRange.start),
-        candidates: candidates.sort((a, b) => a.timeRange.start - b.timeRange.start),
+        candidates: candidates.sort(
+          (a, b) => a.timeRange.start - b.timeRange.start,
+        ),
         memories,
         wishes,
         manualVisits,
@@ -124,7 +194,7 @@ export class TravelFrogService {
   }
 
   async load(): Promise<void> {
-    this.store.patch({ status: 'loading', error: null });
+    this.store.patch({ status: "loading", error: null });
     try {
       await this.writeFrogTravel(async () => undefined);
       const data = await this.readAll();
@@ -132,17 +202,17 @@ export class TravelFrogService {
       this.store.set({
         ...data,
         home,
-        status: 'ready',
+        status: "ready",
         error: null,
         revision: this.store.getSnapshot().revision + 1,
         loadedAt: this.deps.clock.now(),
       });
     } catch (error) {
-      const app = toAppError(error, 'STORAGE_OPEN_FAILED', '无法打开本地档案');
-      this.deps.logger.error('archive.load-failed', error);
+      const app = toAppError(error, "STORAGE_OPEN_FAILED", "无法打开本地档案");
+      this.deps.logger.error("archive.load-failed", error);
       this.store.set({
         ...INITIAL_SNAPSHOT,
-        status: 'error',
+        status: "error",
         error: { code: app.code, message: app.message },
         revision: this.store.getSnapshot().revision + 1,
         loadedAt: this.deps.clock.now(),
@@ -151,7 +221,7 @@ export class TravelFrogService {
   }
 
   private async persistHome(
-    data: Pick<ArchiveSnapshot, 'home' | 'trips' | 'visits' | 'photos'>,
+    data: Pick<ArchiveSnapshot, "home" | "trips" | "visits" | "photos">,
   ): Promise<HomeState> {
     const now = this.deps.clock.now();
     const synced = syncHomeSpecialties({
@@ -173,7 +243,7 @@ export class TravelFrogService {
     this.store.set({
       ...data,
       home,
-      status: 'ready',
+      status: "ready",
       error: null,
       revision: this.store.getSnapshot().revision + 1,
       loadedAt: this.deps.clock.now(),
@@ -203,7 +273,7 @@ export class TravelFrogService {
           const active = new Set(
             wishes
               .filter(
-                (w) => w.status !== 'declined' && w.status !== 'fulfilled',
+                (w) => w.status !== "declined" && w.status !== "fulfilled",
               )
               .map((w) => w.cityRef.key),
           );
@@ -226,18 +296,18 @@ export class TravelFrogService {
                 cityRef: journey.destination,
                 region: journey.destination.countryName,
                 note: null,
-                status: 'pending',
-                source: 'frog',
+                status: "pending",
+                source: "frog",
                 from: journey.from.key,
-                origin: 'user',
+                origin: "user",
                 now: journey.departAt,
               });
               if (!made.ok) throw new DomainViolation(made.error);
-              wish = { ...made.value, delivery: 'journey' };
+              wish = { ...made.value, delivery: "journey" };
               await repos.wishes.save(wish);
             }
-            if (wish?.status === 'pending') {
-              const delivered = changeWishStatus(wish, 'received', now, {
+            if (wish?.status === "pending") {
+              const delivered = changeWishStatus(wish, "received", now, {
                 note: journey.note,
                 from: journey.from.key,
               });
@@ -254,8 +324,8 @@ export class TravelFrogService {
       } catch (error) {
         if (
           !(error instanceof Error) ||
-          !('code' in error) ||
-          error.code !== 'WRITE_CONFLICT' ||
+          !("code" in error) ||
+          error.code !== "WRITE_CONFLICT" ||
           attempt === 3
         )
           throw error;
@@ -275,10 +345,10 @@ export class TravelFrogService {
   }): Promise<void> {
     if (
       input.pace !== undefined &&
-      input.pace !== 'natural' &&
-      input.pace !== 'preview'
+      input.pace !== "natural" &&
+      input.pace !== "preview"
     )
-      throw new AppError('INVALID_INPUT', '未知的旅行节奏');
+      throw new AppError("INVALID_INPUT", "未知的旅行节奏");
     await this.writeFrogTravel(async (state, home, _repos, now) => {
       const away = journeyAway(state.current, now);
       const enabled = input.enabled ?? state.enabled;
@@ -286,12 +356,12 @@ export class TravelFrogService {
       let next: FrogTravelState = { ...state, enabled, pace };
       if (
         !away &&
-        !(state.current?.source === 'directed' && input.pace === undefined)
+        !(state.current?.source === "directed" && input.pace === undefined)
       ) {
         const current = state.current;
         const direction =
           state.direction ??
-          (current?.source === 'directed' && current.wishId
+          (current?.source === "directed" && current.wishId
             ? {
                 destination: current.destination,
                 wishId: current.wishId,
@@ -327,49 +397,49 @@ export class TravelFrogService {
         centroid: {
           lat: input.lat,
           lng: input.lng,
-          source: 'manual',
+          source: "manual",
           approximate: true,
           accuracyM: null,
         },
-        source: 'manual',
-        confidence: 'low',
+        source: "manual",
+        confidence: "low",
       });
     const id = await this.writeFrogTravel(async (state, home, repos, now) => {
       if (city.key === home.city.key || !city.centroid)
-        throw new AppError('INVALID_INPUT', '给蛙蛙选一个家以外的地方');
+        throw new AppError("INVALID_INPUT", "给蛙蛙选一个家以外的地方");
       if (
         state.direction ||
-        (state.current?.source === 'directed' &&
+        (state.current?.source === "directed" &&
           !journeyAway(state.current, now))
       )
         throw new AppError(
-          'INVALID_INPUT',
-          '已经留好了下一趟的方向，等这一趟出发后再托付',
+          "INVALID_INPUT",
+          "已经留好了下一趟的方向，等这一趟出发后再托付",
         );
       const wishes = await repos.wishes.list();
       if (
         wishes.some(
           (w) =>
             w.cityRef.key === city.key &&
-            w.status !== 'declined' &&
-            w.status !== 'fulfilled',
+            w.status !== "declined" &&
+            w.status !== "fulfilled",
         )
       )
-        throw new AppError('INVALID_INPUT', '这个地方已经有一张明信片');
+        throw new AppError("INVALID_INPUT", "这个地方已经有一张明信片");
       const wishId = this.deps.ids.newWishId();
       const made = createWish({
         id: wishId,
         cityRef: city,
         region: city.countryName,
         note: null,
-        source: 'user',
+        source: "user",
         from: home.city.key,
-        origin: 'user',
+        origin: "user",
         now,
-        status: 'pending',
+        status: "pending",
       });
       if (!made.ok) throw new DomainViolation(made.error);
-      await repos.wishes.save({ ...made.value, delivery: 'journey' });
+      await repos.wishes.save({ ...made.value, delivery: "journey" });
       let next: FrogTravelState = {
         ...state,
         direction: { destination: city, wishId, requestedAt: now },
@@ -385,7 +455,7 @@ export class TravelFrogService {
       return { state: next, value: wishId };
     });
     await this.refresh();
-    if (!id) throw new AppError('STORAGE_FAILED', '没有保存下这次托付，请重试');
+    if (!id) throw new AppError("STORAGE_FAILED", "没有保存下这次托付，请重试");
     return id;
   }
 
@@ -393,18 +463,18 @@ export class TravelFrogService {
     await this.writeFrogTravel(async (state, home, repos, now) => {
       const current = state.current;
       const plannedDirection =
-        current?.source === 'directed' && !journeyAway(current, now)
+        current?.source === "directed" && !journeyAway(current, now)
           ? current
           : null;
       const id = state.direction?.wishId ?? plannedDirection?.wishId;
       if (!id)
         throw new AppError(
-          'INVALID_INPUT',
-          '没有待撤回的方向；已经出发的一趟会继续走完',
+          "INVALID_INPUT",
+          "没有待撤回的方向；已经出发的一趟会继续走完",
         );
       const wish = await repos.wishes.get(asWishId(id));
-      if (wish && wish.status !== 'pending')
-        throw new AppError('INVALID_INPUT', '这张信已经寄出，不能再撤回方向');
+      if (wish && wish.status !== "pending")
+        throw new AppError("INVALID_INPUT", "这张信已经寄出，不能再撤回方向");
       if (wish) await repos.wishes.delete(asWishId(id));
       const next = {
         ...state,
@@ -419,7 +489,10 @@ export class TravelFrogService {
     await this.refresh();
   }
 
-  async importFiles(files: readonly File[], onProgress?: (progress: ImportProgress) => void): Promise<ImportSummary> {
+  async importFiles(
+    files: readonly File[],
+    onProgress?: (progress: ImportProgress) => void,
+  ): Promise<ImportSummary> {
     try {
       const summary = await importPhotos(
         {
@@ -438,14 +511,17 @@ export class TravelFrogService {
       await this.refresh();
       return summary;
     } catch (error) {
-      this.deps.logger.error('import.failed', error);
-      throw toAppError(error, 'IMPORT_FAILED', '导入失败，请重试');
+      this.deps.logger.error("import.failed", error);
+      throw toAppError(error, "IMPORT_FAILED", "导入失败，请重试");
     }
   }
 
-  private async loadCandidate(repos: Repositories, id: string): Promise<Candidate> {
+  private async loadCandidate(
+    repos: Repositories,
+    id: string,
+  ): Promise<Candidate> {
     const candidate = await repos.candidates.get(asCandidateId(id));
-    if (!candidate) fail('CANDIDATE_NOT_FOUND', '候选不存在');
+    if (!candidate) fail("CANDIDATE_NOT_FOUND", "候选不存在");
     const pending = assertPending(candidate, asCandidateId(id));
     if (!pending.ok) throw new DomainViolation(pending.error);
     return pending.value;
@@ -460,14 +536,25 @@ export class TravelFrogService {
         const allPhotos = await repos.photos.listAll();
         const photoIds = new Set(candidate.photoIds);
         const members = allPhotos.filter((photo) => photoIds.has(photo.id));
-        if (members.length === 0) throw new DomainViolation({ code: 'CANDIDATE_EMPTY', message: '候选没有照片' });
+        if (members.length === 0)
+          throw new DomainViolation({
+            code: "CANDIDATE_EMPTY",
+            message: "候选没有照片",
+          });
         const trips = await repos.trips.listAll();
         const overlap = findOverlappingTrip(trips, candidate.timeRange);
         if (overlap) {
-          throw new DomainViolation({ code: 'TRIP_TIME_OVERLAP', message: `与「${overlap.title}」时间重叠，请先调整` });
+          throw new DomainViolation({
+            code: "TRIP_TIME_OVERLAP",
+            message: `与「${overlap.title}」时间重叠，请先调整`,
+          });
         }
         const resolvedTitle =
-          title?.trim() || tripTitleFrom(localYear(candidate.timeRange.start, this.offset()), candidate.cityRefs);
+          title?.trim() ||
+          tripTitleFrom(
+            localYear(candidate.timeRange.start, this.offset()),
+            candidate.cityRefs,
+          );
         const tripResult = createTrip({
           id: tripId,
           title: resolvedTitle,
@@ -481,7 +568,9 @@ export class TravelFrogService {
         if (!tripResult.ok) throw new DomainViolation(tripResult.error);
 
         const assigned = allPhotos.map((photo) =>
-          photoIds.has(photo.id) ? { ...photo, tripId, visitId: null, updatedAt: now } : photo,
+          photoIds.has(photo.id)
+            ? { ...photo, tripId, visitId: null, updatedAt: now }
+            : photo,
         );
         const visits = resolveVisits({
           tripId,
@@ -497,41 +586,57 @@ export class TravelFrogService {
           const visitId = visits.value.photoVisitIds.get(photo.id);
           return visitId ? { ...photo, visitId } : photo;
         });
-        const tripPhotos = withVisits.filter((photo) => photo.tripId === tripId);
-        const check = validateTripPhotos({ ...tripResult.value, coverPhotoId: tripPhotos[0]?.id ?? null }, tripPhotos);
+        const tripPhotos = withVisits.filter(
+          (photo) => photo.tripId === tripId,
+        );
+        const check = validateTripPhotos(
+          { ...tripResult.value, coverPhotoId: tripPhotos[0]?.id ?? null },
+          tripPhotos,
+        );
         if (!check.ok) throw new DomainViolation(check.error);
 
-        await repos.trips.save({ ...tripResult.value, coverPhotoId: tripPhotos[0]?.id ?? null });
+        await repos.trips.save({
+          ...tripResult.value,
+          coverPhotoId: tripPhotos[0]?.id ?? null,
+        });
         await repos.visits.saveMany(visits.value.visits);
         await repos.photos.saveMany(withVisits);
         await repos.candidates.save(markConfirmed(candidate, tripId, now));
         const wished = await repos.wishes.list();
         for (const wish of wished) {
-          if (wish.status !== 'stamped' || candidate.origin !== 'user') continue;
-          if (!candidate.cityRefs.some((ref) => ref.key === wish.cityRef.key)) continue;
+          if (wish.status !== "stamped" || candidate.origin !== "user")
+            continue;
+          if (!candidate.cityRefs.some((ref) => ref.key === wish.cityRef.key))
+            continue;
           if (!members.some((photo) => photo.geo !== null)) continue;
-          const step = changeWishStatus(wish, 'fulfilled', now);
+          const step = changeWishStatus(wish, "fulfilled", now);
           if (!step.ok) throw new DomainViolation(step.error);
           await repos.wishes.save(step.value);
         }
       });
     } catch (error) {
-      this.deps.logger.error('candidate.confirm-failed', error, { candidateId });
-      throw toAppError(error, 'TRIP_CREATE_FAILED', '确认候选失败');
+      this.deps.logger.error("candidate.confirm-failed", error, {
+        candidateId,
+      });
+      throw toAppError(error, "TRIP_CREATE_FAILED", "确认候选失败");
     }
     await this.refresh();
     return tripId;
   }
 
   async confirmAll(): Promise<number> {
-    const pending = this.store.getSnapshot().candidates.filter((candidate) => candidate.status === 'pending');
+    const pending = this.store
+      .getSnapshot()
+      .candidates.filter((candidate) => candidate.status === "pending");
     let confirmed = 0;
     for (const candidate of pending) {
       try {
         await this.confirmCandidate(candidate.id);
         confirmed += 1;
       } catch (error) {
-        this.deps.logger.error('candidate.confirm-all-failed', error, { candidateId: candidate.id });
+        this.deps.logger.error("candidate.confirm-all-failed", error, {
+          candidateId: candidate.id,
+        });
       }
     }
     return confirmed;
@@ -545,7 +650,9 @@ export class TravelFrogService {
       const photos = await repos.photos.listAll();
       const ids = new Set(candidate.photoIds);
       await repos.photos.saveMany(
-        photos.filter((photo) => ids.has(photo.id)).map((photo) => ({ ...photo, ignored: true, updatedAt: now })),
+        photos
+          .filter((photo) => ids.has(photo.id))
+          .map((photo) => ({ ...photo, ignored: true, updatedAt: now })),
       );
     });
     await this.refresh();
@@ -555,19 +662,23 @@ export class TravelFrogService {
     const now = this.deps.clock.now();
     try {
       await this.deps.gateway.run(async (repos) => {
-        const candidate = await repos.candidates.get(asCandidateId(candidateId));
-        if (!candidate) fail('CANDIDATE_NOT_FOUND', '候选不存在');
+        const candidate = await repos.candidates.get(
+          asCandidateId(candidateId),
+        );
+        if (!candidate) fail("CANDIDATE_NOT_FOUND", "候选不存在");
         const restored = markRestored(candidate, now);
         if (!restored.ok) throw new DomainViolation(restored.error);
         await repos.candidates.save(restored.value);
         const photos = await repos.photos.listAll();
         const ids = new Set(candidate.photoIds);
         await repos.photos.saveMany(
-          photos.filter((photo) => ids.has(photo.id)).map((photo) => ({ ...photo, ignored: false, updatedAt: now })),
+          photos
+            .filter((photo) => ids.has(photo.id))
+            .map((photo) => ({ ...photo, ignored: false, updatedAt: now })),
         );
       });
     } catch (error) {
-      throw toAppError(error, 'CANDIDATE_RESTORE_FAILED', '恢复候选失败');
+      throw toAppError(error, "CANDIDATE_RESTORE_FAILED", "恢复候选失败");
     }
     await this.refresh();
   }
@@ -591,19 +702,28 @@ export class TravelFrogService {
         });
         if (!merged.ok) throw new DomainViolation(merged.error);
         const idSet = new Set([...a.photoIds, ...b.photoIds]);
-        await repos.candidates.saveMany([markMerged(a, asCandidateId(newId), now), markMerged(b, asCandidateId(newId), now), merged.value]);
+        await repos.candidates.saveMany([
+          markMerged(a, asCandidateId(newId), now),
+          markMerged(b, asCandidateId(newId), now),
+          merged.value,
+        ]);
         await repos.photos.saveMany(
-          photos.filter((photo) => idSet.has(photo.id)).map((photo) => ({ ...photo, candidateId: newId, updatedAt: now })),
+          photos
+            .filter((photo) => idSet.has(photo.id))
+            .map((photo) => ({ ...photo, candidateId: newId, updatedAt: now })),
         );
       });
     } catch (error) {
-      throw toAppError(error, 'MERGE_FAILED', '合并候选失败');
+      throw toAppError(error, "MERGE_FAILED", "合并候选失败");
     }
     await this.refresh();
     return newId;
   }
 
-  async splitCandidate(candidateId: string, at: number): Promise<readonly string[]> {
+  async splitCandidate(
+    candidateId: string,
+    at: number,
+  ): Promise<readonly string[]> {
     const now = this.deps.clock.now();
     const leftId = this.deps.ids.newCandidateId();
     const rightId = this.deps.ids.newCandidateId();
@@ -623,15 +743,23 @@ export class TravelFrogService {
         if (!parts.ok) throw new DomainViolation(parts.error);
         const [left, right] = parts.value;
         const leftSet = new Set(left.photoIds);
-        await repos.candidates.saveMany([markSplit(candidate, [left.id, right.id], now), left, right]);
+        await repos.candidates.saveMany([
+          markSplit(candidate, [left.id, right.id], now),
+          left,
+          right,
+        ]);
         await repos.photos.saveMany(
           photos
             .filter((photo) => candidate.photoIds.includes(photo.id))
-            .map((photo) => ({ ...photo, candidateId: leftSet.has(photo.id) ? left.id : right.id, updatedAt: now })),
+            .map((photo) => ({
+              ...photo,
+              candidateId: leftSet.has(photo.id) ? left.id : right.id,
+              updatedAt: now,
+            })),
         );
       });
     } catch (error) {
-      throw toAppError(error, 'SPLIT_FAILED', '拆分候选失败');
+      throw toAppError(error, "SPLIT_FAILED", "拆分候选失败");
     }
     await this.refresh();
     return [leftId, rightId];
@@ -641,10 +769,10 @@ export class TravelFrogService {
     const now = this.deps.clock.now();
     await this.deps.gateway.run(async (repos) => {
       const trip = await repos.trips.get(asTripId(tripId));
-      if (!trip) fail('TRIP_NOT_FOUND', '旅程不存在');
+      if (!trip) fail("TRIP_NOT_FOUND", "旅程不存在");
       const title = patch.title === undefined ? trip.title : patch.title.trim();
       if (title.length === 0 || title.length > 40) {
-        fail('VALIDATION_FAILED', '标题需要在 1–40 字之间');
+        fail("VALIDATION_FAILED", "标题需要在 1–40 字之间");
       }
       await repos.trips.save({ ...trip, title, updatedAt: now });
     });
@@ -656,7 +784,7 @@ export class TravelFrogService {
     const trimmed = text.trim();
     await this.deps.gateway.run(async (repos) => {
       const trip = await repos.trips.get(asTripId(tripId));
-      if (!trip) fail('TRIP_NOT_FOUND', '旅程不存在');
+      if (!trip) fail("TRIP_NOT_FOUND", "旅程不存在");
       const existing = await repos.memories.getByTrip(asTripId(tripId));
       if (trimmed.length === 0) {
         if (existing) await repos.memories.deleteByTrip(asTripId(tripId));
@@ -671,9 +799,15 @@ export class TravelFrogService {
         now,
       });
       if (!created.ok) throw new DomainViolation(created.error);
-      const memory = existing ? { ...created.value, id: asMemoryId(existing.id) } : created.value;
+      const memory = existing
+        ? { ...created.value, id: asMemoryId(existing.id) }
+        : created.value;
       await repos.memories.save(memory);
-      await repos.trips.save({ ...trip, memoryId: asMemoryId(memory.id), updatedAt: now });
+      await repos.trips.save({
+        ...trip,
+        memoryId: asMemoryId(memory.id),
+        updatedAt: now,
+      });
     });
     await this.refresh();
   }
@@ -689,7 +823,13 @@ export class TravelFrogService {
       await repos.photos.saveMany(
         photos
           .filter((photo) => photo.tripId === id)
-          .map((photo) => ({ ...photo, tripId: null, visitId: null, candidateId: null, updatedAt: now })),
+          .map((photo) => ({
+            ...photo,
+            tripId: null,
+            visitId: null,
+            candidateId: null,
+            updatedAt: now,
+          })),
       );
     });
     await this.refresh();
@@ -714,11 +854,198 @@ export class TravelFrogService {
   }
 
   async applyLocationSuggestions(photoIds: readonly string[]): Promise<number> {
-    const now = this.deps.clock.now();
     const selected = new Set(photoIds);
-    const suggestions = this.suggestions().filter((item) => selected.has(item.photoId));
-    if (suggestions.length === 0) return 0;
-    const byPhoto = new Map(suggestions.map((item) => [item.photoId, item]));
+    const suggestions = this.suggestions().filter((item) =>
+      selected.has(item.photoId),
+    );
+    if (!suggestions.length) return 0;
+    await this.persistLocationEdits(
+      new Map(suggestions.map((item) => [item.photoId, { geo: item.geo }])),
+      "candidate",
+    );
+    return suggestions.length;
+  }
+
+  async retryPhotoPreview(photoId: string, original?: File): Promise<void> {
+    const photo = this.store.getSnapshot().photos.find((p) => p.id === photoId);
+    if (!photo) throw new AppError("INVALID_INPUT", "照片记录不存在");
+    const retained = photo.sourceRef
+      ? await this.deps.gateway.read((repos) =>
+          repos.thumbnails.get(photo.sourceRef!),
+        )
+      : null;
+    const file =
+      original ??
+      (retained
+        ? new File([retained], photo.fileName, { type: photo.mimeType })
+        : null);
+    if (!file)
+      throw new AppError(
+        "INVALID_INPUT",
+        "旧记录没有保留原文件，请重新选择同一张原图",
+      );
+    const fingerprint = await this.deps.fingerprints.hash(file);
+    if (photo.contentHash && fingerprint.hash !== photo.contentHash)
+      throw new AppError(
+        "INVALID_INPUT",
+        "所选文件与原记录内容不同，请选择同一张原图，避免关联错照片",
+      );
+    const preview = await this.deps.thumbnails.create(file, 2048);
+    if (!preview)
+      throw new AppError(
+        "INVALID_INPUT",
+        "仍无法解码这张原图。请保留原文件；可以在设备本地转为 JPG 后作为新照片导入，不会上传到第三方",
+      );
+    await this.deps.gateway.run(async (repos) => {
+      const current = await repos.photos.get(photo.id);
+      if (!current) throw new AppError("INVALID_INPUT", "记录已变化，请刷新");
+      const key = `thumb_${photo.id}`;
+      await repos.thumbnails.put(key, preview);
+      await repos.photos.saveMany([
+        {
+          ...current,
+          thumbRef: key,
+          issues: current.issues.filter((i) => i.code !== "thumbnail-failed"),
+          updatedAt: this.deps.clock.now(),
+        },
+      ]);
+    });
+    await this.refresh();
+  }
+
+  async setPhotoCaptureTime(photoId: string, at: number | null): Promise<void> {
+    if (
+      at !== null &&
+      (!Number.isSafeInteger(at) ||
+        at < 0 ||
+        at > this.deps.clock.now() + 86400000)
+    )
+      throw new AppError(
+        "INVALID_INPUT",
+        "请填写有效的拍摄时间，不要使用未来时间",
+      );
+    await this.deps.gateway.run(async (repos) => {
+      const photo = await repos.photos.get(photoId as never);
+      if (!photo || photo.tripId)
+        throw new AppError("INVALID_INPUT", "仅可在确认旅行前补拍摄时间");
+      const now = this.deps.clock.now();
+      const updated: typeof photo = {
+        ...photo,
+        capturedAt: at ?? photo.capturedAt,
+        capturedAtSource: at === null ? "missing" : "manual",
+        captureOffsetMinutes: this.deps.clock.localOffsetMinutes(at ?? now),
+        offsetSource: "device",
+        issues:
+          at === null
+            ? photo.issues
+            : photo.issues.filter((i) => i.code !== "no-timestamp"),
+        updatedAt: now,
+      };
+      if (photo.candidateId) {
+        const candidate = await repos.candidates.get(
+          photo.candidateId as never,
+        );
+        if (candidate?.status === "pending") {
+          const members = (await repos.photos.listAll())
+            .filter(
+              (p) =>
+                candidate.photoIds.includes(p.id) &&
+                (p.id !== photo.id || at !== null),
+            )
+            .map((p) => (p.id === photo.id ? updated : p));
+          if (members.length)
+            await repos.candidates.save({
+              ...candidate,
+              ...summarizePhotos(
+                members,
+                (g) => this.deps.cityResolver.resolve(g),
+                this.offset(),
+              ),
+              photoIds: members.map((p) => p.id),
+              updatedAt: now,
+            });
+          else await repos.candidates.deleteMany([candidate.id]);
+        }
+      } else if (at !== null) {
+        const summary = summarizePhotos(
+          [updated],
+          (g) => this.deps.cityResolver.resolve(g),
+          this.offset(),
+        );
+        const candidate = {
+          id: this.deps.ids.newCandidateId(),
+          importBatchId: photo.importBatchId,
+          ...summary,
+          photoIds: [photo.id],
+          splitReasons: ["manual"] as const,
+          derivedFrom: [],
+          origin: photo.origin,
+          createdAt: now,
+        };
+        const made = createCandidate(candidate);
+        if (!made.ok) throw new DomainViolation(made.error);
+        await repos.candidates.save(made.value);
+        await repos.photos.saveMany([
+          { ...updated, candidateId: made.value.id },
+        ]);
+        return;
+      }
+      await repos.photos.saveMany([
+        { ...updated, candidateId: at === null ? null : updated.candidateId },
+      ]);
+    });
+    await this.refresh();
+  }
+
+  async setPhotoLocations(
+    photoIds: readonly string[],
+    input: { name: string; country: string; lat: number; lng: number },
+  ): Promise<void> {
+    if (
+      !input.name.trim() ||
+      input.name.trim().length > 100 ||
+      !input.country.trim() ||
+      input.country.trim().length > 100
+    )
+      throw new AppError(
+        "INVALID_INPUT",
+        "请填写地点名与国家/地区（最多100字）",
+      );
+    const geo = makeGeoPoint({
+      lat: input.lat,
+      lng: input.lng,
+      source: "manual",
+      approximate: true,
+    });
+    if (!geo.ok) throw new DomainViolation(geo.error);
+    const known = this.deps.cityResolver.resolveByName(input.name);
+    const city = makeCityRef({
+      name: input.name,
+      countryName: input.country,
+      countryCode:
+        known?.countryName === input.country.trim() ? known.countryCode : "XXX",
+      centroid: geo.value,
+      source: "manual",
+      confidence: "high",
+    });
+    const photos = this.store.getSnapshot().photos;
+    const ids = [...new Set(photoIds)];
+    if (
+      !ids.length ||
+      ids.some((id) => !photos.some((p) => p.id === id && !p.ignored))
+    )
+      throw new AppError("INVALID_INPUT", "请选择仍在档案里的照片");
+    await this.persistLocationEdits(
+      new Map(ids.map((id) => [id, { geo: geo.value, manualCityRef: city }])),
+      "manual",
+    );
+  }
+
+  private async persistLocationEdits(
+    byPhoto: ReadonlyMap<string, { geo: GeoPoint; manualCityRef?: CityRef }>,
+    source: "manual" | "candidate",
+  ): Promise<void> {
+    const now = this.deps.clock.now();
     try {
       await this.deps.gateway.run(async (repos) => {
         const photos = await repos.photos.listAll();
@@ -728,12 +1055,36 @@ export class TravelFrogService {
           return {
             ...photo,
             geo: suggestion.geo,
-            locationSource: 'candidate' as const,
+            locationSource: source,
+            ...(suggestion.manualCityRef
+              ? { manualCityRef: suggestion.manualCityRef }
+              : {}),
             updatedAt: now,
           };
         });
+        for (const candidate of await repos.candidates.listAll()) {
+          if (
+            candidate.status !== "pending" ||
+            !candidate.photoIds.some((id) => byPhoto.has(id))
+          )
+            continue;
+          const members = updated.filter((photo) =>
+            candidate.photoIds.includes(photo.id),
+          );
+          await repos.candidates.save({
+            ...candidate,
+            ...summarizePhotos(
+              members,
+              (geo) => this.deps.cityResolver.resolve(geo),
+              this.offset(),
+            ),
+            updatedAt: now,
+          });
+        }
         const affectedTrips = new Set(
-          updated.filter((photo) => byPhoto.has(photo.id) && photo.tripId !== null).map((photo) => photo.tripId as string),
+          updated
+            .filter((photo) => byPhoto.has(photo.id) && photo.tripId !== null)
+            .map((photo) => photo.tripId as string),
         );
         const rebuiltVisits: Visit[] = [];
         const visitByPhoto = new Map<string, string>();
@@ -752,8 +1103,13 @@ export class TravelFrogService {
             now,
           });
           if (!visits.ok) throw new DomainViolation(visits.error);
+          await repos.trips.save({
+            ...trip,
+            cityRefs: dedupeCities(visits.value.visits.map((v) => v.cityRef)),
+          });
           rebuiltVisits.push(...visits.value.visits);
-          for (const [photoId, visitId] of visits.value.photoVisitIds) visitByPhoto.set(photoId, visitId);
+          for (const [photoId, visitId] of visits.value.photoVisitIds)
+            visitByPhoto.set(photoId, visitId);
         }
         const finalPhotos = updated.map((photo) => {
           if (photo.tripId !== null && affectedTrips.has(photo.tripId)) {
@@ -764,14 +1120,17 @@ export class TravelFrogService {
         });
         await repos.visits.saveMany(rebuiltVisits);
         await repos.photos.saveMany(
-          finalPhotos.filter((photo) => byPhoto.has(photo.id) || (photo.tripId !== null && affectedTrips.has(photo.tripId))),
+          finalPhotos.filter(
+            (photo) =>
+              byPhoto.has(photo.id) ||
+              (photo.tripId !== null && affectedTrips.has(photo.tripId)),
+          ),
         );
       });
     } catch (error) {
-      throw toAppError(error, 'FILL_FAILED', '写入位置失败');
+      throw toAppError(error, "FILL_FAILED", "写入位置失败");
     }
     await this.refresh();
-    return suggestions.length;
   }
 
   async addWish(input: {
@@ -784,25 +1143,34 @@ export class TravelFrogService {
   }): Promise<string> {
     const now = this.deps.clock.now();
     const name = input.name.trim();
-    if (name.length === 0) throw new AppError('INVALID_INPUT', '请填写想去的地方');
-    const resolved = this.deps.cityResolver.resolveByName(name, input.countryCode);
+    if (name.length === 0)
+      throw new AppError("INVALID_INPUT", "请填写想去的地方");
+    const resolved = this.deps.cityResolver.resolveByName(
+      name,
+      input.countryCode,
+    );
     let cityRef: CityRef;
     if (resolved) {
       cityRef = resolved;
     } else {
-      let centroid: CityRef['centroid'] = null;
+      let centroid: CityRef["centroid"] = null;
       if (input.lat !== undefined && input.lng !== undefined) {
-        const geo = makeGeoPoint({ lat: input.lat, lng: input.lng, source: 'manual', approximate: true });
+        const geo = makeGeoPoint({
+          lat: input.lat,
+          lng: input.lng,
+          source: "manual",
+          approximate: true,
+        });
         if (!geo.ok) throw new DomainViolation(geo.error);
         centroid = geo.value;
       }
       cityRef = makeCityRef({
         name,
-        countryCode: input.countryCode?.trim().toUpperCase() || 'XXX',
-        countryName: input.region.trim() || '未知',
+        countryCode: input.countryCode?.trim().toUpperCase() || "XXX",
+        countryName: input.region.trim() || "未知",
         centroid,
-        source: 'manual',
-        confidence: 'low',
+        source: "manual",
+        confidence: "low",
       });
     }
     const id = this.deps.ids.newWishId();
@@ -811,10 +1179,10 @@ export class TravelFrogService {
       cityRef,
       region: input.region.trim() || null,
       note: input.notes?.trim() || null,
-      status: 'pending',
-      source: 'user',
+      status: "pending",
+      source: "user",
       from: null,
-      origin: 'user',
+      origin: "user",
       now,
     });
     if (!wish.ok) throw new DomainViolation(wish.error);
@@ -826,12 +1194,18 @@ export class TravelFrogService {
   }
 
   /** pending -> received when the frog comes back with a written postcard. */
-  async deliverWish(wishId: string, input: { note: string; from?: string | null }): Promise<void> {
+  async deliverWish(
+    wishId: string,
+    input: { note: string; from?: string | null },
+  ): Promise<void> {
     const now = this.deps.clock.now();
     await this.deps.gateway.run(async (repos) => {
       const wish = await repos.wishes.get(asWishId(wishId));
-      if (!wish) fail('WISH_STATE_INVALID', '明信片不存在');
-      const next = changeWishStatus(wish, 'received', now, { note: input.note, from: input.from ?? wish.from });
+      if (!wish) fail("WISH_STATE_INVALID", "明信片不存在");
+      const next = changeWishStatus(wish, "received", now, {
+        note: input.note,
+        from: input.from ?? wish.from,
+      });
       if (!next.ok) throw new DomainViolation(next.error);
       await repos.wishes.save(next.value);
     });
@@ -842,7 +1216,7 @@ export class TravelFrogService {
     const now = this.deps.clock.now();
     await this.deps.gateway.run(async (repos) => {
       const wish = await repos.wishes.get(asWishId(wishId));
-      if (!wish) fail('WISH_STATE_INVALID', '明信片不存在');
+      if (!wish) fail("WISH_STATE_INVALID", "明信片不存在");
       const next = changeWishStatus(wish, status, now);
       if (!next.ok) throw new DomainViolation(next.error);
       await repos.wishes.save(next.value);
@@ -853,13 +1227,28 @@ export class TravelFrogService {
   /** Deadlines derive from persisted creation time, so a reload cannot lose a delivery. */
   async deliverDuePostcards(): Promise<void> {
     const now = this.deps.clock.now();
-    const due = this.store.getSnapshot().wishes.some((wish) =>
-      wish.origin === 'user' && wish.delivery !== 'journey' && wish.status === 'pending' && wish.createdAt + POSTCARD_DELIVERY_MS <= now);
+    const due = this.store
+      .getSnapshot()
+      .wishes.some(
+        (wish) =>
+          wish.origin === "user" &&
+          wish.delivery !== "journey" &&
+          wish.status === "pending" &&
+          wish.createdAt + POSTCARD_DELIVERY_MS <= now,
+      );
     if (!due) return;
     await this.deps.gateway.run(async (repos) => {
       for (const wish of await repos.wishes.list()) {
-        if (wish.origin !== 'user' || wish.delivery === 'journey' || wish.status !== 'pending' || wish.createdAt + POSTCARD_DELIVERY_MS > now) continue;
-        const next = changeWishStatus(wish, 'received', now, { note: postcardNote(wish.cityRef.name) });
+        if (
+          wish.origin !== "user" ||
+          wish.delivery === "journey" ||
+          wish.status !== "pending" ||
+          wish.createdAt + POSTCARD_DELIVERY_MS > now
+        )
+          continue;
+        const next = changeWishStatus(wish, "received", now, {
+          note: postcardNote(wish.cityRef.name),
+        });
         if (!next.ok) throw new DomainViolation(next.error);
         await repos.wishes.save(next.value);
       }
@@ -876,7 +1265,10 @@ export class TravelFrogService {
   }
 
   async saveSettings(patch: Partial<Settings>): Promise<void> {
-    const settings = normalizeSettings({ ...this.store.getSnapshot().settings, ...patch });
+    const settings = normalizeSettings({
+      ...this.store.getSnapshot().settings,
+      ...patch,
+    });
     await this.deps.gateway.run(async (repos) => {
       await repos.settings.save(settings);
     });
@@ -885,23 +1277,53 @@ export class TravelFrogService {
 
   async moveHome(cityName: string): Promise<void> {
     const name = cityName.trim();
-    if (name.length === 0) throw new AppError('INVALID_INPUT', '请填写家的城市');
+    if (name.length === 0)
+      throw new AppError("INVALID_INPUT", "请填写家的城市");
     const city = this.deps.cityResolver.resolveByName(name);
-    if (!city) throw new AppError('CITY_NOT_FOUND', '没有找到这个城市');
-    const next = moveHomeState(this.store.getSnapshot().home, city, this.deps.clock.now());
+    if (!city) throw new AppError("CITY_NOT_FOUND", "没有找到这个城市");
+    const next = moveHomeState(
+      this.store.getSnapshot().home,
+      city,
+      this.deps.clock.now(),
+    );
     if (!next.ok) throw new DomainViolation(next.error);
     await this.deps.gateway.run((repos) => repos.home.save(next.value));
-    await this.writeFrogTravel(async (state,home,_repos,now) => {
-      const current=state.current;
-      if (!current || journeyAway(current,now) || current.from.key===home.city.key) return undefined;
-      const direction=state.direction ?? (current.source==='directed' && current.wishId ? {destination:current.destination,wishId:current.wishId,requestedAt:now} : null);
-      return {state:planFrogJourney({...state,current:null,direction},home.city,FROG_DESTINATIONS,now),value:undefined};
+    await this.writeFrogTravel(async (state, home, _repos, now) => {
+      const current = state.current;
+      if (
+        !current ||
+        journeyAway(current, now) ||
+        current.from.key === home.city.key
+      )
+        return undefined;
+      const direction =
+        state.direction ??
+        (current.source === "directed" && current.wishId
+          ? {
+              destination: current.destination,
+              wishId: current.wishId,
+              requestedAt: now,
+            }
+          : null);
+      return {
+        state: planFrogJourney(
+          { ...state, current: null, direction },
+          home.city,
+          FROG_DESTINATIONS,
+          now,
+        ),
+        value: undefined,
+      };
     });
     await this.refresh();
   }
 
   async setFrogPerch(perch: FrogPerch): Promise<void> {
-    const next = setHomePerch(this.store.getSnapshot().home, perch, this.deps.clock.now());
+    const next = setHomePerch(
+      this.store.getSnapshot().home,
+      perch,
+      this.deps.clock.now(),
+    );
     if (!next.ok) throw new DomainViolation(next.error);
     await this.deps.gateway.run((repos) => repos.home.save(next.value));
     await this.refresh();
@@ -924,7 +1346,9 @@ export class TravelFrogService {
       photos: data.photos.map((photo) => ({
         ...photo,
         geo: includeCoordinates ? photo.geo : null,
-        locationSource: includeCoordinates ? photo.locationSource : 'none',
+        manualCityRef: includeCoordinates ? photo.manualCityRef : undefined,
+        sourceRef: undefined,
+        locationSource: includeCoordinates ? photo.locationSource : "none",
         thumbRef: null,
       })),
       candidates: data.candidates,
@@ -945,7 +1369,7 @@ export class TravelFrogService {
     await this.deps.gateway.clear();
     this.store.set({
       ...INITIAL_SNAPSHOT,
-      status: 'ready',
+      status: "ready",
       error: null,
       revision: this.store.getSnapshot().revision + 1,
       loadedAt: this.deps.clock.now(),
@@ -953,7 +1377,9 @@ export class TravelFrogService {
   }
 
   async loadDemo(): Promise<void> {
-    const { buildDemoArchive } = await import('../infrastructure/demo/demo-archive');
+    const { buildDemoArchive } = await import(
+      "../infrastructure/demo/demo-archive"
+    );
     const now = this.deps.clock.now();
     const demo = buildDemoArchive(now);
     await this.deps.gateway.run(async (repos) => {
@@ -961,16 +1387,18 @@ export class TravelFrogService {
       for (const trip of demo.trips) await repos.trips.save(trip);
       await repos.visits.saveMany(demo.visits);
       if (demo.photos.length > 0) await repos.photos.saveMany(demo.photos);
-      if (demo.candidates.length > 0) await repos.candidates.saveMany(demo.candidates);
+      if (demo.candidates.length > 0)
+        await repos.candidates.saveMany(demo.candidates);
       if (demo.memories.length > 0) {
         for (const memory of demo.memories) await repos.memories.save(memory);
       }
       if (demo.wishes.length > 0) {
         for (const wish of demo.wishes) {
-          if (!await repos.wishes.get(wish.id)) await repos.wishes.save(wish);
+          if (!(await repos.wishes.get(wish.id))) await repos.wishes.save(wish);
         }
       }
-      if (demo.manualVisits.length > 0) await repos.manualVisits.saveMany(demo.manualVisits);
+      if (demo.manualVisits.length > 0)
+        await repos.manualVisits.saveMany(demo.manualVisits);
     });
     await this.refresh();
   }
@@ -984,19 +1412,27 @@ export class TravelFrogService {
         repos.wishes.list(),
         repos.memories.listAll(),
       ]);
-      const demoTrips = trips.filter((trip) => trip.origin === 'demo');
+      const demoTrips = trips.filter((trip) => trip.origin === "demo");
       for (const trip of demoTrips) {
         await repos.visits.deleteByTrip(trip.id);
         await repos.memories.deleteByTrip(trip.id);
         await repos.trips.delete(trip.id);
       }
-      await repos.photos.deleteMany(photos.filter((photo) => photo.origin === 'demo').map((photo) => photo.id));
-      await repos.candidates.deleteMany(candidates.filter((item) => item.origin === 'demo').map((item) => item.id));
-      for (const wish of wishes.filter((item) => item.origin === 'demo')) {
+      await repos.photos.deleteMany(
+        photos
+          .filter((photo) => photo.origin === "demo")
+          .map((photo) => photo.id),
+      );
+      await repos.candidates.deleteMany(
+        candidates
+          .filter((item) => item.origin === "demo")
+          .map((item) => item.id),
+      );
+      for (const wish of wishes.filter((item) => item.origin === "demo")) {
         await repos.manualVisits.deleteByWish(wish.id);
         await repos.wishes.delete(wish.id);
       }
-      for (const memory of memories.filter((item) => item.origin === 'demo')) {
+      for (const memory of memories.filter((item) => item.origin === "demo")) {
         await repos.memories.delete(memory.id);
       }
     });

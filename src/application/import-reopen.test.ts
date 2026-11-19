@@ -105,9 +105,61 @@ describe("real JPEG import, confirmation and database reopening", () => {
     );
     expect(restored.wishes.find((w) => w.id === id)?.status).toBe("fulfilled");
     expect(restored.frogTravel).toEqual(journey);
-    expect((await reopened.service.importFiles(files)).duplicates).toBe(3);
+    expect((await reopened.service.importFiles(files)).needsRepair).toBe(3);
+    expect(reopened.service.getSnapshot().photos).toHaveLength(3);
     expect(reopened.service.getSnapshot().photos).toHaveLength(3);
     reopened.db.close();
     // Node has no browser bitmap/canvas: actual pixel preview rendering requires browser QA.
+  });
+  it("keeps a real HEIC with absent EXIF time explicitly unknown, then supports manual time and arbitrary location", async () => {
+    const now = Date.UTC(2026, 10, 19),
+      factory = new IDBFactory();
+    const db = await openDatabase(factory, now);
+    const service = new TravelFrogService({
+      gateway: new IdbUnitOfWork(db),
+      clock: { now: () => now, localOffsetMinutes: () => 0 },
+      ids: new CryptoIdGenerator(),
+      exif: new BrowserExifReader(),
+      fingerprints: new BrowserFingerprintReader(),
+      cityResolver: new GazetteerCityResolver(),
+      logger: new RingBufferLogger(),
+      thumbnails: { create: async () => null },
+    });
+    await service.load();
+    const input = new File(
+      [
+        new Uint8Array(
+          readFileSync(
+            new URL("./fixtures/synthetic-no-time.heic", import.meta.url),
+          ),
+        ),
+      ],
+      "synthetic-no-time.heic",
+      { type: "image/heic", lastModified: now },
+    );
+    const imported = await service.importFiles([input]);
+    expect(imported.needsRepair).toBe(1);
+    expect(imported.ready).toBe(0);
+    expect(service.getSnapshot().batches[0]?.status).toBe("needs-attention");
+    const photo = service.getSnapshot().photos[0]!;
+    expect(photo.capturedAtSource).toBe("missing");
+    expect(photo.sourceRef).toBeTruthy();
+    expect(service.getSnapshot().candidates).toHaveLength(0);
+    await service.setPhotoCaptureTime(photo.id, Date.UTC(2021, 7, 1, 10));
+    await service.setPhotoLocations([photo.id], {
+      name: "测试自选坐标",
+      country: "法国",
+      lat: 48.858,
+      lng: 2.295,
+    });
+    expect(service.getSnapshot().photos[0]).toMatchObject({
+      capturedAtSource: "manual",
+      capturedAt: Date.UTC(2021, 7, 1, 10),
+      geo: { lat: 48.858, lng: 2.295 },
+    });
+    expect(service.getSnapshot().candidates[0]?.cityRefs[0]?.name).toBe(
+      "测试自选坐标",
+    );
+    db.close();
   });
 });

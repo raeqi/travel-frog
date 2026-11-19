@@ -2,9 +2,10 @@ import type { ImportBatchId, PhotoId, TripId, VisitId } from '../common/ids';
 import { domainError, err, ok, type Result } from '../common/result';
 import { isFiniteInstant, isValidOffset, type Instant } from '../common/time';
 import type { ImportIssueCode, IssueSeverity } from '../import/import-issue';
+import type { CityRef } from '../city/city-ref';
 import type { GeoPoint, LocationSource } from '../geo/geo-point';
 
-export type CaptureTimeSource = 'exif-original' | 'exif-datetime' | 'file-mtime' | 'missing';
+export type CaptureTimeSource = 'exif-original' | 'exif-datetime' | 'file-mtime' | 'manual' | 'missing';
 export type OffsetSource = 'exif' | 'geo-approx' | 'device' | 'unknown';
 export type DataOrigin = 'user' | 'demo';
 
@@ -28,8 +29,10 @@ export interface Photo {
   readonly offsetSource: OffsetSource;
   readonly originalCapturedAt: Instant | null;
   readonly geo: GeoPoint | null;
+  readonly manualCityRef?: CityRef;
   readonly locationSource: LocationSource;
   readonly thumbRef: string | null;
+  readonly sourceRef?: string;
   readonly tripId: TripId | null;
   readonly visitId: VisitId | null;
   readonly candidateId: string | null;
@@ -126,6 +129,7 @@ export function validatePhoto(photo: Photo): Result<Photo> {
   if ((photo.geo === null) !== (photo.locationSource === 'none')) {
     return err(domainError('GEO_INVALID', '坐标与位置来源不一致', { id: photo.id }));
   }
+  if (photo.manualCityRef && (!photo.geo || photo.locationSource !== 'manual' || !photo.manualCityRef.name.trim() || photo.manualCityRef.name.length > 100 || !photo.manualCityRef.centroid || photo.manualCityRef.centroid.lat !== photo.geo.lat || photo.manualCityRef.centroid.lng !== photo.geo.lng)) return err(domainError('GEO_INVALID', '手动地点与照片坐标不一致'));
   return ok(photo);
 }
 

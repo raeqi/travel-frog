@@ -1,3 +1,8 @@
+import { RepairPhoto, ImportedPhotoPreview } from "./RepairPhotos";
+import {
+  ManualLocationForm,
+  type ManualLocationInput,
+} from "./ManualLocationForm";
 import { useState } from "react";
 import type { Candidate } from "../../domain/candidate/candidate";
 import type {
@@ -25,7 +30,8 @@ const REASON_LABELS: Record<string, string> = {
 
 const BATCH_LABELS: Record<string, string> = {
   importing: "导入中",
-  completed: "已完成",
+  completed: "文件已处理",
+  "needs-attention": "需要处理",
   cancelled: "已取消",
   failed: "失败",
 };
@@ -72,10 +78,18 @@ export interface DrawerProps {
   readonly onIgnoreCandidate: (id: string) => Promise<void>;
   readonly onMergeCandidates: (first: string, second: string) => Promise<void>;
   readonly onSplitCandidate: (id: string, at: number) => Promise<void>;
+  readonly onThumbnail?: (id: string) => Promise<Blob | null>;
+  readonly onRetryPhoto?: (id: string, file?: File) => Promise<void>;
+  readonly onPhotoTime?: (id: string, at: number | null) => Promise<void>;
+  readonly onSetPhotoLocations?: (
+    ids: readonly string[],
+    input: ManualLocationInput,
+  ) => Promise<void>;
   readonly onApplySuggestions: (photoIds: readonly string[]) => Promise<void>;
 }
 
 export function Drawer(props: DrawerProps) {
+  const [manualIds, setManualIds] = useState<readonly string[]>([]);
   const [selection, setSelection] = useState<readonly File[]>([]);
   const [splitSelection, setSplitSelection] = useState<{
     id: string;
@@ -96,7 +110,33 @@ export function Drawer(props: DrawerProps) {
   const pending = props.candidates.filter(
     (candidate) => candidate.status === "pending",
   );
-  const fillCount = props.suggestions.length;
+  const missingPhotos = [...props.photosById.values()].filter(
+    (p) => !p.ignored && p.geo === null,
+  );
+  const fillCount = missingPhotos.length;
+  const repairPhotos = [...props.photosById.values()].filter(
+    (p) =>
+      !p.ignored &&
+      (!p.thumbRef ||
+        p.capturedAtSource === "missing" ||
+        p.capturedAtSource === "file-mtime"),
+  );
+  const problemGroups = new Map<string, typeof props.issues>();
+  for (const issue of props.issues) {
+    const key = issue.batchId + ":" + issue.fileName;
+    const found = [...props.photosById.values()].find(
+      (p) => p.importBatchId === issue.batchId && p.fileName === issue.fileName,
+    );
+    if (
+      issue.code === "duplicate" ||
+      (found &&
+        ((issue.code === "thumbnail-failed" && found.thumbRef) ||
+          (issue.code === "no-timestamp" &&
+            found.capturedAtSource === "manual")))
+    )
+      continue;
+    problemGroups.set(key, [...(problemGroups.get(key) ?? []), issue]);
+  }
 
   const toggle = (current: readonly string[], id: string): readonly string[] =>
     current.includes(id)
@@ -121,7 +161,7 @@ export function Drawer(props: DrawerProps) {
       });
       setSelection([]);
       setImportResult(
-        `已导入 ${summary.imported} 张 · 重复 ${summary.duplicates} · 失败 ${summary.failed} · 新候选 ${summary.candidateCount}`,
+        `已保存 ${summary.imported} 条记录 · 可显示照片 ${summary.ready ?? summary.imported} 张 · 需处理 ${summary.needsRepair ?? 0} 张 · 修复 ${summary.repaired ?? 0} 张 · 重复跳过 ${summary.duplicates} · 失败 ${summary.failed} · 待确认 ${summary.candidateCount} 段`,
       );
     } catch (error) {
       setImportResult(error instanceof Error ? error.message : "导入失败");
@@ -377,9 +417,22 @@ export function Drawer(props: DrawerProps) {
                 ))}
               </ul>
             ) : null}
-            {importResult ? <p className="note">{importResult}</p> : null}
+            {importResult ? (
+              <>
+                <p className="note" role="status">
+                  {importResult}
+                </p>
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => props.onTab("candidates")}
+                >
+                  下一步：查看候选并定位
+                </button>
+              </>
+            ) : null}
             <p className="note">
-              照片只在本机解析；原图不会被复制进浏览器。导入完成后先生成候选，确认后才成为旅行。
+              照片只在本机解析。成功后保存预览；解码失败时最多保留25MB原文件供本机重试。导入完成后先生成候选，确认后才成为旅行。
             </p>
           </div>
         ) : null}
@@ -396,25 +449,28 @@ export function Drawer(props: DrawerProps) {
               </p>
             ) : null}
             {pending.length > 1 ? (
-              <div className="merge-bar">
-                <span className="merge-icon">⇄</span>
-                <span>
-                  勾选两张候选可以合并；拖动分界线预览拆分，确认后才写入。
-                </span>
-                <button
-                  className="btn ghost"
-                  type="button"
-                  disabled={selectedCandidates.length !== 2 || importing}
-                  onClick={async () => {
-                    const [first, second] = selectedCandidates;
-                    if (!first || !second) return;
-                    setSelectedCandidates([]);
-                    await props.onMergeCandidates(first, second);
-                  }}
-                >
-                  合并所选
-                </button>
-              </div>
+              <details>
+                <summary>高级整理：合并候选</summary>
+                <div className="merge-bar">
+                  <span className="merge-icon">⇄</span>
+                  <span>
+                    勾选两张候选可以合并；拖动分界线预览拆分，确认后才写入。
+                  </span>
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    disabled={selectedCandidates.length !== 2 || importing}
+                    onClick={async () => {
+                      const [first, second] = selectedCandidates;
+                      if (!first || !second) return;
+                      setSelectedCandidates([]);
+                      await props.onMergeCandidates(first, second);
+                    }}
+                  >
+                    合并所选
+                  </button>
+                </div>
+              </details>
             ) : null}
             {pending.map((candidate) => {
               const bars = [
@@ -454,6 +510,18 @@ export function Drawer(props: DrawerProps) {
                       {candidate.confidence === "high" ? "高置信" : "低置信"}
                     </span>
                   </div>
+                  <div className="candidate-previews">
+                    {candidate.photoIds.slice(0, 6).map((id) => {
+                      const photo = props.photosById.get(id);
+                      return photo ? (
+                        <ImportedPhotoPreview
+                          key={id}
+                          photo={photo}
+                          load={props.onThumbnail}
+                        />
+                      ) : null;
+                    })}
+                  </div>
                   <div className="timeline">
                     {bars.map((bar, index) => (
                       <i key={index} className={bar} />
@@ -475,12 +543,45 @@ export function Drawer(props: DrawerProps) {
                     <button
                       className="btn primary"
                       type="button"
-                      onClick={() =>
-                        void props.onConfirmCandidate(candidate.id)
-                      }
+                      onClick={() => {
+                        if (
+                          candidate.photoIds.some(
+                            (id) =>
+                              !props.photosById.get(id)?.thumbRef ||
+                              props.photosById.get(id)?.capturedAtSource ===
+                                "missing",
+                          )
+                        ) {
+                          props.onTab("progress");
+                        } else if (candidate.locationMissingCount > 0) {
+                          setManualIds(
+                            candidate.photoIds.filter(
+                              (id) => props.photosById.get(id)?.geo === null,
+                            ),
+                          );
+                          props.onTab("fill");
+                        } else void props.onConfirmCandidate(candidate.id);
+                      }}
                     >
-                      确认
+                      {candidate.photoIds.some(
+                        (id) => !props.photosById.get(id)?.thumbRef,
+                      )
+                        ? "先修复照片预览"
+                        : candidate.locationMissingCount > 0
+                          ? "先补位置，再上地图"
+                          : "确认并在地图查看"}
                     </button>
+                    {candidate.locationMissingCount > 0 && (
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        onClick={() =>
+                          void props.onConfirmCandidate(candidate.id)
+                        }
+                      >
+                        先存入档案（暂不上图）
+                      </button>
+                    )}
                     <button
                       className="btn ghost"
                       type="button"
@@ -567,7 +668,9 @@ export function Drawer(props: DrawerProps) {
                 </div>
               );
             })}
-            <p className="note">确认后才会写入档案；误操作可以撤销。</p>
+            <p className="note">
+              有坐标的照片确认后才上地图；缺位置的照片可先补位置，或暂存档案后再补。
+            </p>
           </div>
         ) : null}
 
@@ -575,15 +678,47 @@ export function Drawer(props: DrawerProps) {
           <div className="panel">
             <div className="panel-title">
               <h3>缺定位照片</h3>
-              <span>{fillCount} 张建议</span>
+              <span>
+                {fillCount} 张缺位置 · {props.suggestions.length} 张有建议
+              </span>
             </div>
             {fillCount === 0 ? (
+              <p className="note">目前没有缺位置的照片。</p>
+            ) : (
               <p className="note">
-                没有可套用的位置。导入带 GPS
-                的照片后，同一天的无定位照片会出现在这里。
+                可以手动指定任意地点；下面的自动建议仅供参考，不会自动写入。
               </p>
+            )}
+            {manualIds.length > 0 && props.onSetPhotoLocations ? (
+              <ManualLocationForm
+                key={manualIds.join(",")}
+                count={manualIds.length}
+                onCancel={() => setManualIds([])}
+                onSave={async (input) => {
+                  await props.onSetPhotoLocations!(manualIds, input);
+                  setManualIds([]);
+                  props.onTab("candidates");
+                }}
+              />
             ) : null}
-            {fillCount > 0 ? (
+            {missingPhotos.map((photo) => (
+              <div className="card fill-row" key={photo.id}>
+                <span>
+                  {photo.fileName} · 缺位置
+                  {props.suggestions.some((s) => s.photoId === photo.id)
+                    ? " · 有建议"
+                    : " · 无自动建议"}
+                </span>
+                <button
+                  className="btn primary"
+                  type="button"
+                  onClick={() => setManualIds([photo.id])}
+                >
+                  手动指定位置
+                </button>
+              </div>
+            ))}
+            {props.suggestions.length > 0 ? (
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                 <button
                   className="btn primary"
@@ -676,6 +811,17 @@ export function Drawer(props: DrawerProps) {
 
         {props.tab === "progress" ? (
           <div className="panel">
+            {props.onRetryPhoto &&
+              props.onPhotoTime &&
+              repairPhotos.map((photo) => (
+                <RepairPhoto
+                  key={photo.id}
+                  photo={photo}
+                  load={props.onThumbnail}
+                  onRetry={props.onRetryPhoto!}
+                  onTime={props.onPhotoTime!}
+                />
+              ))}
             <div className="panel-title">
               <h3>最近的导入</h3>
               <span>{props.batches.length} 批</span>
@@ -684,43 +830,58 @@ export function Drawer(props: DrawerProps) {
               {props.batches.length === 0 ? (
                 <p className="note">还没有导入记录。</p>
               ) : null}
-              {props.batches.map((batch) => (
-                <div className="progress-row" key={batch.id}>
-                  <span
-                    className={`pstate ${batch.status === "completed" ? "done" : batch.status === "failed" ? "error" : "running"}`}
-                  >
-                    {batch.status === "completed"
-                      ? "✓"
-                      : batch.status === "failed"
-                        ? "!"
-                        : "·"}
-                  </span>
-                  <span className="plabel">
-                    <strong>
-                      {BATCH_LABELS[batch.status] ?? batch.status}
-                    </strong>
-                    <span>
-                      {batch.sourceFileCount} 个文件 · {batch.photoCount} 张照片
-                      · {batch.candidateCount} 段候选
-                    </span>
-                  </span>
-                  {batch.issueCount > 0 ? (
-                    <span className="hint">{batch.issueCount} 个问题</span>
-                  ) : null}
-                  {batch.status === "failed" ? (
-                    <button
-                      className="btn ghost"
-                      type="button"
-                      onClick={() => {
-                        if (!importing)
-                          document.getElementById("wall-file-input")?.click();
-                      }}
+              {props.batches.map((batch) => {
+                const members = [...props.photosById.values()].filter(
+                  (p) => p.importBatchId === batch.id,
+                );
+                const needs = members.filter(
+                  (p) =>
+                    !p.thumbRef ||
+                    p.capturedAtSource === "missing" ||
+                    p.capturedAtSource === "file-mtime",
+                ).length;
+                const state =
+                  needs > 0
+                    ? "needs-attention"
+                    : batch.status === "needs-attention"
+                      ? "completed"
+                      : batch.status;
+                return (
+                  <div className="progress-row" key={batch.id}>
+                    <span
+                      className={`pstate ${state === "completed" ? "done" : state === "failed" ? "error" : "running"}`}
                     >
-                      重新选择文件重试
-                    </button>
-                  ) : null}
-                </div>
-              ))}
+                      {state === "completed"
+                        ? "✓"
+                        : state === "failed"
+                          ? "!"
+                          : "·"}
+                    </span>
+                    <span className="plabel">
+                      <strong>{BATCH_LABELS[state] ?? state}</strong>
+                      <span>
+                        {batch.sourceFileCount} 个文件 · {batch.photoCount}{" "}
+                        张照片 · {batch.candidateCount} 段候选
+                      </span>
+                    </span>
+                    {batch.issueCount > 0 ? (
+                      <span className="hint">{batch.issueCount} 个问题</span>
+                    ) : null}
+                    {state === "failed" ? (
+                      <button
+                        className="btn ghost"
+                        type="button"
+                        onClick={() => {
+                          if (!importing)
+                            document.getElementById("wall-file-input")?.click();
+                        }}
+                      >
+                        重新选择文件重试
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
             <div className="card">
               <div className="panel-title">
@@ -739,11 +900,13 @@ export function Drawer(props: DrawerProps) {
               {props.issues.length === 0 ? (
                 <p className="note">没有需要处理的问题文件。</p>
               ) : null}
-              {props.issues.map((issue) => (
-                <div className="file-row" key={issue.id}>
-                  <span className="name">{issue.fileName}</span>
+              {[...problemGroups.entries()].map(([key, issues]) => (
+                <div className="file-row" key={key}>
+                  <span className="name">{issues[0]?.fileName}</span>
                   <span className="issue">
-                    {ISSUE_LABELS[issue.code] ?? issue.code}
+                    {[...new Set(issues.map((i) => ISSUE_LABELS[i.code]))].join(
+                      " · ",
+                    )}
                   </span>
                 </div>
               ))}

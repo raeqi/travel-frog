@@ -29,6 +29,7 @@ export interface ResolveVisitsInput {
 
 function cityFor(photo: Photo, lookup: CityLookup): CityRef {
   if (photo.geo) {
+    if (photo.manualCityRef) return photo.manualCityRef;
     const city = lookup(photo.geo);
     if (city) return city;
     return unknownCity(photo.geo);

@@ -34,7 +34,7 @@ export function summarizePhotos(
   for (const photo of sorted) {
     if (!photo.geo) continue;
     located += 1;
-    const city = resolveCity(photo.geo);
+    const city = photo.manualCityRef ?? resolveCity(photo.geo);
     if (city) cities.push(city);
   }
   const missing = sorted.length - located;

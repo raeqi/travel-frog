@@ -159,6 +159,7 @@ function file(name: string): File {
 async function createService(
   clock: Clock = new TestClock(),
   factory = new IDBFactory(),
+  preview: ThumbnailGenerator = thumbnails,
 ) {
   const db = await openDatabase(factory, NOW);
   const service = new TravelFrogService({
@@ -166,7 +167,7 @@ async function createService(
     clock,
     ids: new TestIds(),
     exif,
-    thumbnails,
+    thumbnails: preview,
     fingerprints,
     cityResolver,
     logger,
@@ -247,11 +248,12 @@ describe("travel-frog application flow", () => {
     ).toBe(true);
   });
 
-  it("reports duplicates instead of importing the same bytes twice", async () => {
+  it("retries a broken preview without creating a duplicate record", async () => {
     await service.importFiles([file("a.jpg")]);
     const second = await service.importFiles([file("a.jpg")]);
     expect(second.imported).toBe(0);
-    expect(second.duplicates).toBe(1);
+    expect(second.duplicates).toBe(0);
+    expect(second.needsRepair).toBe(1);
     expect(service.getSnapshot().photos).toHaveLength(1);
   });
 
@@ -404,21 +406,21 @@ it("reloading the demo preserves a user choice already made on its postcard", as
   db.close();
 });
 
-describe('autonomous travel persistence and direction', () => {
+describe("autonomous travel persistence and direction", () => {
   const hoian = {
-    name: '会安',
-    country: '越南',
-    countryCode: 'VNM',
+    name: "会安",
+    country: "越南",
+    countryCode: "VNM",
     lat: 15.8801,
     lng: 108.338,
   };
-  it('travels without imported photos, delivers once, and creates no real trips or awards', async () => {
+  it("travels without imported photos, delivers once, and creates no real trips or awards", async () => {
     let now = NOW;
     const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
     const { service, db } = await createService(clock);
-    await service.configureFrogTravel({ pace: 'preview' });
+    await service.configureFrogTravel({ pace: "preview" });
     const j = service.getSnapshot().frogTravel!.current!;
-    expect(j.source).toBe('autonomous');
+    expect(j.source).toBe("autonomous");
     now = j.letterAt! - 1;
     await service.advanceFrogTravel();
     expect(service.getSnapshot().wishes).toHaveLength(0);
@@ -427,16 +429,16 @@ describe('autonomous travel persistence and direction', () => {
     await service.advanceFrogTravel();
     expect(service.getSnapshot().wishes).toHaveLength(1);
     expect(service.getSnapshot().wishes[0]).toMatchObject({
-      status: 'received',
-      delivery: 'journey',
-      source: 'frog',
+      status: "received",
+      delivery: "journey",
+      source: "frog",
     });
-    expect(service.getSnapshot().wishes[0]?.note).toContain('模拟旅记');
+    expect(service.getSnapshot().wishes[0]?.note).toContain("模拟旅记");
     expect(service.getSnapshot().trips).toHaveLength(0);
     expect(service.getSnapshot().home.specialties).toHaveLength(0);
     db.close();
   });
-  it('recovers one planned journey after months offline without inventing a backlog', async () => {
+  it("recovers one planned journey after months offline without inventing a backlog", async () => {
     let now = NOW;
     const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
     const factory = new IDBFactory();
@@ -454,34 +456,34 @@ describe('autonomous travel persistence and direction', () => {
     expect(second.service.getSnapshot().wishes).toHaveLength(count);
     second.db.close();
   });
-  it('queues a direction while away and excludes its card from legacy six-second delivery', async () => {
+  it("queues a direction while away and excludes its card from legacy six-second delivery", async () => {
     let now = NOW;
     const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
     const { service, db } = await createService(clock);
-    await service.configureFrogTravel({ pace: 'preview' });
+    await service.configureFrogTravel({ pace: "preview" });
     const j = service.getSnapshot().frogTravel!.current!;
     now = j.departAt + 1;
     await service.advanceFrogTravel();
     const id = await service.directFrogTravel(hoian);
     expect(service.getSnapshot().frogTravel?.current?.id).toBe(j.id);
     expect(service.getSnapshot().frogTravel?.direction?.destination.name).toBe(
-      '会安',
+      "会安",
     );
     now += 6001;
     await service.deliverDuePostcards();
     expect(service.getSnapshot().wishes.find((w) => w.id === id)?.status).toBe(
-      'pending',
+      "pending",
     );
     now = j.homeAt + 1;
     await service.advanceFrogTravel();
     expect(service.getSnapshot().frogTravel?.current).toMatchObject({
-      source: 'directed',
+      source: "directed",
       wishId: id,
-      destination: { name: '会安' },
+      destination: { name: "会安" },
     });
     db.close();
   });
-  it('finishes an active journey when automatic departure is switched off and then stays home', async () => {
+  it("finishes an active journey when automatic departure is switched off and then stays home", async () => {
     let now = NOW;
     const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
     const { service, db } = await createService(clock);
@@ -500,12 +502,12 @@ describe('autonomous travel persistence and direction', () => {
     expect(service.getSnapshot().frogTravel?.history).toHaveLength(1);
     db.close();
   });
-  it('guards the transaction so two open tabs cannot duplicate a letter or itinerary', async () => {
+  it("guards the transaction so two open tabs cannot duplicate a letter or itinerary", async () => {
     let now = NOW;
     const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
     const factory = new IDBFactory();
     const first = await createService(clock, factory);
-    await first.service.configureFrogTravel({ pace: 'preview' });
+    await first.service.configureFrogTravel({ pace: "preview" });
     const second = await createService(clock, factory);
     const j = first.service.getSnapshot().frogTravel!.current!;
     now = j.letterAt!;
@@ -522,52 +524,52 @@ describe('autonomous travel persistence and direction', () => {
     first.db.close();
     second.db.close();
   });
-  it('keeps a directed journey on its actual itinerary instead of a fixed six-second promise', async () => {
+  it("keeps a directed journey on its actual itinerary instead of a fixed six-second promise", async () => {
     let now = NOW;
     const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
     const { service, db } = await createService(clock);
     const id = await service.directFrogTravel(hoian);
     const journey = service.getSnapshot().frogTravel!.current!;
-    expect(journey.source).toBe('directed');
-    expect(journey.pace).toBe('natural');
+    expect(journey.source).toBe("directed");
+    expect(journey.pace).toBe("natural");
     now += 6001;
     await service.deliverDuePostcards();
     await service.advanceFrogTravel();
     expect(service.getSnapshot().wishes.find((w) => w.id === id)?.status).toBe(
-      'pending',
+      "pending",
     );
     now = journey.letterAt!;
     await service.advanceFrogTravel();
     expect(service.getSnapshot().wishes.find((w) => w.id === id)?.status).toBe(
-      'received',
+      "received",
     );
     expect(service.getSnapshot().frogTravel?.current?.id).toBe(journey.id);
     db.close();
   });
-  it('withdraws only a pending direction and resumes choosing independently', async () => {
+  it("withdraws only a pending direction and resumes choosing independently", async () => {
     const { service, db } = await createService();
     const id = await service.directFrogTravel(hoian);
     await service.cancelFrogDirection();
     expect(service.getSnapshot().wishes.some((w) => w.id === id)).toBe(false);
     expect(service.getSnapshot().frogTravel?.current?.source).toBe(
-      'autonomous',
+      "autonomous",
     );
     expect(service.getSnapshot().frogTravel?.direction).toBeNull();
     db.close();
   });
-  it('replans an unstarted journey from the new home while preserving the saved direction', async () => {
+  it("replans an unstarted journey from the new home while preserving the saved direction", async () => {
     const { service, db } = await createService();
     const id = await service.directFrogTravel(hoian);
-    await service.moveHome('京都');
+    await service.moveHome("京都");
     expect(service.getSnapshot().frogTravel?.current).toMatchObject({
-      source: 'directed',
+      source: "directed",
       wishId: id,
-      from: { name: '京都' },
-      destination: { name: '会安' },
+      from: { name: "京都" },
+      destination: { name: "会安" },
     });
     db.close();
   });
-  it('allows one explicit direction while automatic travel is off without silently re-enabling it', async () => {
+  it("allows one explicit direction while automatic travel is off without silently re-enabling it", async () => {
     let now = NOW;
     const clock: Clock = { now: () => now, localOffsetMinutes: () => 0 };
     const { service, db } = await createService(clock);
@@ -582,6 +584,114 @@ describe('autonomous travel persistence and direction', () => {
       enabled: false,
       current: null,
     });
+    db.close();
+  });
+});
+
+describe("repair photo records without discarding archive data", () => {
+  it("persists an arbitrary manual location on a pending photo, confirms real membership and restores it", async () => {
+    const factory = new IDBFactory(),
+      clock = new TestClock();
+    const first = await createService(clock, factory);
+    const service = first.service;
+    await service.importFiles([file("x.jpg")]);
+    const photo = service.getSnapshot().photos[0]!;
+    const before = structuredClone(service.getSnapshot().frogTravel);
+    await service.setPhotoLocations([photo.id], {
+      name: "自选山间小镇",
+      country: "法国",
+      lat: 48.858,
+      lng: 2.295,
+    });
+    const candidate = service
+      .getSnapshot()
+      .candidates.find((c) => c.photoIds.includes(photo.id))!;
+    expect(candidate.locationMissingCount).toBe(0);
+    expect(candidate.cityRefs[0]?.name).toBe("自选山间小镇");
+    await service.confirmCandidate(candidate.id);
+    expect(service.getSnapshot().visits[0]?.cityRef.name).toBe("自选山间小镇");
+    first.db.close();
+    const reopened = await createService(clock, factory);
+    const restored = reopened.service.getSnapshot();
+    expect(restored.photos[0]).toMatchObject({
+      id: photo.id,
+      contentHash: photo.contentHash,
+      geo: { lat: 48.858, lng: 2.295 },
+      manualCityRef: { name: "自选山间小镇" },
+    });
+    expect(restored.photos[0]?.tripId).not.toBeNull();
+    expect(restored.frogTravel).toEqual(before);
+    reopened.db.close();
+  });
+  it("rebuilds visits for an already confirmed unlocated photo without requiring reimport", async () => {
+    const { service, db } = await createService();
+    await service.importFiles([file("x.jpg")]);
+    const photo = service.getSnapshot().photos[0]!;
+    await service.confirmCandidate(service.getSnapshot().candidates[0]!.id);
+    expect(service.getSnapshot().visits).toHaveLength(0);
+    await service.setPhotoLocations([photo.id], {
+      name: "自定义河畔",
+      country: "中国",
+      lat: 30,
+      lng: 105,
+    });
+    expect(service.getSnapshot().visits[0]?.cityRef.name).toBe("自定义河畔");
+    expect(service.getSnapshot().photos[0]?.visitId).not.toBeNull();
+    db.close();
+  });
+  it("repairs a matching broken original into the same photo instead of silently skipping it as a duplicate", async () => {
+    let ready = false;
+    const { service, db } = await createService(
+      new TestClock(),
+      new IDBFactory(),
+      {
+        create: async () =>
+          ready ? new Blob(["decoded-preview"], { type: "image/webp" }) : null,
+      },
+    );
+    const first = await service.importFiles([file("a.jpg")]);
+    expect(first.needsRepair).toBe(1);
+    const photo = service.getSnapshot().photos[0]!;
+    expect(photo.sourceRef).toBeTruthy();
+    ready = true;
+    const second = await service.importFiles([file("a.jpg")]);
+    expect(second.repaired).toBe(1);
+    expect(second.imported).toBe(0);
+    expect(service.getSnapshot().photos).toHaveLength(1);
+    expect(service.getSnapshot().photos[0]?.id).toBe(photo.id);
+    expect(service.getSnapshot().photos[0]?.thumbRef).toBeTruthy();
+    expect(await service.thumbnail(photo.id)).not.toBeNull();
+    db.close();
+  });
+  it("still skips healthy duplicates and refuses to repair a photo using unrelated bytes", async () => {
+    const { service, db } = await createService(
+      new TestClock(),
+      new IDBFactory(),
+      { create: async () => new Blob(["preview"]) },
+    );
+    await service.importFiles([file("a.jpg")]);
+    expect((await service.importFiles([file("a.jpg")])).duplicates).toBe(1);
+    await expect(
+      service.retryPhotoPreview(
+        service.getSnapshot().photos[0]!.id,
+        file("b.jpg"),
+      ),
+    ).rejects.toThrow("内容不同");
+    db.close();
+  });
+  it("rejects invalid location edits atomically", async () => {
+    const { service, db } = await createService();
+    await service.importFiles([file("x.jpg")]);
+    const photo = service.getSnapshot().photos[0]!;
+    await expect(
+      service.setPhotoLocations([photo.id], {
+        name: "越界",
+        country: "测试",
+        lat: 91,
+        lng: 0,
+      }),
+    ).rejects.toThrow();
+    expect(service.getSnapshot().photos[0]?.geo).toBeNull();
     db.close();
   });
 });
