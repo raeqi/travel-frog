@@ -81,6 +81,7 @@ export interface DrawerProps {
   readonly onThumbnail?: (id: string) => Promise<Blob | null>;
   readonly onRetryPhoto?: (id: string, file?: File) => Promise<void>;
   readonly onPhotoTime?: (id: string, at: number | null) => Promise<void>;
+  readonly onPickPhotoLocation?: (ids: readonly string[], returnTab: DrawerTab) => void;
   readonly onSetPhotoLocations?: (
     ids: readonly string[],
     input: ManualLocationInput,
@@ -558,12 +559,9 @@ export function Drawer(props: DrawerProps) {
                         ) {
                           props.onTab("progress");
                         } else if (candidate.locationMissingCount > 0) {
-                          setManualIds(
-                            candidate.photoIds.filter(
-                              (id) => props.photosById.get(id)?.geo === null,
-                            ),
-                          );
-                          props.onTab("fill");
+                          const ids = candidate.photoIds.filter(id => props.photosById.get(id)?.geo === null);
+                          if (props.onPickPhotoLocation) props.onPickPhotoLocation(ids, "candidates");
+                          else { setManualIds(ids); props.onTab("fill"); }
                         } else void props.onConfirmCandidate(candidate.id);
                       }}
                     >
@@ -690,9 +688,11 @@ export function Drawer(props: DrawerProps) {
               <p className="note">目前没有缺位置的照片。</p>
             ) : (
               <p className="note">
-                可以手动指定任意地点；下面的自动建议仅供参考，不会自动写入。
+                在地图轻点照片拍摄的位置；下面的已有建议也可以一键使用。
               </p>
             )}
+            <details className="photo-location-advanced"><summary>高级：手动填写坐标</summary>
+            {missingPhotos.map(photo=><button key={photo.id} className="btn ghost" type="button" onClick={()=>setManualIds([photo.id])}>{photo.fileName} · 手动填写</button>)}
             {manualIds.length > 0 && props.onSetPhotoLocations ? (
               <ManualLocationForm
                 key={manualIds.join(",")}
@@ -705,6 +705,7 @@ export function Drawer(props: DrawerProps) {
                 }}
               />
             ) : null}
+            </details>
             {missingPhotos.map((photo) => (
               <div className="card fill-row" key={photo.id}>
                 <span>
@@ -716,9 +717,9 @@ export function Drawer(props: DrawerProps) {
                 <button
                   className="btn primary"
                   type="button"
-                  onClick={() => setManualIds([photo.id])}
+                  onClick={() => props.onPickPhotoLocation ? props.onPickPhotoLocation([photo.id], "fill") : setManualIds([photo.id])}
                 >
-                  手动指定位置
+                  在地图选位置
                 </button>
               </div>
             ))}
