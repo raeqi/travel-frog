@@ -1,0 +1,152 @@
+.photo-location-picker {
+  position: fixed;
+  z-index: 40;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  width: 440px;
+  max-width: calc(100vw - 24px);
+  max-height: 65dvh;
+  overflow: auto;
+  box-sizing: border-box;
+  background: #fffaf0;
+  color: #453b2e;
+  border: 1px solid #c8bba2;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 6px 30px #34271533;
+  font: 14px/1.5 system-ui;
+  overscroll-behavior: contain;
+}
+.photo-location-picker header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 10px;
+}
+.photo-location-picker header strong,
+.photo-location-picker header small {
+  display: block;
+}
+.photo-location-picker header small {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.photo-location-picker button {
+  font: inherit;
+  min-height: 40px;
+  border: 1px solid #baac90;
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: #f8f1e2;
+  color: #35543c;
+  cursor: pointer;
+}
+.photo-location-picker fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.photo-location-picker label {
+  display: grid;
+  gap: 4px;
+}
+.photo-location-picker input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  font: 16px system-ui;
+  padding: 7px;
+  border: 1px solid #bcae94;
+  border-radius: 5px;
+  background: white;
+  color: #453b2e;
+}
+.photo-location-preview {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 10px 0;
+}
+.photo-location-preview img {
+  max-width: 65px;
+  height: 48px !important;
+  border: 3px solid white;
+  box-shadow: 0 1px 3px #34271533;
+}
+.photo-location-preview p,
+.photo-location-context {
+  margin: 6px 0;
+  font-size: 13px;
+}
+.photo-location-context {
+  color: #617052;
+}
+.photo-location-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.photo-location-picker details {
+  font-size: 12px;
+  color: #756c5c;
+  margin-top: 10px;
+}
+.photo-location-picker details label {
+  margin-top: 8px;
+}
+.photo-location-picker summary {
+  cursor: pointer;
+}
+.photo-location-picker .btn.primary {
+  background: #255b3c;
+  color: white;
+}
+.photo-location-picker [role="alert"] {
+  color: #a23d2d;
+}
+.photo-picking .marker-layer,
+.photo-picking .wish-layer,
+.photo-picking .label-layer,
+.photo-picking .frog-layer {
+  opacity: 0.25;
+}
+@media (max-width: 700px) {
+  .photo-location-picker {
+    bottom: 10px;
+    padding: 12px;
+    max-height: 58dvh;
+  }
+  .photo-location-picker button {
+    min-height: 42px;
+  }
+  .photo-location-preview {
+    margin: 6px 0;
+  }
+  .photo-location-preview img {
+    max-width: 48px;
+    height: 38px !important;
+  }
+  .photo-location-picker header strong {
+    font-size: 14px;
+  }
+  .photo-location-picker header button {
+    font-size: 13px;
+    padding: 5px 7px;
+  }
+  .photo-location-buttons .primary {
+    flex: 1;
+  }
+}
+
+@media (max-width: 700px) {
+  .photo-picking .map-sheet {
+    inset: 20px 14px 18px;
+  }
+  .photo-picking .real-places {
+    top: 30px;
+    right: 18px;
+  }
+}

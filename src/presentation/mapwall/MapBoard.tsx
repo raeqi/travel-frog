@@ -32,6 +32,7 @@ export interface DestTagPlacement {
 
 export interface MapBoardProps {
   readonly selecting?:boolean;
+  readonly photoPicking?:boolean;
   readonly onMapPick?:(point:{lat:number;lng:number})=>void;
   readonly onPoiPick?:(point:RealPoi)=>void;
   readonly waypointPins?:readonly {id:string;name:string;x:number;y:number}[];
@@ -162,6 +163,8 @@ function CityPhotoPins({
             .join(' ')}
           style={{ left: `${marker.x}px`, top: `${marker.y}px`, '--tilt': tiltFor(marker.photo.id) } as CSSProperties}
           data-photo={marker.photo.id}
+          data-photo-lat={marker.photo.lat}
+          data-photo-lng={marker.photo.lng}
           data-city={marker.photo.cityKey}
           aria-label="打开照片"
           onClick={(event) => {
@@ -260,7 +263,7 @@ export function MapBoard(props: MapBoardProps) {
 
   return (
     <div className="frame">
-      <div className={`board${props.selecting?' is-selecting':''}`} ref={boardRef} onClick={event=>{
+      <div className={`board${props.selecting?' is-selecting':''}${props.photoPicking?' photo-picking':''}`} ref={boardRef} onClick={event=>{
         if(props.selecting && !(event.target as Element).closest('button,a,input,select,textarea,[role="button"],[data-map-controls]')){
           const rect=event.currentTarget.getBoundingClientRect();const point=mapCoordinate(event.clientX-rect.left,event.clientY-rect.top,props.camera,props.metrics,props.mode);if(point)props.onMapPick?.(point);
         }else onBackgroundClick();
@@ -282,7 +285,7 @@ export function MapBoard(props: MapBoardProps) {
         </svg>
 
         <div className="waypoint-layer" aria-label="清单地点标记">{props.waypointPins?.map((pin,index)=><button type="button" className="waypoint-pin" key={pin.id} style={{left:pin.x,top:pin.y}} aria-label={`清单地点：${pin.name}`} onClick={event=>{event.stopPropagation();props.onWaypointClick?.(pin.id);}}>{index+1}</button>)}{props.draftPin&&<span className="waypoint-pin waypoint-draft" style={{left:props.draftPin.x,top:props.draftPin.y}} aria-label="待保存位置">＋</span>}</div>
-        <div className="marker-layer" id="markerLayer">
+        <div className="marker-layer" inert={props.photoPicking} id="markerLayer">
           {level === 'city' || level === 'region' ? (
             <CityPhotoPins
               cityPhotos={props.cityPhotos}
@@ -318,7 +321,7 @@ export function MapBoard(props: MapBoardProps) {
           ) : null}
         </div>
 
-        <div className="wish-layer" id="wishLayer">
+        <div className="wish-layer" inert={props.photoPicking} id="wishLayer">
           {wishLinks.length > 0 ? (
             <svg className="wish-links" viewBox={`0 0 ${viewWidth} ${viewHeight}`} aria-hidden="true">
               {wishLinks.map((path, index) => (
@@ -331,7 +334,7 @@ export function MapBoard(props: MapBoardProps) {
           ))}
         </div>
 
-        <div className="label-layer" id="labelLayer">
+        <div className="label-layer" inert={props.photoPicking} id="labelLayer">
           {labels.map((label) => (
             <div
               key={label.cityKey}
@@ -368,14 +371,14 @@ export function MapBoard(props: MapBoardProps) {
           ))}
         </div>
 
-        <div className="frog-layer" id="frogLayer">
+        <div className="frog-layer" inert={props.photoPicking} id="frogLayer">
           {frog ? <FrogNode x={frog.x} y={frog.y} mode={frog.mode} charmCount={frog.charmCount} onClick={onFrogClick} /> : null}
           {bubble ? <FrogBubble placement={bubble.placement} text={bubble.text} onDismiss={onBubbleDismiss} /> : null}
         </div>
 
         {frogActions ? <FrogActions x={frogActions.x} y={frogActions.y} below={frogActions.below} onAction={onFrogAction} /> : null}
-        <RealPlaces camera={props.camera} metrics={props.metrics} mode={props.mode} project={project} {...(props.onPoiPick?{onSave:props.onPoiPick}:{})} />
-        {props.selecting&&<div className="pick-hint">选点模式 · 轻点地图后确认保存；可拖动、缩放 · 键盘回车选择视野中心</div>}
+        <RealPlaces saveLabel={props.photoPicking?'选为照片位置':'加入旅行清单'} camera={props.camera} metrics={props.metrics} mode={props.mode} project={project} {...(props.onPoiPick?{onSave:props.onPoiPick}:{})} />
+        {props.selecting&&!props.photoPicking&&<div className="pick-hint">选点模式 · 轻点地图后确认保存；可拖动、缩放 · 键盘回车选择视野中心</div>}
         {props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
         {destHint ? <div className="entrust-hint">给下一趟留个方向 · 蛙蛙也会自己安排旅行</div> : null}
       </div>
