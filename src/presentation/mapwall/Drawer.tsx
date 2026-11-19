@@ -869,7 +869,7 @@ export function Drawer(props: DrawerProps) {
                       </span>
                     </span>
                     {batch.issueCount > 0 ? (
-                      <span className="hint">{batch.issueCount} 个问题</span>
+                      <span className="hint">历史提示 {batch.issueCount} 条</span>
                     ) : null}
                     {state === "failed" ? (
                       <button
@@ -890,7 +890,7 @@ export function Drawer(props: DrawerProps) {
             <div className="card">
               <div className="panel-title">
                 <h3>问题文件</h3>
-                <span>{props.issues.length} 个</span>
+                <span>{problemGroups.size} 个文件</span>
               </div>
               {props.issues.length > 0 ? (
                 <button
@@ -901,7 +901,7 @@ export function Drawer(props: DrawerProps) {
                   导出问题清单
                 </button>
               ) : null}
-              {props.issues.length === 0 ? (
+              {problemGroups.size === 0 ? (
                 <p className="note">没有需要处理的问题文件。</p>
               ) : null}
               {[...problemGroups.entries()].map(([key, issues]) => (
