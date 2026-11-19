@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { nearbyWaypointCity } from "./waypoint-names";
 import type { FrogTravelState } from "../../domain/frog/journey";
 import type { TravelWaypoint } from "../../domain/frog/roaming";
@@ -52,6 +52,8 @@ export function WaypointPanel({
       setBusy(false);
     }
   };
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (draft) bodyRef.current?.scrollTo?.({ top: 0 }); }, [draft]);
   const nearby = draft ? nearbyWaypointCity(draft) : null;
   return (
     <aside
@@ -80,7 +82,7 @@ export function WaypointPanel({
         </button>
       </div>
       {open && (
-        <div className="waypoint-body">
+        <div className="waypoint-body" ref={bodyRef}>
           <header>
             <h2>想去的地方</h2>
             <button
