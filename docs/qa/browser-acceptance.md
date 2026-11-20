@@ -26,7 +26,9 @@ The deterministic matrix uses the offline map and intercepts external requests. 
 
 ## Evidence status
 
-Before the remote run: 185 unit tests passed; production build and browser-test type checks passed. A final camera-constraint adjustment had 7 targeted tests passing. Twelve browser cases were collected but not executed locally because the available Chromium sandbox was not operational. This candidate is **awaiting actual Actions browser results**, not accepted merely because test definitions exist.
+Candidate `f6494d3a0f162f4cd75c2f1132170f631896a4d6` passed all 185 unit tests, production build, browser type checking and all 12 browser cases in [Actions run 44774917315](https://github.com/raeqi/travel-frog/actions/runs/44774917315). The browser ran with sandboxing enabled on the supported CI runner. Screenshots include the generated photo in the actual map/memory flow, not a provider-page placeholder.
+
+The browser matrix verifies the deterministic offline photo flow, mocked POI interactions, and fallback. It does **not** verify external provider success or real streets. A diagnostic attachment now records WebGL2 capability and intercepted provider responses separately; every pushed candidate must pass its own run.
 
 The workflow uploads screenshots/traces and HTML test reports for seven days. Read the Actions run's actual conclusion and individual browser cases; retain failures for diagnosis. No external-service screenshot is used as proof that the edited app works.
 
