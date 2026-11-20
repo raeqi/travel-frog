@@ -53,13 +53,15 @@ export function WaypointPanel({
     }
   };
   const bodyRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (draft) bodyRef.current?.scrollTo?.({ top: 0 }); }, [draft]);
+  useEffect(() => {
+    if (draft) bodyRef.current?.scrollTo?.({ top: 0 });
+  }, [draft]);
   const nearby = draft ? nearbyWaypointCity(draft) : null;
   return (
     <aside
       className={`waypoint-tools${open ? " is-open" : ""}`}
       data-map-controls
-      aria-label="旅行清单"
+      aria-label="蛙蛙目的地"
     >
       <div className="waypoint-toolbar">
         <button
@@ -67,27 +69,16 @@ export function WaypointPanel({
           aria-expanded={open}
           onClick={() => onOpen(!open)}
         >
-          旅行清单 · {state.waypoints?.length ?? 0}
-        </button>
-        <button
-          type="button"
-          aria-pressed={selecting}
-          onClick={() => {
-            onSelecting(!selecting);
-            onOpen(true);
-          }}
-        >
-          {" "}
-          {selecting ? "完成选点" : "在地图选点"}
+          蛙蛙目的地 · {state.waypoints?.length ?? 0}
         </button>
       </div>
       {open && (
         <div className="waypoint-body" ref={bodyRef}>
           <header>
-            <h2>想去的地方</h2>
+            <h2>蛙蛙目的地</h2>
             <button
               type="button"
-              aria-label="收起旅行清单"
+              aria-label="收起蛙蛙目的地"
               onClick={() => {
                 onOpen(false);
                 onSelecting(false);
@@ -96,6 +87,16 @@ export function WaypointPanel({
               ×
             </button>
           </header>
+          <button
+            type="button"
+            className="add-destination"
+            onClick={() => {
+              onDraft(null);
+              onSelecting(true);
+            }}
+          >
+            添加目的地
+          </button>
           <p>
             {selecting
               ? "轻点地图选位置，再确认保存；拖动不会添加。"
@@ -132,7 +133,7 @@ export function WaypointPanel({
                     onDraft(null);
                     onSelecting(false);
                   },
-                  next ? "地点已保存，并设为下一站" : "已保存到旅行清单",
+                  next ? "地点已保存，并设为下一站" : "已保存为候选目的地",
                 );
               }}
             >
@@ -151,7 +152,7 @@ export function WaypointPanel({
                   <input
                     required
                     name="name"
-                    aria-label="清单地点名称"
+                    aria-label="目的地名称"
                     maxLength={100}
                     defaultValue={draft.name}
                     placeholder="例如：我想去的海边"
@@ -201,7 +202,7 @@ export function WaypointPanel({
                 </details>
                 <div className="waypoint-buttons">
                   <button type="submit" value="save">
-                    保存到旅行清单
+                    保存为候选目的地
                   </button>
                   <button type="submit" value="next">
                     保存并设为下一站
@@ -264,7 +265,9 @@ export function WaypointPanel({
             ))}
           </ol>
           {!state.waypoints?.length && (
-            <p>清单还是空的。可在地图点任意位置，或从真实地点详情添加。</p>
+            <p>
+              清单还是空的。点「添加目的地」后可在地图选任意位置，也可从搜索地点添加。
+            </p>
           )}
           <details className="waypoint-advanced">
             <summary>高级定位</summary>

@@ -11,7 +11,7 @@ import { useMapGestures, maxMapZoom } from './map-gestures';
 import {HouseIcon} from './HouseIcon';
 import {mapCoordinate} from './geometry';
 import type {RealPoi} from './real-pois';
-import { RealPlaces } from './RealPlaces';
+import { RealPlacePins } from './RealPlaces';
 
 export interface CityPhotoMarker {
   readonly photo: WallPhoto;
@@ -35,6 +35,7 @@ export interface MapBoardProps {
   readonly photoPicking?:boolean;
   readonly onMapPick?:(point:{lat:number;lng:number})=>void;
   readonly onPoiPick?:(point:RealPoi)=>void;
+  readonly realPois?:readonly RealPoi[];
   readonly waypointPins?:readonly {id:string;name:string;x:number;y:number}[];
   readonly onWaypointClick?:(id:string)=>void;
   readonly draftPin?:{x:number;y:number}|null;
@@ -377,8 +378,8 @@ export function MapBoard(props: MapBoardProps) {
         </div>
 
         {frogActions ? <FrogActions x={frogActions.x} y={frogActions.y} below={frogActions.below} onAction={onFrogAction} /> : null}
-        <RealPlaces saveLabel={props.photoPicking?'选为照片位置':'加入旅行清单'} camera={props.camera} metrics={props.metrics} mode={props.mode} project={project} {...(props.onPoiPick?{onSave:props.onPoiPick}:{})} />
-        {props.selecting&&!props.photoPicking&&<div className="pick-hint">选点模式 · 轻点地图后确认保存；可拖动、缩放 · 键盘回车选择视野中心</div>}
+        <RealPlacePins pois={props.realPois??[]} camera={props.camera} metrics={props.metrics} project={project} onSelect={point=>props.onPoiPick?.(point)}/>
+
         {props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
         {destHint ? <div className="entrust-hint">给下一趟留个方向 · 蛙蛙也会自己安排旅行</div> : null}
       </div>

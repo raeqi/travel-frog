@@ -202,22 +202,23 @@ export function Drawer(props: DrawerProps) {
   };
 
   return (
-    <aside className="drawer" aria-label="整理">
+    <aside className="drawer" aria-label="管理照片">
       <header className="drawer-head">
         <div>
-          <h2>整理</h2>
+          <h2>管理照片</h2>
           <p>照片留在本机，整理不离开这面墙。</p>
         </div>
         <button
           className="icon-btn"
           type="button"
-          aria-label="关闭整理"
+          aria-label="关闭管理照片"
           onClick={props.onClose}
         >
           ×
         </button>
       </header>
-      <div className="tabs" role="tablist" aria-label="整理分区">
+      {fillCount>0&&<button type="button" className="photo-location-reminder" onClick={()=>props.onTab("fill")}>{fillCount} 张照片待补位置</button>}
+      <div className="tabs" role="tablist" aria-label="照片管理分区">
         <button
           type="button"
           role="tab"

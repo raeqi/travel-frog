@@ -35,6 +35,7 @@ function remaining(at: number, now: number, fast: boolean) {
         : `约 ${(seconds / 3600).toFixed(1)} 小时`;
 }
 interface Props {
+  readonly showChip?: boolean;
   readonly state: FrogTravelState;
   readonly home: CityRef;
   readonly now: number;
@@ -52,6 +53,7 @@ interface Props {
   readonly onCancelDirection: () => Promise<void>;
 }
 export function FrogJourneyPanel({
+  showChip = true,
   state,
   home,
   now,
@@ -105,7 +107,7 @@ export function FrogJourneyPanel({
   };
   return (
     <>
-      <button
+      {showChip && <button
         className="journey-chip"
         type="button"
         aria-label="蛙蛙的旅行"
@@ -117,7 +119,7 @@ export function FrogJourneyPanel({
           <strong>{activity}</strong>
           <small>{fast ? '加速演示' : '自主漫游 · 本机模拟'}</small>
         </span>
-      </button>
+      </button>}
       {open && (
         <div
           className="journey-shade"

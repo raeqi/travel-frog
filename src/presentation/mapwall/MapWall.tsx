@@ -34,7 +34,7 @@ import { photoLocationCamera } from './photo-location-camera';
 import type { ManualLocationInput } from './ManualLocationForm';
 import { namedMapPoint } from './waypoint-names';
 import { EntrustChooser } from './EntrustChooser';
-import { Crumb, EmptyCard, TopBar, Toast, Tray, ZoomControls } from './Chrome';
+import { Crumb, EmptyCard, TopBar, Toast, ZoomControls } from './Chrome';
 import { MemoryOverlay } from './MemoryOverlay';
 import { Drawer, type DrawerTab } from './Drawer';
 import { WishFocus, type WishBackPhoto } from './Postcard';
@@ -44,7 +44,7 @@ import { furnitureFor, luggageTier, type SpecialtyAward } from '../../domain/hom
 import type { FrogPerch } from '../../domain/home/perch';
 import type { MapViewState } from '../../domain/home/map-view';
 import { SettingsPanel, type ThemeChoice } from './SettingsPanel';
-import { SearchPanel, type SearchItem } from './SearchPanel';
+import { SearchPanel, type SearchItem, type PlaceSearchTab } from './SearchPanel';
 import type { PlacedPostcard } from './Postcard';
 import { cityCamera } from './city-camera';
 import { boundCamera, maxMapZoom } from './map-gestures';
@@ -57,6 +57,10 @@ import {routeActivity,type TravelWaypoint} from '../../domain/frog/roaming';
 import {landAt} from '../../infrastructure/geo/frog-landscape';
 import './waypoints.css';
 import './map-left-rail.css';
+import './map-primary-actions.css';
+import {RealPlaces} from './RealPlaces';
+import {useRealPlaces} from './useRealPlaces';
+import {poiArea} from './real-pois';
 
 type Mode = 'world' | 'city' | 'region';
 type Level = 'world' | 'country' | 'city' | 'region';
@@ -238,6 +242,7 @@ export function MapWall() {
   const frogAway = journeyAway(travel.current,journeyNow);
   const model = useMemo(() => buildWallModel(snapshot, snapshot.home.city.key), [snapshot]);
   const empty = wallModelIsEmpty(model);
+  const missingPhotoCount=snapshot.photos.filter(p=>!p.ignored&&p.geo===null).length;
 
   const [scene, setScene] = useState<'wall' | 'home'>('wall');
   const [waypointsOpen,setWaypointsOpen]=useState(false),[selecting,setSelecting]=useState(false),[waypointDraft,setWaypointDraft]=useState<WaypointDraft|null>(null);
@@ -257,6 +262,9 @@ export function MapWall() {
   const boardRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState<Metrics>(EMPTY_METRICS);
+  const realPoiArea=poiArea(camera,metrics,mode);
+  const realPlaces=useRealPlaces(realPoiArea);
+  const [searchTab,setSearchTab]=useState<PlaceSearchTab>('archive');
 
   const [theme, setTheme] = useState<ThemeChoice>(snapshot.settings.theme);
   const [hints, setHints] = useState(snapshot.settings.frogHints);
@@ -498,7 +506,7 @@ export function MapWall() {
     frame=requestAnimationFrame(step);return()=>cancelAnimationFrame(frame);
   },[following,scene,metrics,travel,snapshot.home.city,animationInstant]);
 
-  const locateWaypoint=useCallback((point:TravelWaypoint)=>{
+  const locateWaypoint=useCallback((point:Pick<TravelWaypoint,'lat'|'lng'>)=>{
     setScene('wall');setReplay(null);setFan(null);animateCamera({cx:projectWorld(point.lat,point.lng).x,cy:projectWorld(point.lat,point.lng).y,zoom:3600},'world','world');
   },[animateCamera,setReplay]);
   const startPhotoPick=useCallback((ids:readonly string[],returnTab:DrawerTab)=>{
@@ -545,8 +553,11 @@ export function MapWall() {
   const pickMapPoint=useCallback((point:{lat:number;lng:number})=>{
     if(photoSaving.current)return;
     if(photoPick){setPhotoPick(current=>current?{...current,draft:namedMapPoint(point)}:current);revealPhotoPin(point);return;}
-    setWaypointDraft(namedMapPoint(point));setWaypointsOpen(true);setSelecting(false);
+    setWaypointDraft(namedMapPoint(point));setWaypointsOpen(true);setListOpen(false);setSelecting(false);
   },[photoPick,revealPhotoPin]);
+  const startDestinationPick=()=>{setScene('wall');setWaypointDraft(null);setSelecting(true);setWaypointsOpen(false);setListOpen(false);setSearchOpen(false);setJourneyPanelOpen(false);followingRef.current=false;setFollowing(false);setFan(null);setFrogActionsOpen(false);};
+  const cancelDestinationPick=()=>{setSelecting(false);setWaypointDraft(null);setWaypointsOpen(true);};
+  const openDestinationDraft=(point:WaypointDraft)=>{setScene('wall');setSearchOpen(false);setSelecting(false);setListOpen(false);setFan(null);setFrogActionsOpen(false);followingRef.current=false;setFollowing(false);setWaypointDraft(point);setWaypointsOpen(true);};
   const beginFollowing=useCallback(()=>{
     if(following){followingRef.current=false;setFollowing(false);return;}
     if(cameraFrame.current!==null)cancelAnimationFrame(cameraFrame.current);
@@ -871,6 +882,7 @@ export function MapWall() {
         title: city.name,
         subtitle: `${city.countryName} · ${city.photoIds.length} 张照片`,
         go: '飞到城市',
+        destination:{name:city.name,country:city.countryName,lat:city.lat,lng:city.lng,source:'map'},
       });
     }
     for (const wish of model.wishes) {
@@ -880,6 +892,7 @@ export function MapWall() {
         title: wish.name,
         subtitle: `${wish.countryName} · ${wish.note ?? '等青蛙路过'}`,
         go: '查看明信片',
+        destination:{name:wish.name,country:wish.countryName,lat:wish.lat,lng:wish.lng,source:'map'},
       });
     }
     return items;
@@ -1318,6 +1331,7 @@ export function MapWall() {
         return;
       }
       if (event.key === 'Escape') {
+        if(selecting){setSelecting(false);setWaypointDraft(null);setWaypointsOpen(true);return;}
         if (wishFocus) setWishFocus(null);
         else if (specialtyFocus) setSpecialtyFocus(null);
         else if (scene === 'home') returnToMap();
@@ -1350,6 +1364,7 @@ export function MapWall() {
     entrusting,
     settingsOpen,
     searchOpen,
+    selecting,
     memoryTripId,
     drawerOpen,
     replay,
@@ -1406,7 +1421,9 @@ export function MapWall() {
         selecting={selecting||!!photoPick}
         photoPicking={!!photoPick}
         onMapPick={pickMapPoint}
-        onPoiPick={poi=>{if(photoPick){if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:{name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'}}:current);revealPhotoPin(poi);return;}setListOpen(false);setFan(null);setFrogActionsOpen(false);followingRef.current=false;setFollowing(false);setWaypointDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'});setWaypointsOpen(true);setSelecting(false);}}
+        realPois={realPlaces.pois}
+        onPoiPick={poi=>{if(photoPick){if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:{name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'}}:current);revealPhotoPin(poi);return;}realPlaces.setSelected(poi);setSearchTab('real');setSearchOpen(true);}}
+
         waypointPins={(photoPick?[]:travel.waypoints??[]).map(point=>{const p=toScreen(projectAt(mode,point.lat,point.lng),camera,metrics);return {...point,x:p.x,y:p.y};}).filter(p=>inBoard(p.x,p.y,metrics,24))}
         draftPin={photoPick?.draft?toScreen(projectAt(mode,photoPick.draft.lat,photoPick.draft.lng),camera,metrics):waypointDraft?toScreen(projectAt(mode,waypointDraft.lat,waypointDraft.lng),camera,metrics):null}
         onWaypointClick={id=>{const point=travel.waypoints?.find(p=>p.id===id);if(point){setListOpen(false);setWaypointDraft({...point});setWaypointsOpen(true);}}}
@@ -1458,9 +1475,6 @@ export function MapWall() {
       )}
 
       {scene==='wall'&&snapshot.status==='ready'&&!photoPick&&<aside className="map-left-rail" aria-label="地图侧栏" data-map-controls>
-        <WaypointPanel state={travel} open={waypointsOpen} selecting={selecting} draft={waypointDraft} onOpen={value=>{setWaypointsOpen(value);if(value)setListOpen(false);}} onSelecting={value=>{setSelecting(value);if(value){setListOpen(false);followingRef.current=false;setFollowing(false);setFan(null);setFrogActionsOpen(false);}}} onDraft={setWaypointDraft}
-          onSave={async(point,next)=>{const id=await service.saveTravelWaypoint(point);if(next)await service.setFrogNextWaypoint(id);}}
-          onNext={id=>service.setFrogNextWaypoint(id)} onLocate={locateWaypoint} onRemove={id=>service.removeTravelWaypoint(id)}/>
           {!photoPick&&<PoiList
             groups={groups}
             total={totalPoi}
@@ -1480,19 +1494,26 @@ export function MapWall() {
             onHome={openHome}
             onScroll={scheduleViewSave}
           />}
-        <aside className="roaming-tools" data-map-controls aria-label="蛙蛙漫游控制">
+        <aside className={`roaming-tools${waypointsOpen?' destinations-open':''}`} data-map-controls aria-label="蛙蛙状态与动作">
+          <button className="roaming-title" type="button" aria-label="蛙蛙的旅行" onClick={()=>setJourneyPanelOpen(true)}>{travel.current?.destination.name??snapshot.home.city.name} · {{resting:'在家休息',packing:'收拾行李',outbound:'去程中',visiting:'在目的地停留',returning:'回家路上'}[travelPhase]}</button>
           {frogLocation&&<output aria-label="蛙蛙模拟位置" aria-live="off" data-frog-lat={frogLocation.lat} data-frog-lng={frogLocation.lng} data-motion-kind={movement}>蛙蛙 · {travel.motionPausedAt!==undefined?'已暂停':movement==='walk'?'落脚点附近漫游':movement==='transit'?'交通转场（可能过海）':'在家'}</output>}
-          <div><button type="button" aria-pressed={following} onClick={beginFollowing}>{following?'停止跟随':'跟随蛙蛙'}</button><button type="button" onClick={()=>void guard(()=>service.pauseFrogMotion(travel.motionPausedAt===undefined))}>{travel.motionPausedAt!==undefined?'继续漫游':'暂停漫游'}</button>{!frogAway&&travel.current?<button type="button" onClick={()=>void guard(()=>service.startFrogJourneyNow())}>现在出发</button>:frogAway?<button type="button" onClick={()=>void guard(()=>service.returnFrogHome())}>让蛙蛙回家</button>:null}</div>
+        <WaypointPanel state={travel} open={waypointsOpen} selecting={selecting} draft={waypointDraft} onOpen={value=>{setWaypointsOpen(value);if(value)setListOpen(false);}} onSelecting={value=>{if(value)startDestinationPick();else setSelecting(false);}} onDraft={setWaypointDraft}
+          onSave={async(point,next)=>{const id=await service.saveTravelWaypoint(point);if(next)await service.setFrogNextWaypoint(id);}}
+          onNext={id=>service.setFrogNextWaypoint(id)} onLocate={locateWaypoint} onRemove={id=>service.removeTravelWaypoint(id)}/>
+          <div className="roaming-actions"><button type="button" aria-pressed={following} onClick={beginFollowing}>{following?'停止镜头跟随':'镜头跟随'}</button><button type="button" onClick={()=>void guard(()=>service.pauseFrogMotion(travel.motionPausedAt===undefined))}>{travel.motionPausedAt!==undefined?'继续漫游':'暂停漫游'}</button>{!frogAway&&travel.current?<button type="button" onClick={()=>void guard(()=>service.startFrogJourneyNow())}>现在出发</button>:frogAway?<button type="button" onClick={()=>void guard(()=>service.returnFrogHome())}>让蛙蛙回家</button>:null}</div>
+          <small className="camera-follow-status">{following?'镜头跟随中 · 拖地图即退出':'自由查看 · 镜头跟随不改变蛙蛙行程'}</small>
         </aside>
       </aside>}
+      {selecting&&!photoPick&&scene==='wall'&&<section className="destination-pickbar" aria-label="添加蛙蛙目的地"><strong>添加目的地</strong><p>轻点地图放图钉；可拖动、缩放。确认保存前不会添加。</p><button type="button" onClick={cancelDestinationPick}>取消选点</button></section>}
       {photoPick?<PhotoLocationPicker photos={snapshot.photos.filter(p=>photoPick.ids.includes(p.id))} draft={photoPick.draft} onSave={savePhotoPick} onCancel={cancelPhotoPick} onRepick={()=>{if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:null}:current);}} load={loadThumbnail}/>:<TopBar
         onHome={openHome}
+        missingCount={missingPhotoCount}
         onImport={() => {
           setDrawerTab('import');
           setDrawerOpen(true);
         }}
         onDrawer={() => {
-          setDrawerTab('candidates');
+          setDrawerTab(missingPhotoCount>0?'fill':'candidates');
           setDrawerOpen(true);
         }}
         onSearch={() => setSearchOpen(true)}
@@ -1501,7 +1522,7 @@ export function MapWall() {
       />}
 
       {snapshot.status === 'ready' && !photoPick && <FrogJourneyPanel
-        state={travel} home={snapshot.home.city} now={journeyNow}
+        showChip={scene!=='wall'} state={travel} home={snapshot.home.city} now={journeyNow}
         open={journeyPanelOpen} onOpen={setJourneyPanelOpen}
         onConfigure={input=>service.configureFrogTravel(input)}
         onHome={openHome} onEntrust={startEntrust}
@@ -1534,13 +1555,6 @@ export function MapWall() {
             onZoomIn={() => zoomBy(1.9)}
             onZoomOut={() => zoomBy(1 / 1.9)}
           />
-          {!photoPick&&<Tray
-            count={model.noGpsCount}
-            onOpen={() => {
-              setDrawerTab('fill');
-              setDrawerOpen(true);
-            }}
-          />}
         </>
       ) : null}
 
@@ -1678,6 +1692,10 @@ export function MapWall() {
       <SearchPanel
         open={searchOpen}
         items={searchItems}
+        tab={searchTab} onTab={setSearchTab}
+        realPlaces={<RealPlaces places={realPlaces} area={realPoiArea} onSave={poi=>openDestinationDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'})}/>}
+        onDestination={openDestinationDraft}
+        onLocate={point=>{setSearchOpen(false);locateWaypoint(point);}}
         onClose={() => setSearchOpen(false)}
         onPick={(item) => {
           setSearchOpen(false);
