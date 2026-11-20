@@ -1,0 +1,88 @@
+.map-left-rail {
+  position: fixed;
+  left: 40px;
+  top: 100px;
+  bottom: 94px;
+  width: min(345px, calc(100vw - 80px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  z-index: 29;
+  pointer-events: none;
+}
+.map-left-rail > * {
+  pointer-events: auto;
+}
+.map-left-rail .waypoint-tools,
+.map-left-rail .poi-list,
+.map-left-rail .roaming-tools {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  z-index: auto;
+  flex: 0 0 auto;
+}
+.map-left-rail .waypoint-tools,
+.map-left-rail .poi-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.map-left-rail .waypoint-tools.is-open,
+.map-left-rail .poi-list.is-open {
+  flex: 1 1 0;
+}
+.map-left-rail .waypoint-toolbar,
+.map-left-rail .poi-toggle {
+  flex: 0 0 auto;
+}
+.map-left-rail .waypoint-body {
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.map-left-rail .roaming-tools {
+  margin-top: auto;
+}
+body.drawer-open .map-left-rail {
+  visibility: hidden;
+  pointer-events: none;
+}
+@media (max-width: 700px) {
+  .map-left-rail {
+    left: 12px;
+    top: 82px;
+    bottom: 94px;
+    width: min(345px, calc(100vw - 24px));
+  }
+  .map-left-rail .roaming-tools button {
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+}
+@media (max-height: 520px) {
+  .map-left-rail {
+    top: 82px;
+    bottom: 78px;
+    gap: 6px;
+  }
+  .map-left-rail .roaming-tools {
+    padding: 7px;
+  }
+  .map-left-rail .roaming-tools button {
+    min-height: 36px;
+    padding: 5px 8px;
+  }
+}
+/* The existing journey chip sits at bottom: 78px on narrow screens.
+   Reserve its own strip below the rail so it cannot intercept frog buttons. */
+@media (max-width: 600px) {
+  .map-left-rail {
+    bottom: 154px;
+  }
+}
