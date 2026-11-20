@@ -8,7 +8,7 @@ async function photos(page:Page){return page.evaluate(async()=>{
   try{return await new Promise<Record<string,any>[]>((resolve,reject)=>{const r=db.transaction('photos').objectStore('photos').getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}finally{db.close();}
 });}
 async function importImages(page:Page,files:{name:string;mimeType:string;buffer:Buffer}[]){
-  await page.getByRole('button',{name:'导入照片',exact:true}).click();
+  await page.getByRole('navigation',{name:'主操作'}).getByRole('button',{name:'导入照片',exact:true}).click();
   await page.locator('#wall-file-input').setInputFiles(files);
   await page.getByRole('button',{name:`导入 ${files.length} 个文件`,exact:true}).click();
   await expect.poll(async()=>(await photos(page)).length).toBe(files.length);
@@ -60,7 +60,7 @@ async function expectActualImage(page:Page,id:string,color:number[]){
 test.beforeEach(async({page})=>{
   // Deterministic offline data/UI test. External provider availability is a separate acceptance job.
   await page.route('https://**/*',route=>route.abort('blockedbyclient'));
-  await page.goto('/');await expect(page.getByRole('button',{name:'导入照片',exact:true})).toBeVisible();
+  await page.goto('/');await expect(page.getByRole('navigation',{name:'主操作'}).getByRole('button',{name:'导入照片',exact:true})).toBeVisible();
 });
 test('suggestion → Kyoto view → cancel restores scroll → pick → confirm → actual photo → refresh',async({page},info)=>{
   const extras=Array.from({length:8},(_,n)=>({name:`qa-extra-${n}.jpg`,mimeType:'image/jpeg',buffer:Buffer.concat([readFileSync(fixture('no-suggestion.jpg')),Buffer.from(`qa-extra-${n}`)])}));
