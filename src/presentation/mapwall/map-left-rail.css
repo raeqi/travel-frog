@@ -79,3 +79,10 @@ body.drawer-open .map-left-rail {
     padding: 5px 8px;
   }
 }
+/* The existing journey chip sits at bottom: 78px on narrow screens.
+   Reserve its own strip below the rail so it cannot intercept frog buttons. */
+@media (max-width: 600px) {
+  .map-left-rail {
+    bottom: 154px;
+  }
+}
