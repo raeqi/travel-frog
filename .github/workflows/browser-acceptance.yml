@@ -26,10 +26,13 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
       - name: Live native basemap with CI software graphics
+        timeout-minutes: 8
         env:
           TRAVEL_FROG_CI_GL: swangle
         run: |
-          sudo apt-get install -y fonts-noto-cjk
+          # Playwright --with-deps already installs WQY/IPA CJK fonts.
+          fc-match -f '%{family}\n' 'sans-serif:lang=zh'
+          fc-match -f '%{family}\n' 'sans-serif:lang=ja'
           npm run test:basemap:live
       - uses: actions/upload-artifact@v5
         if: ${{ !cancelled() }}
