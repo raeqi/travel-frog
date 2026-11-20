@@ -84,6 +84,8 @@ test('suggestion → Kyoto view → cancel restores scroll → pick → confirm 
   expect(await drawer.locator('.drawer-body').evaluate(n=>n.scrollTop)).toBeCloseTo(lastScroll,0);expect(await photos(page)).toEqual(before);
   await button.scrollIntoViewIfNeeded();const targetScroll=await drawer.locator('.drawer-body').evaluate(n=>n.scrollTop);await button.click();
   const picker=page.getByRole('region',{name:'给照片在地图选位置'});await expect(picker).toContainText('当前参考：京都');
+  const cancelBox=await picker.getByRole('button',{name:'取消，返回照片'}).boundingBox();expect(cancelBox!.width).toBeGreaterThanOrEqual(100);expect(cancelBox!.height).toBeLessThanOrEqual(50);await expect(picker.locator('header small')).toHaveAttribute('title',longName);
+  const filename=await picker.locator('header small').evaluate(n=>({height:n.clientHeight,lineHeight:parseFloat(getComputedStyle(n).lineHeight)}));expect(filename.height).toBeLessThanOrEqual(filename.lineHeight*2+1);
   const view=await page.locator('#worldSvg').getAttribute('viewBox');const values=view!.split(/[ ,]+/).map(Number);expect((values[0]!+values[2]!/2)/1000*360-180).toBeCloseTo(135.7681,3);
   await expect(picker.locator('input[type=number]:visible')).toHaveCount(0);
   await picker.getByRole('button',{name:'取消，返回照片'}).click();await expect(drawer).toBeVisible();expect(await photos(page)).toEqual(before);expect(await drawer.locator('.drawer-body').evaluate(n=>n.scrollTop)).toBeCloseTo(targetScroll,0);

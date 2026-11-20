@@ -24,6 +24,14 @@
   align-items: start;
   gap: 10px;
 }
+.photo-location-picker header > div {
+  min-width: 0;
+  flex: 1;
+}
+.photo-location-picker header > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .photo-location-picker header strong,
 .photo-location-picker header small {
   display: block;
@@ -31,6 +39,10 @@
 .photo-location-picker header small {
   font-size: 12px;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 .photo-location-picker button {
   font: inherit;

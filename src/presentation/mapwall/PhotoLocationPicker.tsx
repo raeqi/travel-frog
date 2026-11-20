@@ -50,7 +50,7 @@ export function PhotoLocationPicker({
       <header>
         <div>
           <strong>给 {photos.length} 张照片选位置</strong>
-          <small>{photos[0]?.fileName}</small>
+          <small title={photos[0]?.fileName}>{photos[0]?.fileName}</small>
         </div>
         <button type="button" disabled={busy} onClick={onCancel}>
           取消，返回照片
