@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {basemapProvider} from './basemap-provider';
 describe('replaceable basemap with explicit provider terms boundary',()=>{
- it('uses the official public production instance and never silently substitutes standard OSM tiles',()=>{expect(basemapProvider({})).toMatchObject({id:'openfreemap',style:'https://tiles.openfreemap.org/styles/liberty'});expect(()=>basemapProvider({VITE_MAP_RASTER_URL:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',VITE_MAP_ATTRIBUTION:'OSM'})).toThrow();});
+ it('uses the bundled official geographic style and never silently substitutes standard OSM tiles',()=>{expect(basemapProvider({})).toMatchObject({id:'versatiles',style:'/basemaps/versatiles-9.1.0/style.json'});expect(()=>basemapProvider({VITE_MAP_RASTER_URL:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',VITE_MAP_ATTRIBUTION:'OSM'})).toThrow();});
  it('requires HTTPS and attribution for an explicitly configured independent raster provider',()=>{expect(()=>basemapProvider({VITE_MAP_RASTER_URL:'https://tiles.example.test/{z}/{x}/{y}.png'})).toThrow();expect(()=>basemapProvider({VITE_MAP_STYLE_URL:'http://tiles.example.test/style.json'})).toThrow();const p=basemapProvider({VITE_MAP_RASTER_URL:'https://tiles.example.test/{z}/{x}/{y}.png',VITE_MAP_ATTRIBUTION:'Example & OSM',VITE_MAP_LABEL:'Configured provider'});expect(p.id).toBe('configured-raster');expect(typeof p.style).toBe('object');if(typeof p.style!=='string')expect(p.style.sources.basemap).toMatchObject({type:'raster',attribution:'Example &amp; OSM'});});
 });

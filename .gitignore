@@ -26,3 +26,6 @@ dist-ssr
 # Browser QA artifacts (synthetic data, retained by CI only)
 playwright-report/
 test-results/
+
+playwright-live-report/
+test-results-live/

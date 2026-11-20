@@ -25,6 +25,12 @@ jobs:
       - run: npm run typecheck:browser
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+      - name: Live native basemap with CI software graphics
+        env:
+          TRAVEL_FROG_CI_GL: swangle
+        run: |
+          sudo apt-get install -y fonts-noto-cjk
+          npm run test:basemap:live
       - uses: actions/upload-artifact@v5
         if: ${{ !cancelled() }}
         with:
@@ -32,4 +38,6 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            playwright-live-report/
+            test-results-live/
           retention-days: 7

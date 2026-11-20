@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import type {Camera,Metrics} from './geometry';
 import {mercatorView,type ProjectionMode} from './mercator-camera';
 import {basemapProvider} from './basemap-provider';
+import {basemapFrame} from './basemap-frame';
 import './live-basemap.css';
 /** The existing wall owns input, data and camera; this adapter only renders geography. */
 export function LiveBasemap({camera,metrics,mode,onFailure,onReady}:{camera:Camera;metrics:Metrics;mode:ProjectionMode;onFailure:()=>void;onReady:()=>void}) {
@@ -27,7 +28,7 @@ export function LiveBasemap({camera,metrics,mode,onFailure,onReady}:{camera:Came
       element.querySelector('.maplibregl-control-container')?.setAttribute('data-map-controls','');
       map.on('style.load',()=>map?.setProjection({type:'mercator'}));
       map.on('error',fail);
-      map.on('idle',()=>{if(alive&&!failed&&map?.isStyleLoaded()&&map.areTilesLoaded()){element.dataset.loaded='true';window.clearTimeout(timer);latest.current.onReady();}});
+      map.on('idle',()=>{if(alive&&!failed&&map?.isStyleLoaded()&&map.areTilesLoaded()){element.dataset.frame=JSON.stringify(basemapFrame(map));element.dataset.loaded='true';window.clearTimeout(timer);latest.current.onReady();}});
       map.getCanvas().addEventListener('webglcontextlost',fail);
     } catch {fail();}
     const observer=new ResizeObserver(()=>map?.resize());observer.observe(element);

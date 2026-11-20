@@ -9,7 +9,8 @@ export function basemapProvider(env:Record<string,string|undefined>):BasemapProv
     if(!env.VITE_MAP_ATTRIBUTION?.trim())throw new Error('自定义底图必须配置署名。');
     return {id:'configured-raster',label:env.VITE_MAP_LABEL||'已配置底图',style:{version:8,sources:{basemap:{type:'raster',tiles:[raster],tileSize:256,attribution:escape(env.VITE_MAP_ATTRIBUTION)}},layers:[{id:'basemap',type:'raster',source:'basemap'}]}};
   }
-  const style=env.VITE_MAP_STYLE_URL||'https://tiles.openfreemap.org/styles/liberty';
+  if(!env.VITE_MAP_STYLE_URL)return {id:'versatiles',label:'VersaTiles',style:(env.BASE_URL||'/')+'basemaps/versatiles-9.1.0/style.json'};
+  const style=env.VITE_MAP_STYLE_URL;
   if(new URL(style).protocol!=='https:')throw new Error('底图样式须使用 HTTPS。');
-  return {id:env.VITE_MAP_STYLE_URL?'configured-vector':'openfreemap',label:env.VITE_MAP_LABEL||'OpenFreeMap',style};
+  return {id:'configured-vector',label:env.VITE_MAP_LABEL||'已配置底图',style};
 }

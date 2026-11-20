@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test:browser": "playwright test",
     "test:browser:list": "playwright test --list",
-    "typecheck:browser": "tsc -p tsconfig.browser.json"
+    "typecheck:browser": "tsc -p tsconfig.browser.json",
+    "test:basemap:live": "playwright test -c playwright.live.config.ts"
   },
   "dependencies": {
     "heic-to": "1.6.7",
