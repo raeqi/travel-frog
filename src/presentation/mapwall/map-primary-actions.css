@@ -238,3 +238,38 @@ body:has(.destination-pickbar) .map-left-rail {
     max-height: calc(100dvh - 32px);
   }
 }
+.place-search .tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.place-search .tabs button[aria-selected="true"] {
+  border-bottom: 2px solid #285a40;
+  font-weight: 600;
+}
+@media (max-width: 700px) {
+  .drawer {
+    left: 12px;
+    right: 12px;
+    top: 14px;
+    bottom: 14px;
+    width: auto;
+    max-width: calc(100vw - 24px);
+  }
+  .drawer-head {
+    padding: 14px 14px 10px;
+  }
+  .drawer-body {
+    padding: 14px;
+    min-width: 0;
+  }
+  .fill-row {
+    gap: 10px;
+  }
+  .fill-row > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .fill-row > button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}

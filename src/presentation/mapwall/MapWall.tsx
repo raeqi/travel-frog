@@ -1327,7 +1327,7 @@ export function MapWall() {
       if(photoPick){if(event.key==='Escape'){event.preventDefault();cancelPhotoPick();}return;}
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        setSearchOpen(true);
+        setSelecting(false);setSearchOpen(true);
         return;
       }
       if (event.key === 'Escape') {
@@ -1516,7 +1516,7 @@ export function MapWall() {
           setDrawerTab(missingPhotoCount>0?'fill':'candidates');
           setDrawerOpen(true);
         }}
-        onSearch={() => setSearchOpen(true)}
+        onSearch={() => {setSelecting(false);setSearchOpen(true);}}
         onTheme={toggleTheme}
         onSettings={() => setSettingsOpen(true)}
       />}
