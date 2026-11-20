@@ -12,6 +12,9 @@ export function boundCamera(
   maxZoom: number,
 ): Camera {
   const zoom = limit(camera.zoom, 0.8, maxZoom);
+  // A geographic camera is bounded in Mercator coordinates. Legacy paper
+  // viewport gutters shift the center when a narrow screen zooms the world.
+  if(metrics.mercatorMode)return panMercator({...camera,zoom},0,0,metrics,metrics.mercatorMode);
   const { viewW, viewH } = viewRect({ ...camera, zoom }, metrics);
   // Allow a 20% viewport gutter so the full-world view still responds to a drag.
   const halfX = Math.min(500, viewW * 0.3),

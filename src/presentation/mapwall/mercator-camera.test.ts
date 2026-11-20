@@ -2,10 +2,17 @@ import {describe,it,expect} from 'vitest';
 import {MercatorCoordinate} from 'maplibre-gl';
 import {projectWorld,toScreen,mapCoordinate,type Metrics} from './geometry';
 import {legacyGeo,legacyPoint,mercatorView} from './mercator-camera';
-import {panCamera,zoomCamera} from './map-gestures';
+import {boundCamera,panCamera,zoomCamera} from './map-gestures';
 import {photoLocationCamera} from './photo-location-camera';
 const metrics:Metrics={boardW:1100,boardH:720,sheetW:900,sheetH:570,offX:100,offY:70,mercatorMode:'world'};
 describe('whole-wall geographic alignment',()=>{
+ it('keeps the geographic center during toolbar zoom on a narrow world viewport',()=>{
+  const narrow={...metrics,sheetW:212,sheetH:616},camera={cx:500,cy:322,zoom:1};
+  const bounded=boundCamera({...camera,zoom:1.9},narrow,400000);
+  expect(mercatorView(bounded,narrow,'world').center.lat).toBeCloseTo(-.5625,9);
+  expect(mercatorView(bounded,narrow,'world').center.lng).toBeCloseTo(0,9);
+  expect(bounded.zoom).toBe(1.9);
+ });
  it('matches MapLibre at the equator, Kyoto, and high latitudes without moving saved coordinates',()=>{
   for(const center of [{lat:35.0116,lng:135.7681},{lat:0,lng:0},{lat:70,lng:24}]){
    const p=projectWorld(center.lat,center.lng),camera={cx:p.x,cy:p.y,zoom:2500};
