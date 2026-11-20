@@ -10,7 +10,8 @@
   "changes": [
     "Kept stable OSM source only; omitted optional beta land-cover source",
     "Sprite URLs refer to bundled same-release assets",
-    "Set flat Mercator projection; added visible VersaTiles attribution"
+    "Set flat Mercator projection; added visible VersaTiles attribution",
+    "Relative bundled sprites are resolved against the actual style URL before MapLibre loads them"
   ],
   "removedLayers": [
     "landcover-land-glacier",

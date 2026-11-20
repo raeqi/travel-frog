@@ -1,5 +1,7 @@
 # Photo location and real-basemap QA candidate
 
+Historical photo candidate through `5612278`. For the subsequent independent provider and live-rendering increment, see [native-basemap-increment.md](native-basemap-increment.md).
+
 This test branch contains project code and generated synthetic images only. It does not merge to main, publish a website, change repository/Site access, or upload personal photos.
 
 ## Scope

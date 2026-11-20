@@ -27,3 +27,9 @@ The existing 185 unit tests and 12 deterministic browser cases still run first. 
 Native diagnostics contain only public geographic view information, not photo bytes or filenames. Captured screenshots contain synthetic photos. The live test does not intercept the tile/font host or weaken assertions when graphics/network requests fail. No automatic cross-provider retry is implemented. A 429 or unavailable provider is failure evidence, not a pass.
 
 At preparation time, unit tests passed and two live cases were collected; actual runtime result must come from this candidate's Actions run and screenshots. No real streets or rendered alignment is claimed until that run is examined. Mainland-China connectivity, globally Chinese labels, touch hardware, device GPU performance and production service capacity remain outside this CI acceptance.
+
+## First live attempt and concrete fix
+
+[Run 44778402196](https://github.com/raeqi/travel-frog/actions/runs/44778402196), commit `31a2f723d0221f85230714adc23bdb94062fb8d4`, retained all 185 unit tests and 12 photo browser cases passing. Both live cases failed at their initial native-frame gate; this is not a rendering pass. The artifact records WebGL 2.0 with ANGLE/SwiftShader, sandbox enabled, local style HTTP200 and no tile requests.
+
+The pinned sprite path was root-relative. The installed MapLibre 6.19 sprite loader explicitly requires an absolute URL and throws before loading sprites. The follow-up resolves named/string sprite URLs against the real style URL using its supported style transform. Regression checks cover hosting subdirectories, unchanged external URLs and styles without sprites. It does not weaken the live-feature assertions or change the browser security settings. The next candidate still requires its own actual CI result.

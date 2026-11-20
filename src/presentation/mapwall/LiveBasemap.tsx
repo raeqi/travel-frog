@@ -7,6 +7,7 @@ import type {Camera,Metrics} from './geometry';
 import {mercatorView,type ProjectionMode} from './mercator-camera';
 import {basemapProvider} from './basemap-provider';
 import {basemapFrame} from './basemap-frame';
+import {resolveSprites} from './resolve-sprites';
 import './live-basemap.css';
 /** The existing wall owns input, data and camera; this adapter only renders geography. */
 export function LiveBasemap({camera,metrics,mode,onFailure,onReady}:{camera:Camera;metrics:Metrics;mode:ProjectionMode;onFailure:()=>void;onReady:()=>void}) {
@@ -22,7 +23,7 @@ export function LiveBasemap({camera,metrics,mode,onFailure,onReady}:{camera:Came
       const provider=basemapProvider(import.meta.env);
       const initial=latest.current,view=mercatorView(initial.camera,initial.metrics,initial.mode);
       // Wall geometry owns the bounds; avoid SDK viewport constraints shifting the basemap under overlays.
-      map=new maplibregl.Map({container:element,style:provider.style,center:[view.center.lng,view.center.lat],zoom:view.zoom,bearing:0,pitch:0,minZoom:-2,maxZoom:22,interactive:false,renderWorldCopies:false,transformConstrain:(center,zoom)=>({center,zoom}),attributionControl:false,fadeDuration:0});
+      map=new maplibregl.Map({container:element,style:provider.style,transformStyle:(_previous,next)=>resolveSprites(next,typeof provider.style==='string'?new URL(provider.style,document.baseURI).href:document.baseURI),center:[view.center.lng,view.center.lat],zoom:view.zoom,bearing:0,pitch:0,minZoom:-2,maxZoom:22,interactive:false,renderWorldCopies:false,transformConstrain:(center,zoom)=>({center,zoom}),attributionControl:false,fadeDuration:0});
       mapRef.current=map;
       map.addControl(new maplibregl.AttributionControl({compact:false}),'top-right');
       element.querySelector('.maplibregl-control-container')?.setAttribute('data-map-controls','');
