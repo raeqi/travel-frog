@@ -1337,6 +1337,8 @@ export function MapWall() {
         else if (scene === 'home') returnToMap();
         else if (entrusting) setEntrusting(false);
         else if (settingsOpen || searchOpen) closeOverlays();
+        else if (waypointsOpen && waypointDraft) setWaypointDraft(null);
+        else if (waypointsOpen) setWaypointsOpen(false);
         else if (memoryTripId) setMemoryTripId(null);
         else if (drawerOpen) setDrawerOpen(false);
         else if (replay) setReplay(null);
@@ -1364,7 +1366,7 @@ export function MapWall() {
     entrusting,
     settingsOpen,
     searchOpen,
-    selecting,
+    selecting,waypointsOpen,waypointDraft,
     memoryTripId,
     drawerOpen,
     replay,
@@ -1422,7 +1424,7 @@ export function MapWall() {
         photoPicking={!!photoPick}
         onMapPick={pickMapPoint}
         realPois={realPlaces.pois}
-        onPoiPick={poi=>{if(photoPick){if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:{name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'}}:current);revealPhotoPin(poi);return;}realPlaces.setSelected(poi);setSearchTab('real');setSearchOpen(true);}}
+        onPoiPick={poi=>{if(photoPick){if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:{name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'}}:current);revealPhotoPin(poi);return;}if(selecting){openDestinationDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'});return;}realPlaces.setSelected(poi);setSearchTab('real');setSearchOpen(true);}}
 
         waypointPins={(photoPick?[]:travel.waypoints??[]).map(point=>{const p=toScreen(projectAt(mode,point.lat,point.lng),camera,metrics);return {...point,x:p.x,y:p.y};}).filter(p=>inBoard(p.x,p.y,metrics,24))}
         draftPin={photoPick?.draft?toScreen(projectAt(mode,photoPick.draft.lat,photoPick.draft.lng),camera,metrics):waypointDraft?toScreen(projectAt(mode,waypointDraft.lat,waypointDraft.lng),camera,metrics):null}
@@ -1497,7 +1499,7 @@ export function MapWall() {
         <aside className={`roaming-tools${waypointsOpen?' destinations-open':''}`} data-map-controls aria-label="蛙蛙状态与动作">
           <button className="roaming-title" type="button" aria-label="蛙蛙的旅行" onClick={()=>setJourneyPanelOpen(true)}>{travel.current?.destination.name??snapshot.home.city.name} · {{resting:'在家休息',packing:'收拾行李',outbound:'去程中',visiting:'在目的地停留',returning:'回家路上'}[travelPhase]}</button>
           {frogLocation&&<output aria-label="蛙蛙模拟位置" aria-live="off" data-frog-lat={frogLocation.lat} data-frog-lng={frogLocation.lng} data-motion-kind={movement}>蛙蛙 · {travel.motionPausedAt!==undefined?'已暂停':movement==='walk'?'落脚点附近漫游':movement==='transit'?'交通转场（可能过海）':'在家'}</output>}
-        <WaypointPanel state={travel} open={waypointsOpen} selecting={selecting} draft={waypointDraft} onOpen={value=>{setWaypointsOpen(value);if(value)setListOpen(false);}} onSelecting={value=>{if(value)startDestinationPick();else setSelecting(false);}} onDraft={setWaypointDraft}
+        <WaypointPanel state={travel} open={waypointsOpen} selecting={selecting} draft={waypointDraft} onOpen={value=>{setWaypointsOpen(value);if(value)setListOpen(false);else{setWaypointDraft(null);setSelecting(false);}}} onSelecting={value=>{if(value)startDestinationPick();else setSelecting(false);}} onDraft={setWaypointDraft}
           onSave={async(point,next)=>{const id=await service.saveTravelWaypoint(point);if(next)await service.setFrogNextWaypoint(id);}}
           onNext={id=>service.setFrogNextWaypoint(id)} onLocate={locateWaypoint} onRemove={id=>service.removeTravelWaypoint(id)}/>
           <div className="roaming-actions"><button type="button" aria-pressed={following} onClick={beginFollowing}>{following?'停止镜头跟随':'镜头跟随'}</button><button type="button" onClick={()=>void guard(()=>service.pauseFrogMotion(travel.motionPausedAt===undefined))}>{travel.motionPausedAt!==undefined?'继续漫游':'暂停漫游'}</button>{!frogAway&&travel.current?<button type="button" onClick={()=>void guard(()=>service.startFrogJourneyNow())}>现在出发</button>:frogAway?<button type="button" onClick={()=>void guard(()=>service.returnFrogHome())}>让蛙蛙回家</button>:null}</div>
