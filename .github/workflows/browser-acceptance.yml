@@ -23,7 +23,9 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run typecheck:browser
-      - run: npx playwright install --with-deps chromium
+      - name: Prepare Chromium and system dependencies
+        timeout-minutes: 7
+        run: npx playwright install --with-deps chromium
       - run: npm run test:browser
       - name: Live native basemap with CI software graphics
         timeout-minutes: 8
