@@ -7,7 +7,8 @@ async function nativeFrame(page:Page,point?:{lat:number;lng:number},streets=fals
  await expect.poll(async()=>{
   const node=page.locator('.live-basemap[data-loaded=true]');if(!await node.count())return false;
   const raw=await node.getAttribute('data-frame');if(!raw)return false;const f=JSON.parse(raw) as Frame;
-  return f.features>0&&f.zoom>=minZoom&&(!point||(Math.abs(f.center.lat-point.lat)<.000001&&Math.abs(f.center.lng-point.lng)<.000001))&&(!streets||(f.roads>0&&f.labels>0));
+  const box=await node.boundingBox();
+  return !!box&&box.width>0&&box.height>0&&Math.abs(f.width-box.width)<1&&Math.abs(f.height-box.height)<1&&f.features>0&&f.zoom>=minZoom&&(!point||(Math.abs(f.center.lat-point.lat)<.000001&&Math.abs(f.center.lng-point.lng)<.000001))&&(!streets||(f.roads>0&&f.labels>0));
  },{timeout:30000,message:'A current native frame with real geographic features must render; offline fallback is not a pass'}).toBe(true);
  return JSON.parse((await page.locator('.live-basemap').getAttribute('data-frame'))!) as Frame;
 }

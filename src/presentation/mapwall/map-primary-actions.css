@@ -194,7 +194,19 @@ body:has(.destination-pickbar) .map-left-rail {
   }
   .map-left-rail {
     top: 120px;
-    bottom: 88px;
+    bottom: 132px;
+  }
+  .zoomctl {
+    right: 12px;
+    bottom: 28px;
+  }
+  .zoomctl button {
+    width: 40px;
+    height: 40px;
+  }
+  body:has(.photo-location-picker) .zoomctl {
+    top: 42px;
+    bottom: auto;
   }
   .destination-pickbar {
     left: 12px;

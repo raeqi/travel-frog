@@ -1,4 +1,6 @@
-.live-basemap {position:absolute;inset:0;z-index:1;pointer-events:none;background:#e7edf0;}
+/* SDK CSS also sets position on .maplibregl-map. Keep this full-size adapter
+   independent of lazy stylesheet insertion order. */
+.live-basemap,.live-basemap.maplibregl-map {position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;background:#e7edf0;}
 .live-basemap .maplibregl-canvas {pointer-events:none;}
 .live-basemap .maplibregl-control-container {pointer-events:auto;}
 .live-basemap .maplibregl-ctrl-attrib {font:12px/1.5 system-ui,sans-serif;max-width:100%;color:#263b36;background:#fffffff0;}

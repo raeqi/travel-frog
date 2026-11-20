@@ -29,10 +29,10 @@ export function LiveBasemap({camera,metrics,mode,onFailure,onReady}:{camera:Came
       element.querySelector('.maplibregl-control-container')?.setAttribute('data-map-controls','');
       map.on('style.load',()=>map?.setProjection({type:'mercator'}));
       map.on('error',fail);
-      map.on('idle',()=>{if(alive&&!failed&&map?.isStyleLoaded()&&map.areTilesLoaded()){element.dataset.frame=JSON.stringify(basemapFrame(map));element.dataset.loaded='true';window.clearTimeout(timer);latest.current.onReady();}});
+      map.on('idle',()=>{if(alive&&!failed&&map?.isStyleLoaded()&&map.areTilesLoaded()){const frame=basemapFrame(map);if(frame.width<=0||frame.height<=0)return;element.dataset.frame=JSON.stringify(frame);element.dataset.loaded='true';window.clearTimeout(timer);latest.current.onReady();}});
       map.getCanvas().addEventListener('webglcontextlost',fail);
     } catch {fail();}
-    const observer=new ResizeObserver(()=>map?.resize());observer.observe(element);
+    const observer=new ResizeObserver(()=>{element.dataset.loaded='false';map?.resize();});observer.observe(element);
     return ()=>{alive=false;window.clearTimeout(timer);observer.disconnect();map?.remove();mapRef.current=null;};
   },[]);
   useLayoutEffect(()=>{
