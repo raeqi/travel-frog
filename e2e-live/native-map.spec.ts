@@ -23,6 +23,12 @@ async function importPhoto(page:Page,name:string,total:number){
  await page.getByRole('button',{name:'导入 1 个文件',exact:true}).click();await expect(page.getByText(/已保存 1 条记录/)).toBeVisible();await expect.poll(async()=>(await record(page,'photos')).length).toBe(total);
 }
 async function shot(page:Page,info:TestInfo,name:string){const path=info.outputPath(name+'.png');await page.screenshot({path,fullPage:true});await info.attach(name,{path,contentType:'image/png'});}
+async function visibleCredits(page:Page){
+ for(const text of ['OpenStreetMap contributors','VersaTiles']){
+  const link=page.locator('.live-basemap .maplibregl-ctrl-attrib').getByRole('link',{name:new RegExp(text)});await expect(link).toBeVisible();
+  expect(await link.evaluate(n=>{const b=n.getClientRects()[0]!;return document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.closest('a')===n;}),'Map credits must be readable and reachable, including beside mobile cards').toBe(true);
+ }
+}
 function project(point:{lat:number;lng:number},f:Frame,rect:{x:number;y:number;width:number;height:number}){
  const center=MercatorCoordinate.fromLngLat(f.center),p=MercatorCoordinate.fromLngLat(point),size=512*2**f.zoom;
  return {x:rect.x+rect.width/2+(p.x-center.x)*size,y:rect.y+rect.height/2+(p.y-center.y)*size};
@@ -41,10 +47,10 @@ test('real streets, photo pick/save/refresh, POI routing and drag stay aligned',
   await page.goto('/');const graphics=await page.evaluate(()=>{const gl=document.createElement('canvas').getContext('webgl2');if(!gl)return null;const ext=gl.getExtension('WEBGL_debug_renderer_info'),result={version:String(gl.getParameter(gl.VERSION)),renderer:String(gl.getParameter(ext?.UNMASKED_RENDERER_WEBGL??gl.RENDERER))};gl.getExtension('WEBGL_lose_context')?.loseContext();return result;});await info.attach('graphics',{body:JSON.stringify({graphics,softwareDriverRequested:process.env.TRAVEL_FROG_CI_GL,chromiumSandbox:true}),contentType:'application/json'});expect(graphics,'Real WebGL2 must be available').not.toBeNull();
   frames.push({stage:'world',frame:await nativeFrame(page)});await shot(page,info,'world-real-geography');
   await importPhoto(page,'kyoto-anchor.jpg',1);await page.getByRole('tab',{name:/候选/}).click();await page.getByRole('button',{name:'确认并在地图查看',exact:true}).click();
-  const anchor=(await record(page,'photos'))[0];await zoomToStreets(page,anchor.geo);frames.push({stage:'kyoto-anchor',frame:await photoAlignment(page,anchor)});await shot(page,info,'kyoto-real-roads-and-photo');
+  const anchor=(await record(page,'photos'))[0];await zoomToStreets(page,anchor.geo);frames.push({stage:'kyoto-anchor',frame:await photoAlignment(page,anchor)});await visibleCredits(page);await shot(page,info,'kyoto-real-roads-and-photo');
   await page.getByRole('button',{name:'世界',exact:true}).click();let regional=await nativeFrame(page,{lat:-.5625,lng:0});for(let i=0;i<8&&regional.zoom<3;i++){const next=regional.zoom+.9;await page.getByRole('button',{name:'放大',exact:true}).click();regional=await nativeFrame(page,{lat:-.5625,lng:0},false,next);}expect(regional.zoom).toBeGreaterThanOrEqual(3);expect(regional.boundaries).toBeGreaterThan(0);expect(regional.labels).toBeGreaterThan(0);frames.push({stage:'regional-boundaries-labels',frame:regional});await shot(page,info,'regional-boundaries-labels');
   await importPhoto(page,'kyoto-next-day-no-gps.jpg',2);await page.getByRole('tab',{name:/补位置/}).click();const target=(await record(page,'photos')).find((p:any)=>p.fileName==='kyoto-next-day-no-gps.jpg');await page.locator(`[data-location-photo="${target.id}"]`).getByRole('button',{name:'在地图选位置',exact:true}).click();
-  const picker=page.getByRole('region',{name:'给照片在地图选位置'});await expect(picker).toContainText('当前参考：京都');const f=await zoomToStreets(page,anchor.geo),rect=(await page.locator('.live-basemap').boundingBox())!,card=(await picker.boundingBox())!;
+  const picker=page.getByRole('region',{name:'给照片在地图选位置'});await expect(picker).toContainText('当前参考：京都');const f=await zoomToStreets(page,anchor.geo),rect=(await page.locator('.live-basemap').boundingBox())!,card=(await picker.boundingBox())!;await visibleCredits(page);
   const x=Math.round(rect.x+rect.width*.62),y=Math.round(Math.min(rect.y+rect.height*.25,card.y-35)),center=MercatorCoordinate.fromLngLat(f.center),size=512*2**f.zoom;
   const wanted=new MercatorCoordinate(center.x+(x-rect.x-rect.width/2)/size,center.y+(y-rect.y-rect.height/2)/size).toLngLat();await page.mouse.click(x,y);
   const selected=await picker.evaluate(n=>({lat:Number(n.querySelector<HTMLInputElement>('input[name=lat]')!.value),lng:Number(n.querySelector<HTMLInputElement>('input[name=lng]')!.value)}));expect(selected.lat).toBeCloseTo(wanted.lat,6);expect(selected.lng).toBeCloseTo(wanted.lng,6);await picker.getByRole('textbox',{name:'照片地点名'}).fill('QA 河岸精确位置');await shot(page,info,'photo-point-on-real-streets');await picker.getByRole('button',{name:'保存位置并继续'}).click();await page.getByRole('button',{name:'确认并在地图查看',exact:true}).click();
