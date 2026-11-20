@@ -56,6 +56,7 @@ import {WaypointPanel,type WaypointDraft} from './WaypointPanel';
 import {routeActivity,type TravelWaypoint} from '../../domain/frog/roaming';
 import {landAt} from '../../infrastructure/geo/frog-landscape';
 import './waypoints.css';
+import './map-left-rail.css';
 
 type Mode = 'world' | 'city' | 'region';
 type Level = 'world' | 'country' | 'city' | 'region';
@@ -1405,10 +1406,10 @@ export function MapWall() {
         selecting={selecting||!!photoPick}
         photoPicking={!!photoPick}
         onMapPick={pickMapPoint}
-        onPoiPick={poi=>{if(photoPick){if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:{name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'}}:current);revealPhotoPin(poi);return;}setFan(null);setFrogActionsOpen(false);followingRef.current=false;setFollowing(false);setWaypointDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'});setWaypointsOpen(true);setSelecting(false);}}
+        onPoiPick={poi=>{if(photoPick){if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:{name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'}}:current);revealPhotoPin(poi);return;}setListOpen(false);setFan(null);setFrogActionsOpen(false);followingRef.current=false;setFollowing(false);setWaypointDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'});setWaypointsOpen(true);setSelecting(false);}}
         waypointPins={(photoPick?[]:travel.waypoints??[]).map(point=>{const p=toScreen(projectAt(mode,point.lat,point.lng),camera,metrics);return {...point,x:p.x,y:p.y};}).filter(p=>inBoard(p.x,p.y,metrics,24))}
         draftPin={photoPick?.draft?toScreen(projectAt(mode,photoPick.draft.lat,photoPick.draft.lng),camera,metrics):waypointDraft?toScreen(projectAt(mode,waypointDraft.lat,waypointDraft.lng),camera,metrics):null}
-        onWaypointClick={id=>{const point=travel.waypoints?.find(p=>p.id===id);if(point){setWaypointDraft({...point});setWaypointsOpen(true);}}}
+        onWaypointClick={id=>{const point=travel.waypoints?.find(p=>p.id===id);if(point){setListOpen(false);setWaypointDraft({...point});setWaypointsOpen(true);}}}
         viewBox={viewBox}
         viewWidth={metrics.boardW}
         viewHeight={metrics.boardH}
@@ -1456,15 +1457,34 @@ export function MapWall() {
       />
       )}
 
-      {scene==='wall'&&snapshot.status==='ready'&&!photoPick&&<>
-        <WaypointPanel state={travel} open={waypointsOpen} selecting={selecting} draft={waypointDraft} onOpen={setWaypointsOpen} onSelecting={value=>{setSelecting(value);if(value){followingRef.current=false;setFollowing(false);setFan(null);setFrogActionsOpen(false);}}} onDraft={setWaypointDraft}
+      {scene==='wall'&&snapshot.status==='ready'&&!photoPick&&<aside className="map-left-rail" aria-label="地图侧栏" data-map-controls>
+        <WaypointPanel state={travel} open={waypointsOpen} selecting={selecting} draft={waypointDraft} onOpen={value=>{setWaypointsOpen(value);if(value)setListOpen(false);}} onSelecting={value=>{setSelecting(value);if(value){setListOpen(false);followingRef.current=false;setFollowing(false);setFan(null);setFrogActionsOpen(false);}}} onDraft={setWaypointDraft}
           onSave={async(point,next)=>{const id=await service.saveTravelWaypoint(point);if(next)await service.setFrogNextWaypoint(id);}}
           onNext={id=>service.setFrogNextWaypoint(id)} onLocate={locateWaypoint} onRemove={id=>service.removeTravelWaypoint(id)}/>
+          {!photoPick&&<PoiList
+            groups={groups}
+            total={totalPoi}
+            open={listOpen}
+            linked={linked}
+            highlightCity={highlightCity}
+            highlightWish={highlightWish}
+            homeCityName={snapshot.home.city.name}
+            scrollRef={poiScrollRef}
+            imageForPhoto={(photoId) => {
+              const photo = model.photoById.get(photoId);
+              return photo ? imageFor(photo) : null;
+            }}
+            onToggle={() => {setListOpen(!listOpen);if(!listOpen){setWaypointsOpen(false);setSelecting(false);}}}
+            onCity={focusCityFromList}
+            onWish={focusWishRow}
+            onHome={openHome}
+            onScroll={scheduleViewSave}
+          />}
         <aside className="roaming-tools" data-map-controls aria-label="蛙蛙漫游控制">
           {frogLocation&&<output aria-label="蛙蛙模拟位置" aria-live="off" data-frog-lat={frogLocation.lat} data-frog-lng={frogLocation.lng} data-motion-kind={movement}>蛙蛙 · {travel.motionPausedAt!==undefined?'已暂停':movement==='walk'?'落脚点附近漫游':movement==='transit'?'交通转场（可能过海）':'在家'}</output>}
           <div><button type="button" aria-pressed={following} onClick={beginFollowing}>{following?'停止跟随':'跟随蛙蛙'}</button><button type="button" onClick={()=>void guard(()=>service.pauseFrogMotion(travel.motionPausedAt===undefined))}>{travel.motionPausedAt!==undefined?'继续漫游':'暂停漫游'}</button>{!frogAway&&travel.current?<button type="button" onClick={()=>void guard(()=>service.startFrogJourneyNow())}>现在出发</button>:frogAway?<button type="button" onClick={()=>void guard(()=>service.returnFrogHome())}>让蛙蛙回家</button>:null}</div>
         </aside>
-      </>}
+      </aside>}
       {photoPick?<PhotoLocationPicker photos={snapshot.photos.filter(p=>photoPick.ids.includes(p.id))} draft={photoPick.draft} onSave={savePhotoPick} onCancel={cancelPhotoPick} onRepick={()=>{if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:null}:current);}} load={loadThumbnail}/>:<TopBar
         onHome={openHome}
         onImport={() => {
@@ -1501,25 +1521,6 @@ export function MapWall() {
 
       {(!empty||!!travel.waypoints?.length||selecting||waypointsOpen||!!photoPick) && scene === 'wall' ? (
         <>
-          {!photoPick&&<PoiList
-            groups={groups}
-            total={totalPoi}
-            open={listOpen}
-            linked={linked}
-            highlightCity={highlightCity}
-            highlightWish={highlightWish}
-            homeCityName={snapshot.home.city.name}
-            scrollRef={poiScrollRef}
-            imageForPhoto={(photoId) => {
-              const photo = model.photoById.get(photoId);
-              return photo ? imageFor(photo) : null;
-            }}
-            onToggle={() => setListOpen((open) => !open)}
-            onCity={focusCityFromList}
-            onWish={focusWishRow}
-            onHome={openHome}
-            onScroll={scheduleViewSave}
-          />}
           <Crumb
             level={level}
             countryName={following?'世界':countryName}

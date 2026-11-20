@@ -1,5 +1,5 @@
-import type { RefObject } from 'react';
-import type { PoiGroups } from './groups';
+import type { RefObject } from "react";
+import type { PoiGroups } from "./groups";
 
 export interface PoiListProps {
   readonly groups: PoiGroups;
@@ -19,7 +19,15 @@ export interface PoiListProps {
 }
 
 const MENU_ICON = (
-  <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+  <svg
+    viewBox="0 0 20 20"
+    width="16"
+    height="16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+  >
     <path d="M4 5.2h12M4 10h12M4 14.8h12" />
     <circle cx="2.2" cy="5.2" r=".8" fill="currentColor" stroke="none" />
     <circle cx="2.2" cy="10" r=".8" fill="currentColor" stroke="none" />
@@ -42,57 +50,77 @@ export function PoiList({
   onScroll,
 }: PoiListProps) {
   return (
-    <>
-      <aside className={`poi-list${open ? ' is-open' : ''}${linked ? ' is-linked' : ''}`} aria-label="点位清单">
-        <button
-          className="poi-toggle"
-          type="button"
-          aria-expanded={open}
-          aria-controls="poiScroll"
-          title={open ? '收起点位清单' : '展开点位清单'}
-          tabIndex={open ? 0 : -1}
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggle();
-          }}
+    <aside
+      className={`poi-list${open ? " is-open" : ""}${linked ? " is-linked" : ""}`}
+      aria-label="点位清单"
+    >
+      <button
+        className="poi-toggle"
+        type="button"
+        aria-expanded={open}
+        aria-controls="poiContents"
+        aria-label={open ? "收起足迹与愿望列表" : "展开足迹与愿望列表"}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggle();
+        }}
+      >
+        {MENU_ICON}
+        <span>足迹 / 还想去</span>
+        <em>{total} 处</em>
+        <b>{open ? "收起" : "展开"}</b>
+      </button>
+      <div className="poi-body" id="poiContents" hidden={!open} inert={!open}>
+        <div
+          className="poi-scroll"
+          id="poiScroll"
+          ref={scrollRef}
+          onScroll={onScroll}
+          tabIndex={0}
+          role="region"
+          aria-label="足迹与愿望列表内容"
         >
-          {MENU_ICON}
-        </button>
-        <div className="poi-body" inert={!open} aria-hidden={!open}>
           <header className="poi-head">
             <span>足迹</span>
-            <em>{total} 处</em>
           </header>
-          <div className="poi-scroll" id="poiScroll" ref={scrollRef} onScroll={onScroll}>
-            {groups.years.map((group) => (
-              <div key={group.year}>
-                <div className="poi-year">{group.year}</div>
-                {group.rows.map((row) => {
-                  const image = imageForPhoto(row.photoId);
-                  return (
-                    <button
-                      key={`${group.year}-${row.cityKey}`}
-                      type="button"
-                      className={`poi-row${highlightCity === row.cityKey ? ' is-hl' : ''}`}
-                      data-city={row.cityKey}
-                      data-year={group.year}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onCity(row.cityKey);
-                      }}
-                    >
-                      <span className="poi-thumb" style={image ? { backgroundImage: `url("${image}")` } : undefined} />
-                      <span className="poi-name">{row.name}</span>
-                      <span className="poi-meta">
-                        {group.year} · {row.count} 张
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-          {groups.wished.length > 0 ? (
+          {groups.years.length === 0 && (
+            <p className="poi-empty">还没有照片足迹。</p>
+          )}
+          {groups.years.map((group) => (
+            <div key={group.year}>
+              <div className="poi-year">{group.year}</div>
+              {group.rows.map((row) => {
+                const image = imageForPhoto(row.photoId);
+                return (
+                  <button
+                    key={`${group.year}-${row.cityKey}`}
+                    type="button"
+                    className={`poi-row${highlightCity === row.cityKey ? " is-hl" : ""}`}
+                    data-city={row.cityKey}
+                    data-year={group.year}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onCity(row.cityKey);
+                    }}
+                  >
+                    <span
+                      className="poi-thumb"
+                      style={
+                        image
+                          ? { backgroundImage: `url("${image}")` }
+                          : undefined
+                      }
+                    />
+                    <span className="poi-name">{row.name}</span>
+                    <span className="poi-meta">
+                      {group.year} · {row.count} 张
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+          {groups.wished.length > 0 && (
             <div className="poi-wish-block">
               <div className="poi-sub">
                 还想去 <i>{groups.wished.length}</i>
@@ -101,7 +129,7 @@ export function PoiList({
                 <button
                   key={wish.id}
                   type="button"
-                  className={`poi-row poi-wish-row${highlightWish === wish.id ? ' is-hl' : ''}`}
+                  className={`poi-row poi-wish-row${highlightWish === wish.id ? " is-hl" : ""}`}
                   data-wish={wish.id}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -114,26 +142,9 @@ export function PoiList({
                 </button>
               ))}
             </div>
-          ) : null}
-
+          )}
         </div>
-      </aside>
-      <button
-        className="poi-fab"
-        type="button"
-        aria-expanded={open}
-        aria-controls="poiScroll"
-        aria-label={open ? '收起点位清单' : '展开点位清单'}
-        title={open ? '收起点位清单' : '展开点位清单'}
-        tabIndex={open ? -1 : 0}
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggle();
-        }}
-      >
-        {MENU_ICON}
-        <b className="poi-count">{total}</b>
-      </button>
-    </>
+      </div>
+    </aside>
   );
 }
