@@ -6,7 +6,7 @@ import { PhotoLocationPicker } from "./PhotoLocationPicker";
 import { Drawer } from "./Drawer";
 import type { Photo } from "../../domain/photo/photo";
 import { namedMapPoint } from "./waypoint-names";
-import { DEFAULT_HOME_CITY } from '../../domain/home/home';
+import { DEFAULT_HOME_CITY } from "../../domain/home/home";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root | undefined;
 afterEach(async () => {
@@ -29,12 +29,57 @@ const photo = {
   tripId: null,
 } as Photo;
 describe("photo map location confirmation", () => {
-  it('keeps existing suggested locations usable in one click without opening the map',async()=>{
-    const host=mount(),apply=vi.fn(async()=>{}),pick=vi.fn();
-    const target={...photo,capturedAt:Date.UTC(2024,4,2),captureOffsetMinutes:0} as Photo;
-    await act(async()=>root!.render(<Drawer open tab="fill" onTab={()=>{}} onClose={()=>{}} candidates={[]} batches={[]} issues={[]} suggestions={[{photoId:photo.id,geo:DEFAULT_HOME_CITY.centroid!,cityRef:DEFAULT_HOME_CITY,reason:'same-day-gps',sourcePhotoIds:['located'],timeDeltaMs:1,distanceKm:0,confidence:'high'}]} photosById={new Map([[photo.id,target]])} onImportFiles={async()=>{throw new Error('not used');}} onConfirmCandidate={async()=>{}} onIgnoreCandidate={async()=>{}} onMergeCandidates={async()=>{}} onSplitCandidate={async()=>{}} onApplySuggestions={apply} onPickPhotoLocation={pick}/>));
-    await act(async()=>[...host.querySelectorAll('button')].find(e=>e.textContent==='全部套用')!.dispatchEvent(new MouseEvent('click',{bubbles:true})));
-    expect(apply).toHaveBeenCalledWith([photo.id]);expect(pick).not.toHaveBeenCalled();
+  it("keeps existing suggested locations usable in one click without opening the map", async () => {
+    const host = mount(),
+      apply = vi.fn(async () => {}),
+      pick = vi.fn();
+    const target = {
+      ...photo,
+      capturedAt: Date.UTC(2024, 4, 2),
+      captureOffsetMinutes: 0,
+    } as Photo;
+    await act(async () =>
+      root!.render(
+        <Drawer
+          open
+          tab="fill"
+          onTab={() => {}}
+          onClose={() => {}}
+          candidates={[]}
+          batches={[]}
+          issues={[]}
+          suggestions={[
+            {
+              photoId: photo.id,
+              geo: DEFAULT_HOME_CITY.centroid!,
+              cityRef: DEFAULT_HOME_CITY,
+              reason: "same-day-gps",
+              sourcePhotoIds: ["located"],
+              timeDeltaMs: 1,
+              distanceKm: 0,
+              confidence: "high",
+            },
+          ]}
+          photosById={new Map([[photo.id, target]])}
+          onImportFiles={async () => {
+            throw new Error("not used");
+          }}
+          onConfirmCandidate={async () => {}}
+          onIgnoreCandidate={async () => {}}
+          onMergeCandidates={async () => {}}
+          onSplitCandidate={async () => {}}
+          onApplySuggestions={apply}
+          onPickPhotoLocation={pick}
+        />,
+      ),
+    );
+    await act(async () =>
+      [...host.querySelectorAll("button")]
+        .find((e) => e.textContent === `使用${DEFAULT_HOME_CITY.name}建议`)!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(apply).toHaveBeenCalledWith([photo.id]);
+    expect(pick).not.toHaveBeenCalled();
   });
   it("requires a map pick, never asks for numbers initially, and cancels without saving", async () => {
     const host = mount(),

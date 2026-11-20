@@ -1,3 +1,4 @@
+import {legacyPoint,panMercator} from './mercator-camera';
 import {
   projectWorld,
   projectCity,
@@ -16,6 +17,10 @@ export function photoLocationCamera(
   mode: "world" | "city" | "region",
 ): Camera {
   if (metrics.sheetW <= 0) return camera;
+  if(metrics.mercatorMode){
+    const p=legacyPoint(point,mode);
+    return panMercator({cx:p.x,cy:p.y,zoom:camera.zoom},0,-metrics.sheetH*.3,metrics,mode);
+  }
   const projected = (
     mode === "city"
       ? projectCity

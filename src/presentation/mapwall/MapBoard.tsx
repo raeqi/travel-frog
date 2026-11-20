@@ -1,4 +1,7 @@
-import type { CSSProperties, RefObject } from 'react';
+import {lazy,Suspense,type CSSProperties,type RefObject} from 'react';
+import './live-basemap.css';
+import {BasemapBoundary} from './BasemapBoundary';
+const LiveBasemap=lazy(()=>import('./LiveBasemap').then(m=>({default:m.LiveBasemap})));
 import type { DestinationCandidate } from './candidates';
 import { CityLayer, RegionLayer, WorldLayer } from './layers';
 import type { LabelPlacement, PilePlacement, Rect } from './layout';
@@ -31,6 +34,11 @@ export interface DestTagPlacement {
 }
 
 export interface MapBoardProps {
+  readonly liveBasemap?:boolean;
+  readonly basemapMessage?:string;
+  readonly onBasemapToggle?:()=>void;
+  readonly onBasemapFailure?:()=>void;
+  readonly onBasemapReady?:()=>void;
   readonly selecting?:boolean;
   readonly photoPicking?:boolean;
   readonly onMapPick?:(point:{lat:number;lng:number})=>void;
@@ -226,7 +234,7 @@ function FanCards({
 }
 
 export function MapBoard(props: MapBoardProps) {
-  useMapGestures(props.boardRef, props.camera, props.metrics, maxMapZoom(props.mode), props.onCamera);
+  useMapGestures(props.boardRef, props.camera, props.metrics, maxMapZoom(props.mode,!!props.liveBasemap), props.onCamera);
   const project = props.mode === 'city' ? projectCity : props.mode === 'region' ? projectRegion : projectWorld;
   const {
     boardRef,
@@ -264,19 +272,20 @@ export function MapBoard(props: MapBoardProps) {
 
   return (
     <div className="frame">
-      <div className={`board${props.selecting?' is-selecting':''}${props.photoPicking?' photo-picking':''}`} ref={boardRef} onClick={event=>{
+      <div className={`board${props.liveBasemap?' has-live-map':''}${props.selecting?' is-selecting':''}${props.photoPicking?' photo-picking':''}`} ref={boardRef} onClick={event=>{
         if(props.selecting && !(event.target as Element).closest('button,a,input,select,textarea,[role="button"],[data-map-controls]')){
           const rect=event.currentTarget.getBoundingClientRect();const point=mapCoordinate(event.clientX-rect.left,event.clientY-rect.top,props.camera,props.metrics,props.mode);if(point)props.onMapPick?.(point);
         }else onBackgroundClick();
       }} onKeyDown={event=>{if(props.selecting&&event.target===event.currentTarget&&event.key==='Enter'){event.preventDefault();const point=mapCoordinate(props.metrics.offX+props.metrics.sheetW/2,props.metrics.offY+props.metrics.sheetH/2,props.camera,props.metrics,props.mode);if(point)props.onMapPick?.(point);}}} tabIndex={0} role="region" aria-label="旅行地图：拖动平移，滚轮缩放，触控板双指平移，捏合缩放；键盘方向键平移，加减号缩放">
         <div className="map-sheet" id="mapSheet" ref={sheetRef}>
+          {props.liveBasemap?<BasemapBoundary onFailure={()=>props.onBasemapFailure?.()}><Suspense fallback={null}><LiveBasemap camera={props.camera} metrics={props.metrics} mode={props.mode} onFailure={()=>props.onBasemapFailure?.()} onReady={()=>props.onBasemapReady?.()}/></Suspense></BasemapBoundary>:<>
           <WorldLayer viewBox={viewBox} visitedCountries={visitedCountries} />
           <CityLayer viewBox={viewBox} />
           <RegionLayer viewBox={viewBox} />
           <div className="map-print" aria-hidden="true">
             <span className="map-print-title">THE WORLD, KEPT AT HOME</span>
             <span className="map-print-sub">私人旅行档案 · 仅本机</span>
-          </div>
+          </div></>}
         </div>
 
         <svg id="routeSvg" className="route-layer" viewBox={`0 0 ${viewWidth} ${viewHeight}`} aria-hidden="true">
@@ -380,7 +389,8 @@ export function MapBoard(props: MapBoardProps) {
         {frogActions ? <FrogActions x={frogActions.x} y={frogActions.y} below={frogActions.below} onAction={onFrogAction} /> : null}
         <RealPlacePins pois={props.realPois??[]} camera={props.camera} metrics={props.metrics} project={project} onSelect={point=>props.onPoiPick?.(point)}/>
 
-        {props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
+        {props.onBasemapToggle&&<div className="basemap-controls" data-map-controls><p role="status">{props.basemapMessage}</p><button type="button" onClick={props.onBasemapToggle}>{props.liveBasemap?'使用离线示意图':'加载真实底图'}</button></div>}
+        {!props.liveBasemap&&props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
         {destHint ? <div className="entrust-hint">给下一趟留个方向 · 蛙蛙也会自己安排旅行</div> : null}
       </div>
     </div>

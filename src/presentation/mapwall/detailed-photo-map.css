@@ -1,0 +1,87 @@
+.photo-detail-map {
+  position: fixed;
+  inset: 18px;
+  z-index: 31;
+  background: #e7e6da;
+  border: 1px solid #bbaa8d;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.photo-detail-map-canvas {
+  position: absolute;
+  inset: 0;
+}
+.photo-detail-map .leaflet-container {
+  font: 14px/1.5 system-ui;
+}
+.photo-detail-map .leaflet-control-zoom a {
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
+  font-size: 24px;
+}
+.photo-detail-map .leaflet-control-attribution {
+  font-size: 11px;
+  max-width: calc(100vw - 90px);
+}
+.photo-detail-toolbar {
+  position: absolute;
+  z-index: 1000;
+  left: 70px;
+  top: 38px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+.photo-detail-toolbar span {
+  background: #fffaf0e8;
+  border-radius: 6px;
+  padding: 6px 9px;
+  font: 13px/1.4 system-ui;
+}
+.photo-detail-map button {
+  background: #fffaf0;
+  color: #35543c;
+  border: 1px solid #bbaa8d;
+  border-radius: 7px;
+  padding: 8px 10px;
+  font: 14px/1.4 system-ui;
+  cursor: pointer;
+  min-height: 40px;
+  pointer-events: auto;
+}
+.photo-detail-status {
+  position: absolute;
+  top: 98px;
+  left: 70px;
+  z-index: 1000;
+  max-width: calc(100% - 95px);
+  padding: 7px 10px;
+  background: #fffaf0e8;
+  border-radius: 7px;
+  font: 13px/1.5 system-ui;
+  pointer-events: none;
+}
+.photo-detail-status.is-error,
+.photo-detail-status.is-partial {
+  background: #fff0d4;
+  pointer-events: auto;
+}
+.photo-detail-status button {
+  margin: 5px;
+}
+@media (max-width: 600px) {
+  .photo-detail-map {
+    inset: 8px;
+  }
+  .photo-detail-toolbar {
+    top: 35px;
+  }
+  .photo-detail-status {
+    top: 137px;
+    font-size: 12px;
+  }
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useArchive, useService } from '../context';
 import { buildWallModel, formattedDay, isNewWish, wallModelIsEmpty, type WallModel, type WallPhoto, type WallWish } from './model';
 import {
@@ -61,10 +61,12 @@ import './map-primary-actions.css';
 import {RealPlaces} from './RealPlaces';
 import {useRealPlaces} from './useRealPlaces';
 import {poiArea} from './real-pois';
+import {photoLocationReference,type PhotoLocationReference} from './photo-location-start';
 
+const DetailedPhotoMap=lazy(()=>import('./DetailedPhotoMap').then(m=>({default:m.DetailedPhotoMap})));
 type Mode = 'world' | 'city' | 'region';
 type Level = 'world' | 'country' | 'city' | 'region';
-interface PhotoPickSession { ids: readonly string[]; returnTab: DrawerTab; draft: WaypointDraft|null; view: {camera:Camera;mode:Mode;level:Level} }
+interface PhotoPickSession { ids: readonly string[]; returnTab: DrawerTab; reference:PhotoLocationReference|null; draft: WaypointDraft|null; view: {camera:Camera;mode:Mode;level:Level} }
 
 interface ReplayState {
   readonly tripId: string;
@@ -247,7 +249,9 @@ export function MapWall() {
   const [scene, setScene] = useState<'wall' | 'home'>('wall');
   const [waypointsOpen,setWaypointsOpen]=useState(false),[selecting,setSelecting]=useState(false),[waypointDraft,setWaypointDraft]=useState<WaypointDraft|null>(null);
   const [photoPick,setPhotoPick]=useState<PhotoPickSession|null>(null);
+  const [detailedPhotoMap,setDetailedPhotoMap]=useState(false);
   const photoSaving=useRef(false);
+  const pendingPhotoFocus=useRef<readonly string[]>([]);
   const [following,setFollowing]=useState(false);
   const followingRef=useRef(false);
   const frogLocation=frogJourneyLocation(travel.current,snapshot.home.city,journeyNow);
@@ -261,7 +265,10 @@ export function MapWall() {
 
   const boardRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
-  const [metrics, setMetrics] = useState<Metrics>(EMPTY_METRICS);
+  const [measuredMetrics, setMetrics] = useState<Metrics>(EMPTY_METRICS);
+  const [liveBasemap,setLiveBasemap]=useState(import.meta.env.VITE_BASEMAP_MODE!=='offline');
+  const [basemapMessage,setBasemapMessage]=useState('正在加载真实底图…');
+  const metrics=useMemo<Metrics>(()=>liveBasemap?{...measuredMetrics,mercatorMode:mode}:measuredMetrics,[liveBasemap,measuredMetrics,mode]);
   const realPoiArea=poiArea(camera,metrics,mode);
   const realPlaces=useRealPlaces(realPoiArea);
   const [searchTab,setSearchTab]=useState<PlaceSearchTab>('archive');
@@ -511,16 +518,19 @@ export function MapWall() {
   },[animateCamera,setReplay]);
   const startPhotoPick=useCallback((ids:readonly string[],returnTab:DrawerTab)=>{
     if(!ids.length)return;
-    setPhotoPick({ids,returnTab,draft:null,view:{camera:cameraRef.current,mode,level}});
+    setDetailedPhotoMap(false);
+    const reference=photoLocationReference(ids,snapshot.photos,service.suggestions());
+    setPhotoPick({ids,returnTab,draft:null,reference,view:{camera:cameraRef.current,mode,level}});
     setDrawerOpen(false);setScene('wall');setWaypointsOpen(false);setSelecting(false);setWaypointDraft(null);
     setListOpen(false);setFan(null);setMemoryTripId(null);setWishFocus(null);setJourneyPanelOpen(false);setFrogActionsOpen(false);setReplay(null);
     followingRef.current=false;setFollowing(false);
-    if(mode!=='world'){
+    if(reference){const p=projectWorld(reference.lat,reference.lng);animateCamera({cx:p.x,cy:p.y,zoom:2500},'world','world',true);}
+    else if(mode!=='world'){
       const p=mapCoordinate(metrics.offX+metrics.sheetW/2,metrics.offY+metrics.sheetH/2,cameraRef.current,metrics,mode);
       const centre=p?projectWorld(p.lat,p.lng):null;
       animateCamera(centre?{cx:centre.x,cy:centre.y,zoom:2500}:WORLD_CAMERA,'world','world',true);
     }
-  },[mode,level,metrics,animateCamera,setMemoryTripId,setWishFocus,setReplay]);
+  },[mode,level,metrics,animateCamera,setMemoryTripId,setWishFocus,setReplay,snapshot.photos,service]);
   const cancelPhotoPick=useCallback(()=>{
     if(!photoPick||photoSaving.current)return;
     animateCamera(photoPick.view.camera,photoPick.view.mode,photoPick.view.level,true);
@@ -535,6 +545,7 @@ export function MapWall() {
       setPhotoPick(null);
       const pending=photos.some(p=>p.tripId===null);
       if(pending){
+        pendingPhotoFocus.current=[...photoPick.ids];
         animateCamera(photoPick.view.camera,photoPick.view.mode,photoPick.view.level,true);
         setDrawerTab(photos.some(p=>!p.thumbRef||p.capturedAtSource==='missing')?'progress':'candidates');setDrawerOpen(true);
         notify('位置已保存，继续确认这组照片');
@@ -568,7 +579,7 @@ export function MapWall() {
     if (cameraFrame.current !== null) cancelAnimationFrame(cameraFrame.current);
     cameraFrame.current = null;
     const current = cameraRef.current;
-    gestureCamera(boundCamera({ ...current, zoom: current.zoom * factor }, metrics, maxMapZoom(mode)));
+    gestureCamera(boundCamera({ ...current, zoom: current.zoom * factor }, metrics, maxMapZoom(mode,!!metrics.mercatorMode)));
   }, [mode, metrics, gestureCamera]);
 
   const focusCountry = useCallback(() => {
@@ -1415,6 +1426,11 @@ export function MapWall() {
         />
       ) : (
       <MapBoard
+        liveBasemap={liveBasemap}
+        basemapMessage={liveBasemap?basemapMessage:basemapMessage.includes('失败')?basemapMessage:'离线示意图 · 无真实街道'}
+        onBasemapToggle={()=>{setBasemapMessage('正在加载真实底图…');setLiveBasemap(current=>!current);}}
+        onBasemapFailure={()=>{setBasemapMessage('真实底图加载失败，已切换离线示意图。可继续选点或手动重试。');setLiveBasemap(false);}}
+        onBasemapReady={()=>setBasemapMessage('真实底图 · 地名采用服务提供的语言')}
         boardRef={boardRef}
         sheetRef={sheetRef}
         camera={camera}
@@ -1507,7 +1523,10 @@ export function MapWall() {
         </aside>
       </aside>}
       {selecting&&!photoPick&&scene==='wall'&&<section className="destination-pickbar" aria-label="添加蛙蛙目的地"><strong>添加目的地</strong><p>轻点地图放图钉；可拖动、缩放。确认保存前不会添加。</p><button type="button" onClick={cancelDestinationPick}>取消选点</button></section>}
-      {photoPick?<PhotoLocationPicker photos={snapshot.photos.filter(p=>photoPick.ids.includes(p.id))} draft={photoPick.draft} onSave={savePhotoPick} onCancel={cancelPhotoPick} onRepick={()=>{if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:null}:current);}} load={loadThumbnail}/>:<TopBar
+      {import.meta.env.DEV&&photoPick&&detailedPhotoMap&&<Suspense fallback={<p className="photo-map-loading" role="status">正在准备街道地图…</p>}><DetailedPhotoMap
+        initialView={{...(photoPick.reference??mapCoordinate(metrics.offX+metrics.sheetW/2,metrics.offY+metrics.sheetH/2,photoPick.view.camera,metrics,photoPick.view.mode)??{lat:0,lng:0}),zoom:photoPick.reference?14:photoPick.view.mode==='world'?Math.log2(Math.max(1,metrics.sheetW)*photoPick.view.camera.zoom/512):14}}
+        reference={photoPick.reference} selected={photoPick.draft} onPick={pickMapPoint} onExit={()=>setDetailedPhotoMap(false)}/></Suspense>}
+      {photoPick?<PhotoLocationPicker photos={snapshot.photos.filter(p=>photoPick.ids.includes(p.id))} draft={photoPick.draft} onSave={savePhotoPick} onCancel={cancelPhotoPick} onRepick={()=>{if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:null}:current);}} load={loadThumbnail} detailedMap={detailedPhotoMap} {...(import.meta.env.DEV?{onDetailedMap:()=>setDetailedPhotoMap(true)}:{})} referenceLabel={photoPick.reference?.label??null} onSearchPlace={point=>{const p=projectWorld(point.lat,point.lng);animateCamera({cx:p.x,cy:p.y,zoom:2500},'world','world',true);setPhotoPick(current=>current?{...current,draft:null,reference:{...point,label:point.name,kind:'search'}}:current);}}/>:<TopBar
         onHome={openHome}
         missingCount={missingPhotoCount}
         onImport={() => {
@@ -1609,7 +1628,9 @@ export function MapWall() {
           await guard(async()=>{
             const tripId=await service.confirmCandidate(id);
             const fresh=buildWallModel(service.getSnapshot(),snapshot.home.city.key);
-            const city=fresh.cities.find(c=>c.tripIds.includes(tripId));
+            const focus=fresh.photos.find(p=>p.tripId===tripId&&pendingPhotoFocus.current.includes(p.id));
+            const city=(focus?fresh.cityByKey.get(focus.cityKey):null)??fresh.cities.find(c=>c.tripIds.includes(tripId));
+            if(focus)pendingPhotoFocus.current=[];
             setActiveTripId(tripId);setDrawerOpen(false);
             if(city){setCityKey(city.key);animateCamera(cityCamera(fresh.photos.filter(p=>p.cityKey===city.key),city,metrics.sheetW>0?metrics.sheetH/metrics.sheetW:.64),'world','city');notify('已确认，正在地图查看这组照片');}
             else notify('已存入档案；缺位置的照片补好后才能上地图');
@@ -1625,10 +1646,11 @@ export function MapWall() {
           await guard(() => service.splitCandidate(id, at), '已拆分为 2 个候选');
         }}
         onApplySuggestions={async (ids) => {
-          await guard(async () => {
-            const applied = await service.applyLocationSuggestions(ids);
-            notify(`已套用 ${applied} 张照片的位置`);
-          });
+          const applied=await service.applyLocationSuggestions(ids);
+          const archive=service.getSnapshot(),photos=archive.photos.filter(p=>ids.includes(p.id));
+          if(applied&&photos.some(p=>p.tripId===null)){setDrawerTab('candidates');notify(`已应用 ${applied} 张照片的位置建议，请继续确认照片`);}
+          else if(applied){const fresh=buildWallModel(archive,archive.home.city.key),located=fresh.photos.find(p=>ids.includes(p.id)),city=located?fresh.cityByKey.get(located.cityKey):null;if(city&&located){setDrawerOpen(false);setScene('wall');setActiveTripId(located.tripId);setCityKey(city.key);animateCamera(cityCamera(fresh.photos.filter(p=>p.cityKey===city.key),city,metrics.sheetW>0?metrics.sheetH/metrics.sheetW:.64),'world','city');}notify(`已应用 ${applied} 张照片的位置建议，正在地图查看`);}
+          else throw new Error('这些照片已没有可用建议，请更新列表后再试');
         }}
       />
 

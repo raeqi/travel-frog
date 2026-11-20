@@ -1,3 +1,4 @@
+import {mercatorToScreen,mercatorCoordinate,type ProjectionMode} from './mercator-camera';
 import { WORLD_HEIGHT, WORLD_WIDTH } from '../../infrastructure/geo/projection';
 
 export interface Camera {
@@ -7,6 +8,7 @@ export interface Camera {
 }
 
 export interface Metrics {
+  readonly mercatorMode?: ProjectionMode;
   readonly boardW: number;
   readonly boardH: number;
   readonly sheetW: number;
@@ -68,6 +70,7 @@ export interface ScreenPoint {
 }
 
 export function toScreen(point: { x: number; y: number }, camera: Camera, metrics: Metrics): ScreenPoint {
+  if(metrics.mercatorMode)return mercatorToScreen(point,camera,metrics,metrics.mercatorMode);
   const view = viewRect(camera, metrics);
   const k = metrics.sheetW / view.viewW;
   return { x: metrics.offX + (point.x - view.vx) * k, y: metrics.offY + (point.y - view.vy) * k, k };
@@ -106,6 +109,7 @@ export function postcardTilt(id: string): string {
 
 /** Inverse of the visible projection. Board coordinates include the sheet margins. */
 export function mapCoordinate(x:number,y:number,camera:Camera,metrics:Metrics,mode:'world'|'city'|'region'):{lat:number;lng:number}|null {
+ if(metrics.mercatorMode)return mercatorCoordinate(x,y,camera,metrics,metrics.mercatorMode);
  const view=viewRect(camera,metrics),k=metrics.sheetW/view.viewW;if(!(k>0))return null;
  const px=view.vx+(x-metrics.offX)/k,py=view.vy+(y-metrics.offY)/k;
  const lng=mode==='city'?135.7681+(px-500)/CITY_SCALE:mode==='region'?135.55+(px-500)/REGION_SCALE:px/1000*360-180;

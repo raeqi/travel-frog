@@ -1,0 +1,9 @@
+.live-basemap {position:absolute;inset:0;z-index:1;pointer-events:none;background:#e7edf0;}
+.live-basemap .maplibregl-canvas {pointer-events:none;}
+.live-basemap .maplibregl-control-container {pointer-events:auto;}
+.live-basemap .maplibregl-ctrl-attrib {font:12px/1.5 system-ui,sans-serif;max-width:100%;color:#263b36;background:#fffffff0;}
+.board.has-live-map .map-sheet::before {display:none;}
+.basemap-controls {position:absolute;right:18px;bottom:38px;z-index:24;max-width:225px;padding:7px 10px;border-radius:8px;background:#fffef8f5;box-shadow:0 2px 8px #172b2820;font:14px/1.4 system-ui,sans-serif;color:#244539;}
+.basemap-controls p {margin:0 0 5px;}
+.basemap-controls button {font:inherit;min-height:40px;padding:5px 9px;border:1px solid #496958;border-radius:5px;background:#fff;color:inherit;cursor:pointer;}
+@media(max-width:700px){.basemap-controls{right:8px;bottom:24px;max-width:170px;font-size:13px;}.basemap-controls p{margin-bottom:3px;}}

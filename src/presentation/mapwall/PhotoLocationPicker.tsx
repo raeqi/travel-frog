@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { Photo } from "../../domain/photo/photo";
 import type { ManualLocationInput } from "./ManualLocationForm";
 import type { WaypointDraft } from "./WaypointPanel";
+import { GazetteerCityResolver } from "../../infrastructure/geo/city-resolver";
+const cityNames = new GazetteerCityResolver();
 import { nearbyWaypointCity } from "./waypoint-names";
 import { ImportedPhotoPreview } from "./RepairPhotos";
 import "./photo-location-picker.css";
@@ -13,7 +15,15 @@ export function PhotoLocationPicker({
   onCancel,
   onRepick,
   load,
+  detailedMap = false,
+  onDetailedMap,
+  referenceLabel = null,
+  onSearchPlace,
 }: {
+  detailedMap?: boolean;
+  onDetailedMap?: () => void;
+  referenceLabel?: string | null;
+  onSearchPlace?: (point: { name: string; lat: number; lng: number }) => void;
   photos: readonly Photo[];
   draft: WaypointDraft | null;
   onSave: (input: ManualLocationInput) => Promise<void>;
@@ -23,7 +33,11 @@ export function PhotoLocationPicker({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [query, setQuery] = useState("");
   const nearby = draft ? nearbyWaypointCity(draft) : null;
+  const matches = query.trim()
+    ? cityNames.suggest(query, 5).filter((c) => c.centroid)
+    : [];
   return (
     <section
       className="photo-location-picker"
@@ -49,6 +63,62 @@ export function PhotoLocationPicker({
               : "轻点地图选位置，也可拖动、缩放。只有最后确认才会保存。"}
           </p>
         </div>
+      )}
+      {!draft && (
+        <>
+          {referenceLabel && (
+            <p className="photo-reference">
+              当前参考：{referenceLabel}
+              。这只是起始视野，请在地图上确认准确位置。
+            </p>
+          )}
+          {onSearchPlace && (
+            <div className="photo-place-search">
+              <label>
+                搜索城市
+                <input
+                  aria-label="搜索照片拍摄城市"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="例如：京都"
+                />
+              </label>
+              {matches.length > 0 && (
+                <ul aria-label="照片城市建议">
+                  {matches.map((c) => (
+                    <li key={c.key}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSearchPlace({
+                            name: c.name,
+                            lat: c.centroid!.lat,
+                            lng: c.centroid!.lng,
+                          });
+                          setQuery("");
+                        }}
+                      >
+                        查看{c.name}附近 · {c.countryName}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      {!detailedMap && onDetailedMap && (
+        <details className="photo-street-optin">
+          <summary>使用街道底图 · 本地试验</summary>
+          <p>
+            会向 OpenStreetMap 请求当前视野的底图；服务会接收 IP
+            和瓦片范围，不发送照片或文件名。地名采用当地语言，尚非全中文。
+          </p>
+          <button type="button" onClick={onDetailedMap}>
+            启用街道底图
+          </button>
+        </details>
       )}
       {draft ? (
         <form
