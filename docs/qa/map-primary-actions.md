@@ -35,3 +35,17 @@ The first candidate exposed the pre-existing 520px photo drawer extending beyond
 - Managed preview relay 4173 timed out again; `sites-preview status` reported stopped. No replacement server or browser security workaround was used. Browser QA ran on the original Site candidates 21 and corrected22.
 - External Overpass availability, mobile hardware/multi-touch, room WebGL and a new photo import/HEIC decoding session were not retested for this entry-point change. Network fixtures are used only in automated component tests, separately from the actual Wikipedia browser check.
 - No GitHub CI checks were reported/configured for the PR; the checks above ran in the execution environment. GitHub remains private and the Site audience remains public, unchanged.
+
+## Added POI selection conflict regression — version 23
+
+The requested extra case reproduced on version22: after Search loaded real pins and closed, entering Add Destination and clicking the Eiffel Tower pin produced **one destination pick bar + one search panel + one place detail at the same time**. Closing Search left the pick bar active.
+
+The handler now consumes the POI into the active destination draft; photo picking remains the first, separate branch. Esc cancels a destination draft once; closing its panel clears the draft. On the actual version23 browser:
+
+- Repeated the real query (50 Wikipedia results), closed Search, entered Add Destination, and clicked `地点：艾菲爾鐵塔`.
+- Observed pick bar0, search0, place detail0, exactly one destination draft named 艾菲爾鐵塔.
+- Pressed Esc once: draft0/search0, candidate count7, missing-photo count4. Repeated with the panel close button: draft0 and the same counts.
+- Outside selection mode, the same pin still opened the source-backed detail in one click; Esc once closed Search.
+- Re-ran all 167 tests and the production build after the fix.
+
+Main merge was rejected by automatic approval review (stated reason: no recognized explicit merge authorization in this task). No alternate merge route was attempted. The complete tested branch remains in PR12; the original Site has version23. Main remains `283aa934`. This deployment is explicitly a branch build, not a claimed main release.
