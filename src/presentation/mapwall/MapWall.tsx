@@ -27,6 +27,7 @@ import {
 import { groupPoiRows, poiTotal } from './groups';
 import { availableDestinations, type DestinationCandidate } from './candidates';
 import { usePhotoImages, photoImage } from './usePhotoImages';
+import {BasemapControls} from './BasemapControls';
 import { MapBoard, type CityPhotoMarker, type DestTagPlacement, type RoutePath } from './MapBoard';
 import { PoiList } from './PoiList';
 import { PhotoLocationPicker } from './PhotoLocationPicker';
@@ -1402,6 +1403,7 @@ export function MapWall() {
       ? '关西'
       : model.cityByKey.get(effectiveCityKey)?.name ?? activeTrip?.visits[0]?.name ?? '京都';
 
+  const basemapControls=<BasemapControls live={liveBasemap} message={liveBasemap?basemapMessage:basemapMessage.includes('失败')?basemapMessage:'离线示意图 · 无真实街道'} onToggle={()=>{setBasemapMessage('正在加载真实底图…');setLiveBasemap(current=>!current);}}/>;
   const suggestions = service.suggestions();
   const photosById = useMemo(() => new Map(snapshot.photos.map((photo) => [photo.id, photo] as const)), [snapshot.photos]);
 
@@ -1427,9 +1429,7 @@ export function MapWall() {
       ) : (
       <MapBoard
         liveBasemap={liveBasemap}
-        basemapMessage={liveBasemap?basemapMessage:basemapMessage.includes('失败')?basemapMessage:'离线示意图 · 无真实街道'}
-        onBasemapToggle={()=>{setBasemapMessage('正在加载真实底图…');setLiveBasemap(current=>!current);}}
-        onBasemapFailure={()=>{setBasemapMessage('真实底图加载失败，已切换离线示意图。可继续选点或手动重试。');setLiveBasemap(false);}}
+        onBasemapFailure={()=>{setBasemapMessage('真实底图加载失败，已切换离线示意图。');setLiveBasemap(false);}}
         onBasemapReady={()=>setBasemapMessage('真实底图 · 地名采用服务提供的语言')}
         boardRef={boardRef}
         sheetRef={sheetRef}
@@ -1493,6 +1493,7 @@ export function MapWall() {
       )}
 
       {scene==='wall'&&snapshot.status==='ready'&&!photoPick&&<aside className="map-left-rail" aria-label="地图侧栏" data-map-controls>
+          {basemapControls}
           {!photoPick&&<PoiList
             groups={groups}
             total={totalPoi}
@@ -1526,7 +1527,7 @@ export function MapWall() {
       {import.meta.env.DEV&&photoPick&&detailedPhotoMap&&<Suspense fallback={<p className="photo-map-loading" role="status">正在准备街道地图…</p>}><DetailedPhotoMap
         initialView={{...(photoPick.reference??mapCoordinate(metrics.offX+metrics.sheetW/2,metrics.offY+metrics.sheetH/2,photoPick.view.camera,metrics,photoPick.view.mode)??{lat:0,lng:0}),zoom:photoPick.reference?14:photoPick.view.mode==='world'?Math.log2(Math.max(1,metrics.sheetW)*photoPick.view.camera.zoom/512):14}}
         reference={photoPick.reference} selected={photoPick.draft} onPick={pickMapPoint} onExit={()=>setDetailedPhotoMap(false)}/></Suspense>}
-      {photoPick?<PhotoLocationPicker photos={snapshot.photos.filter(p=>photoPick.ids.includes(p.id))} draft={photoPick.draft} onSave={savePhotoPick} onCancel={cancelPhotoPick} onRepick={()=>{if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:null}:current);}} load={loadThumbnail} detailedMap={detailedPhotoMap} {...(import.meta.env.DEV?{onDetailedMap:()=>setDetailedPhotoMap(true)}:{})} referenceLabel={photoPick.reference?.label??null} onSearchPlace={point=>{const p=projectWorld(point.lat,point.lng);animateCamera({cx:p.x,cy:p.y,zoom:2500},'world','world',true);setPhotoPick(current=>current?{...current,draft:null,reference:{...point,label:point.name,kind:'search'}}:current);}}/>:<TopBar
+      {photoPick?<PhotoLocationPicker mapControls={basemapControls} photos={snapshot.photos.filter(p=>photoPick.ids.includes(p.id))} draft={photoPick.draft} onSave={savePhotoPick} onCancel={cancelPhotoPick} onRepick={()=>{if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:null}:current);}} load={loadThumbnail} detailedMap={detailedPhotoMap} {...(import.meta.env.DEV?{onDetailedMap:()=>setDetailedPhotoMap(true)}:{})} referenceLabel={photoPick.reference?.label??null} onSearchPlace={point=>{const p=projectWorld(point.lat,point.lng);animateCamera({cx:p.x,cy:p.y,zoom:2500},'world','world',true);setPhotoPick(current=>current?{...current,draft:null,reference:{...point,label:point.name,kind:'search'}}:current);}}/>:<TopBar
         onHome={openHome}
         missingCount={missingPhotoCount}
         onImport={() => {

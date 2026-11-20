@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState,type ReactNode } from "react";
 import type { Photo } from "../../domain/photo/photo";
 import type { ManualLocationInput } from "./ManualLocationForm";
 import type { WaypointDraft } from "./WaypointPanel";
@@ -19,7 +19,9 @@ export function PhotoLocationPicker({
   onDetailedMap,
   referenceLabel = null,
   onSearchPlace,
+  mapControls,
 }: {
+  mapControls?:ReactNode;
   detailedMap?: boolean;
   onDetailedMap?: () => void;
   referenceLabel?: string | null;
@@ -120,6 +122,7 @@ export function PhotoLocationPicker({
           </button>
         </details>
       )}
+      {mapControls}
       {draft ? (
         <form
           key={`${draft.lat}:${draft.lng}:${draft.name}`}

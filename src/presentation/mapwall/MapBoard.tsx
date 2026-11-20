@@ -35,8 +35,6 @@ export interface DestTagPlacement {
 
 export interface MapBoardProps {
   readonly liveBasemap?:boolean;
-  readonly basemapMessage?:string;
-  readonly onBasemapToggle?:()=>void;
   readonly onBasemapFailure?:()=>void;
   readonly onBasemapReady?:()=>void;
   readonly selecting?:boolean;
@@ -389,7 +387,6 @@ export function MapBoard(props: MapBoardProps) {
         {frogActions ? <FrogActions x={frogActions.x} y={frogActions.y} below={frogActions.below} onAction={onFrogAction} /> : null}
         <RealPlacePins pois={props.realPois??[]} camera={props.camera} metrics={props.metrics} project={project} onSelect={point=>props.onPoiPick?.(point)}/>
 
-        {props.onBasemapToggle&&<div className="basemap-controls" data-map-controls><p role="status">{props.basemapMessage}</p><button type="button" onClick={props.onBasemapToggle}>{props.liveBasemap?'使用离线示意图':'加载真实底图'}</button></div>}
         {!props.liveBasemap&&props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
         {destHint ? <div className="entrust-hint">给下一趟留个方向 · 蛙蛙也会自己安排旅行</div> : null}
       </div>
