@@ -61,7 +61,10 @@ async function expectActualImage(page:Page,id:string,color:number[]){
   },digest.hash);
   expect(index).toBeGreaterThanOrEqual(0);await page.locator('.memory .pcell').nth(index).click();
   const image=page.getByRole('img',{name:'放大的旅行照片'});await expect(image).toBeVisible();
-  expect(await image.evaluate(async(img:HTMLImageElement)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await(await fetch(img.src)).arrayBuffer()))).join(','))).toBe(digest.hash);
+  // Archive/view restoration may briefly reload thumbnail URLs. A visible img
+  // can still contain the honest unavailable placeholder until that read ends.
+  await expect(image).toHaveAttribute('src',/^blob:/);
+  await expect.poll(async()=>{try{return await image.evaluate(async(img:HTMLImageElement)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await(await fetch(img.src)).arrayBuffer()))).join(','));}catch{return null;}},{message:'The loaded lightbox bytes must equal this imported photo thumbnail'}).toBe(digest.hash);
 }
 test.beforeEach(async({page})=>{
   // Deterministic offline data/UI test. External provider availability is a separate acceptance job.
