@@ -1,4 +1,7 @@
-import type { CSSProperties, RefObject } from 'react';
+import {lazy,Suspense,type CSSProperties,type RefObject} from 'react';
+import './live-basemap.css';
+import {BasemapBoundary} from './BasemapBoundary';
+const LiveBasemap=lazy(()=>import('./LiveBasemap').then(m=>({default:m.LiveBasemap})));
 import type { DestinationCandidate } from './candidates';
 import { CityLayer, RegionLayer, WorldLayer } from './layers';
 import type { LabelPlacement, PilePlacement, Rect } from './layout';
@@ -11,7 +14,7 @@ import { useMapGestures, maxMapZoom } from './map-gestures';
 import {HouseIcon} from './HouseIcon';
 import {mapCoordinate} from './geometry';
 import type {RealPoi} from './real-pois';
-import { RealPlaces } from './RealPlaces';
+import { RealPlacePins } from './RealPlaces';
 
 export interface CityPhotoMarker {
   readonly photo: WallPhoto;
@@ -31,10 +34,14 @@ export interface DestTagPlacement {
 }
 
 export interface MapBoardProps {
+  readonly liveBasemap?:boolean;
+  readonly onBasemapFailure?:()=>void;
+  readonly onBasemapReady?:()=>void;
   readonly selecting?:boolean;
   readonly photoPicking?:boolean;
   readonly onMapPick?:(point:{lat:number;lng:number})=>void;
   readonly onPoiPick?:(point:RealPoi)=>void;
+  readonly realPois?:readonly RealPoi[];
   readonly waypointPins?:readonly {id:string;name:string;x:number;y:number}[];
   readonly onWaypointClick?:(id:string)=>void;
   readonly draftPin?:{x:number;y:number}|null;
@@ -225,7 +232,7 @@ function FanCards({
 }
 
 export function MapBoard(props: MapBoardProps) {
-  useMapGestures(props.boardRef, props.camera, props.metrics, maxMapZoom(props.mode), props.onCamera);
+  useMapGestures(props.boardRef, props.camera, props.metrics, maxMapZoom(props.mode,!!props.liveBasemap), props.onCamera);
   const project = props.mode === 'city' ? projectCity : props.mode === 'region' ? projectRegion : projectWorld;
   const {
     boardRef,
@@ -263,19 +270,20 @@ export function MapBoard(props: MapBoardProps) {
 
   return (
     <div className="frame">
-      <div className={`board${props.selecting?' is-selecting':''}${props.photoPicking?' photo-picking':''}`} ref={boardRef} onClick={event=>{
+      <div className={`board${props.liveBasemap?' has-live-map':''}${props.selecting?' is-selecting':''}${props.photoPicking?' photo-picking':''}`} ref={boardRef} onClick={event=>{
         if(props.selecting && !(event.target as Element).closest('button,a,input,select,textarea,[role="button"],[data-map-controls]')){
           const rect=event.currentTarget.getBoundingClientRect();const point=mapCoordinate(event.clientX-rect.left,event.clientY-rect.top,props.camera,props.metrics,props.mode);if(point)props.onMapPick?.(point);
         }else onBackgroundClick();
       }} onKeyDown={event=>{if(props.selecting&&event.target===event.currentTarget&&event.key==='Enter'){event.preventDefault();const point=mapCoordinate(props.metrics.offX+props.metrics.sheetW/2,props.metrics.offY+props.metrics.sheetH/2,props.camera,props.metrics,props.mode);if(point)props.onMapPick?.(point);}}} tabIndex={0} role="region" aria-label="旅行地图：拖动平移，滚轮缩放，触控板双指平移，捏合缩放；键盘方向键平移，加减号缩放">
         <div className="map-sheet" id="mapSheet" ref={sheetRef}>
+          {props.liveBasemap?<BasemapBoundary onFailure={()=>props.onBasemapFailure?.()}><Suspense fallback={null}><LiveBasemap camera={props.camera} metrics={props.metrics} mode={props.mode} onFailure={()=>props.onBasemapFailure?.()} onReady={()=>props.onBasemapReady?.()}/></Suspense></BasemapBoundary>:<>
           <WorldLayer viewBox={viewBox} visitedCountries={visitedCountries} />
           <CityLayer viewBox={viewBox} />
           <RegionLayer viewBox={viewBox} />
           <div className="map-print" aria-hidden="true">
             <span className="map-print-title">THE WORLD, KEPT AT HOME</span>
             <span className="map-print-sub">私人旅行档案 · 仅本机</span>
-          </div>
+          </div></>}
         </div>
 
         <svg id="routeSvg" className="route-layer" viewBox={`0 0 ${viewWidth} ${viewHeight}`} aria-hidden="true">
@@ -377,9 +385,9 @@ export function MapBoard(props: MapBoardProps) {
         </div>
 
         {frogActions ? <FrogActions x={frogActions.x} y={frogActions.y} below={frogActions.below} onAction={onFrogAction} /> : null}
-        <RealPlaces saveLabel={props.photoPicking?'选为照片位置':'加入旅行清单'} camera={props.camera} metrics={props.metrics} mode={props.mode} project={project} {...(props.onPoiPick?{onSave:props.onPoiPick}:{})} />
-        {props.selecting&&!props.photoPicking&&<div className="pick-hint">选点模式 · 轻点地图后确认保存；可拖动、缩放 · 键盘回车选择视野中心</div>}
-        {props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
+        <RealPlacePins pois={props.realPois??[]} camera={props.camera} metrics={props.metrics} project={project} onSelect={point=>props.onPoiPick?.(point)}/>
+
+        {!props.liveBasemap&&props.mode !== 'world' ? <span className="schematic-credit">插画示意底图 · 非实测街道</span> : null}
         {destHint ? <div className="entrust-hint">给下一趟留个方向 · 蛙蛙也会自己安排旅行</div> : null}
       </div>
     </div>

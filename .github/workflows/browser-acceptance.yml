@@ -1,0 +1,48 @@
+name: Browser acceptance (no deployment)
+on:
+  push:
+    branches: [qa/photo-map-browser-20261120]
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run typecheck:browser
+      - name: Prepare Chromium and system dependencies
+        timeout-minutes: 7
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - name: Live native basemap with CI software graphics
+        timeout-minutes: 8
+        env:
+          TRAVEL_FROG_CI_GL: swangle
+        run: |
+          # Playwright --with-deps already installs WQY/IPA CJK fonts.
+          fc-match -f '%{family}\n' 'sans-serif:lang=zh'
+          fc-match -f '%{family}\n' 'sans-serif:lang=ja'
+          npm run test:basemap:live
+      - uses: actions/upload-artifact@v5
+        if: ${{ !cancelled() }}
+        with:
+          name: synthetic-browser-acceptance
+          path: |
+            playwright-report/
+            test-results/
+            playwright-live-report/
+            test-results-live/
+          retention-days: 7

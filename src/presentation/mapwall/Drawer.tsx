@@ -3,7 +3,8 @@ import {
   ManualLocationForm,
   type ManualLocationInput,
 } from "./ManualLocationForm";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import "./photo-location-review.css";
 import type { Candidate } from "../../domain/candidate/candidate";
 import type {
   ImportBatch,
@@ -81,7 +82,10 @@ export interface DrawerProps {
   readonly onThumbnail?: (id: string) => Promise<Blob | null>;
   readonly onRetryPhoto?: (id: string, file?: File) => Promise<void>;
   readonly onPhotoTime?: (id: string, at: number | null) => Promise<void>;
-  readonly onPickPhotoLocation?: (ids: readonly string[], returnTab: DrawerTab) => void;
+  readonly onPickPhotoLocation?: (
+    ids: readonly string[],
+    returnTab: DrawerTab,
+  ) => void;
   readonly onSetPhotoLocations?: (
     ids: readonly string[],
     input: ManualLocationInput,
@@ -90,6 +94,35 @@ export interface DrawerProps {
 }
 
 export function Drawer(props: DrawerProps) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const savedScroll = useRef({ tab: props.tab, top: 0 });
+  useLayoutEffect(() => {
+    if (props.open && bodyRef.current)
+      bodyRef.current.scrollTop =
+        savedScroll.current.tab === props.tab ? savedScroll.current.top : 0;
+  }, [props.open, props.tab]);
+  const [locationBusy, setLocationBusy] = useState(false),
+    [locationError, setLocationError] = useState(""),
+    [locationMessage, setLocationMessage] = useState("");
+  const applyLocationSuggestions = async (ids: readonly string[]) => {
+    if (!ids.length || locationBusy) return;
+    setLocationBusy(true);
+    setLocationError("");
+    setLocationMessage("");
+    try {
+      await props.onApplySuggestions(ids);
+      setSelectedSuggestions((current) =>
+        current.filter((id) => !ids.includes(id)),
+      );
+      setLocationMessage("地点建议已应用。");
+    } catch (error) {
+      setLocationError(
+        error instanceof Error ? error.message : "地点建议没有保存，请重试",
+      );
+    } finally {
+      setLocationBusy(false);
+    }
+  };
   const [manualIds, setManualIds] = useState<readonly string[]>([]);
   const [selection, setSelection] = useState<readonly File[]>([]);
   const [splitSelection, setSplitSelection] = useState<{
@@ -115,6 +148,16 @@ export function Drawer(props: DrawerProps) {
     (p) => !p.ignored && p.geo === null,
   );
   const fillCount = missingPhotos.length;
+  const missingIds = new Set<string>(missingPhotos.map((p) => p.id));
+  const locationSuggestions = new Map(
+    props.suggestions
+      .filter((s) => missingIds.has(s.photoId))
+      .map((s) => [s.photoId, s]),
+  );
+  const suggestedIds = [...locationSuggestions.keys()];
+  const chosenIds = selectedSuggestions.filter((id) =>
+    locationSuggestions.has(id),
+  );
   const repairPhotos = [...props.photosById.values()].filter(
     (p) =>
       !p.ignored &&
@@ -172,16 +215,6 @@ export function Drawer(props: DrawerProps) {
     }
   };
 
-  const fillGroups = new Map<string, typeof props.suggestions>();
-  for (const suggestion of props.suggestions) {
-    const photo = props.photosById.get(suggestion.photoId);
-    const day = photo
-      ? fmtLocalDate(photo.capturedAt, photo.captureOffsetMinutes)
-      : "未知日期";
-    const list = fillGroups.get(day) ?? [];
-    fillGroups.set(day, [...list, suggestion]);
-  }
-
   const exportIssues = () => {
     if (props.issues.length === 0) return;
     const payload = props.issues.map((issue) => ({
@@ -202,22 +235,31 @@ export function Drawer(props: DrawerProps) {
   };
 
   return (
-    <aside className="drawer" aria-label="整理">
+    <aside className="drawer" aria-label="管理照片">
       <header className="drawer-head">
         <div>
-          <h2>整理</h2>
+          <h2>管理照片</h2>
           <p>照片留在本机，整理不离开这面墙。</p>
         </div>
         <button
           className="icon-btn"
           type="button"
-          aria-label="关闭整理"
+          aria-label="关闭管理照片"
           onClick={props.onClose}
         >
           ×
         </button>
       </header>
-      <div className="tabs" role="tablist" aria-label="整理分区">
+      {fillCount > 0 && (
+        <button
+          type="button"
+          className="photo-location-reminder"
+          onClick={() => props.onTab("fill")}
+        >
+          {fillCount} 张照片待补位置
+        </button>
+      )}
+      <div className="tabs" role="tablist" aria-label="照片管理分区">
         <button
           type="button"
           role="tab"
@@ -278,7 +320,16 @@ export function Drawer(props: DrawerProps) {
           e.currentTarget.value = "";
         }}
       />
-      <div className="drawer-body">
+      <div
+        className="drawer-body"
+        ref={bodyRef}
+        onScroll={(e) => {
+          savedScroll.current = {
+            tab: props.tab,
+            top: e.currentTarget.scrollTop,
+          };
+        }}
+      >
         {props.tab === "import" ? (
           <div className="panel">
             <div
@@ -559,9 +610,15 @@ export function Drawer(props: DrawerProps) {
                         ) {
                           props.onTab("progress");
                         } else if (candidate.locationMissingCount > 0) {
-                          const ids = candidate.photoIds.filter(id => props.photosById.get(id)?.geo === null);
-                          if (props.onPickPhotoLocation) props.onPickPhotoLocation(ids, "candidates");
-                          else { setManualIds(ids); props.onTab("fill"); }
+                          const ids = candidate.photoIds.filter(
+                            (id) => props.photosById.get(id)?.geo === null,
+                          );
+                          if (props.onPickPhotoLocation)
+                            props.onPickPhotoLocation(ids, "candidates");
+                          else {
+                            setManualIds(ids);
+                            props.onTab("fill");
+                          }
                         } else void props.onConfirmCandidate(candidate.id);
                       }}
                     >
@@ -677,141 +734,160 @@ export function Drawer(props: DrawerProps) {
         ) : null}
 
         {props.tab === "fill" ? (
-          <div className="panel">
+          <section className="panel location-review" aria-label="补照片位置">
             <div className="panel-title">
-              <h3>缺定位照片</h3>
+              <h3>待补位置照片</h3>
               <span>
-                {fillCount} 张缺位置 · {props.suggestions.length} 张有建议
+                {fillCount} 张 · {locationSuggestions.size} 张有建议
               </span>
             </div>
             {fillCount === 0 ? (
               <p className="note">目前没有缺位置的照片。</p>
             ) : (
-              <p className="note">
-                在地图轻点照片拍摄的位置；下面的已有建议也可以一键使用。
+              <p className="location-intro">
+                每张照片只需确认一次位置。有建议可直接使用，也可以在地图上重新选。
               </p>
             )}
-            <details className="photo-location-advanced"><summary>高级：手动填写坐标</summary>
-            {missingPhotos.map(photo=><button key={photo.id} className="btn ghost" type="button" onClick={()=>setManualIds([photo.id])}>{photo.fileName} · 手动填写</button>)}
-            {manualIds.length > 0 && props.onSetPhotoLocations ? (
-              <ManualLocationForm
-                key={manualIds.join(",")}
-                count={manualIds.length}
-                onCancel={() => setManualIds([])}
-                onSave={async (input) => {
-                  await props.onSetPhotoLocations!(manualIds, input);
-                  setManualIds([]);
-                  props.onTab("candidates");
-                }}
-              />
-            ) : null}
-            </details>
-            {missingPhotos.map((photo) => (
-              <div className="card fill-row" key={photo.id}>
-                <span>
-                  {photo.fileName} · 缺位置
-                  {props.suggestions.some((s) => s.photoId === photo.id)
-                    ? " · 有建议"
-                    : " · 无自动建议"}
-                </span>
+            {suggestedIds.length > 0 && (
+              <div className="location-batch" aria-label="批量使用地点建议">
+                <label>
+                  <input
+                    type="checkbox"
+                    aria-label={`全选 ${suggestedIds.length} 张有建议的照片`}
+                    checked={chosenIds.length === suggestedIds.length}
+                    onChange={(e) =>
+                      setSelectedSuggestions(
+                        e.target.checked ? suggestedIds : [],
+                      )
+                    }
+                  />
+                  全选有建议的 {suggestedIds.length} 张
+                </label>
                 <button
+                  type="button"
                   className="btn primary"
-                  type="button"
-                  onClick={() => props.onPickPhotoLocation ? props.onPickPhotoLocation([photo.id], "fill") : setManualIds([photo.id])}
+                  disabled={chosenIds.length === 0 || locationBusy}
+                  onClick={() => void applyLocationSuggestions([...chosenIds])}
                 >
-                  在地图选位置
+                  为所选 {chosenIds.length} 张应用建议
                 </button>
+                <p>只应用勾选照片的现有建议；没有建议的照片不会被改动。</p>
               </div>
-            ))}
-            {props.suggestions.length > 0 ? (
-              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <button
-                  className="btn primary"
-                  type="button"
-                  disabled={selectedSuggestions.length === 0}
-                  onClick={async () => {
-                    const ids = selectedSuggestions;
-                    setSelectedSuggestions([]);
-                    await props.onApplySuggestions(ids);
-                  }}
-                >
-                  套用所选 {selectedSuggestions.length} 张
-                </button>
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={async () => {
-                    await props.onApplySuggestions(
-                      props.suggestions.map((item) => item.photoId),
-                    );
-                  }}
-                >
-                  全部套用
-                </button>
-              </div>
-            ) : null}
-            <div className="fill-groups">
-              {Array.from(fillGroups.entries()).map(([day, suggestions]) => (
-                <div className="card" key={day}>
-                  <div className="panel-title">
-                    <h3>{day}</h3>
-                    <button
-                      className="btn ghost"
-                      type="button"
-                      onClick={async () => {
-                        const ids = suggestions.map((item) => item.photoId);
-                        setSelectedSuggestions((current) =>
-                          current.filter((id) => !ids.includes(id)),
-                        );
-                        await props.onApplySuggestions(ids);
-                      }}
-                    >
-                      按天套用 {suggestions.length} 张
-                    </button>
-                  </div>
-                  {suggestions.map((suggestion) => {
-                    const photo = props.photosById.get(suggestion.photoId);
-                    const checked = selectedSuggestions.includes(
-                      suggestion.photoId,
-                    );
-                    return (
-                      <div className="fill-row" key={suggestion.photoId}>
+            )}
+            {locationError && <p role="alert">{locationError}</p>}
+            {locationMessage && <p role="status">{locationMessage}</p>}
+            <ul className="location-photo-list" aria-label="待补位置照片列表">
+              {missingPhotos.map((photo) => {
+                const suggestion = locationSuggestions.get(photo.id);
+                const checked = chosenIds.includes(photo.id);
+                return (
+                  <li
+                    className="location-photo-row"
+                    data-location-photo={photo.id}
+                    key={photo.id}
+                  >
+                    <div className="location-photo-heading">
+                      {suggestion && (
                         <input
                           type="checkbox"
+                          aria-label={`选择 ${photo.fileName} 的地点建议`}
                           checked={checked}
                           onChange={() =>
                             setSelectedSuggestions((current) =>
-                              toggle(current, suggestion.photoId),
+                              toggle(current, photo.id),
                             )
                           }
                         />
-                        <span className="meta">
-                          <strong>
-                            {photo?.fileName ?? suggestion.photoId}
-                          </strong>
-                          <span>
-                            → {suggestion.cityRef.name} ·{" "}
-                            {suggestion.reason === "same-day-gps"
-                              ? "同日 GPS"
-                              : "时间最近"}{" "}
-                            ·{" "}
-                            {suggestion.confidence === "high"
-                              ? "高"
-                              : suggestion.confidence === "medium"
-                                ? "中"
-                                : "低"}
-                          </span>
-                        </span>
+                      )}
+                      <strong title={photo.fileName}>{photo.fileName}</strong>
+                    </div>
+                    <div className="location-photo-content">
+                      <ImportedPhotoPreview
+                        photo={photo}
+                        load={props.onThumbnail}
+                      />
+                      <div className="location-photo-context">
+                        {suggestion ? (
+                          <p>
+                            建议：<b>{suggestion.cityRef.name}</b>
+                            <span>
+                              {suggestion.reason === "same-day-gps"
+                                ? "参考同日照片"
+                                : "参考时间相近照片"}{" "}
+                              ·{" "}
+                              {suggestion.confidence === "high"
+                                ? "高"
+                                : suggestion.confidence === "medium"
+                                  ? "中"
+                                  : "低"}
+                              置信
+                            </span>
+                          </p>
+                        ) : (
+                          <p>
+                            没有自动建议
+                            <span>可在地图上搜索城市，再点选拍摄位置。</span>
+                          </p>
+                        )}
+                        <div className="location-photo-actions">
+                          {suggestion && (
+                            <button
+                              type="button"
+                              className="btn primary"
+                              disabled={locationBusy}
+                              onClick={() =>
+                                void applyLocationSuggestions([photo.id])
+                              }
+                            >
+                              使用{suggestion.cityRef.name}建议
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className={`btn ${suggestion ? "ghost" : "primary"}`}
+                            onClick={() =>
+                              props.onPickPhotoLocation
+                                ? props.onPickPhotoLocation([photo.id], "fill")
+                                : setManualIds([photo.id])
+                            }
+                          >
+                            在地图选位置
+                          </button>
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              ))}
-              <p className="note">
-                候选来自本机照片的同日位置，不会自动写入。套用后照片会出现在地图上，并标记为「推断」。
-              </p>
-            </div>
-          </div>
+                    </div>
+                    {props.onSetPhotoLocations && (
+                      <details className="location-row-advanced">
+                        <summary>高级：手动坐标</summary>
+                        <button
+                          type="button"
+                          className="btn ghost"
+                          onClick={() => setManualIds([photo.id])}
+                        >
+                          填写这张照片的位置
+                        </button>
+                        {manualIds.length === 1 &&
+                          manualIds[0] === photo.id && (
+                            <ManualLocationForm
+                              count={1}
+                              onCancel={() => setManualIds([])}
+                              onSave={async (input) => {
+                                await props.onSetPhotoLocations!(
+                                  [photo.id],
+                                  input,
+                                );
+                                setManualIds([]);
+                                props.onTab("candidates");
+                              }}
+                            />
+                          )}
+                      </details>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
         ) : null}
 
         {props.tab === "progress" ? (
@@ -870,7 +946,9 @@ export function Drawer(props: DrawerProps) {
                       </span>
                     </span>
                     {batch.issueCount > 0 ? (
-                      <span className="hint">历史提示 {batch.issueCount} 条</span>
+                      <span className="hint">
+                        历史提示 {batch.issueCount} 条
+                      </span>
                     ) : null}
                     {state === "failed" ? (
                       <button

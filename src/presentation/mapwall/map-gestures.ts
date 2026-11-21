@@ -1,8 +1,9 @@
+import {panMercator} from './mercator-camera';
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { viewRect, type Camera, type Metrics } from "./geometry";
 
-export const maxMapZoom = (mode: "world" | "city" | "region") =>
-  mode === "world" ? 12000 : mode === "city" ? 24 : 60;
+export const maxMapZoom = (mode: "world" | "city" | "region", live=false) =>
+  mode === "world" ? (live?400000:12000) : mode === "city" ? 24 : 60;
 
 const limit = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 export function boundCamera(
@@ -11,6 +12,9 @@ export function boundCamera(
   maxZoom: number,
 ): Camera {
   const zoom = limit(camera.zoom, 0.8, maxZoom);
+  // A geographic camera is bounded in Mercator coordinates. Legacy paper
+  // viewport gutters shift the center when a narrow screen zooms the world.
+  if(metrics.mercatorMode)return panMercator({...camera,zoom},0,0,metrics,metrics.mercatorMode);
   const { viewW, viewH } = viewRect({ ...camera, zoom }, metrics);
   // Allow a 20% viewport gutter so the full-world view still responds to a drag.
   const halfX = Math.min(500, viewW * 0.3),
@@ -28,6 +32,7 @@ export function panCamera(
   metrics: Metrics,
   maxZoom: number,
 ): Camera {
+  if(metrics.mercatorMode)return panMercator(camera,dx,dy,metrics,metrics.mercatorMode);
   const k = 1000 / camera.zoom / Math.max(1, metrics.sheetW);
   return boundCamera(
     { ...camera, cx: camera.cx - dx * k, cy: camera.cy - dy * k },
@@ -44,6 +49,12 @@ export function zoomCamera(
   maxZoom: number,
 ): Camera {
   const zoom = limit(camera.zoom * factor, 0.8, maxZoom);
+  if(metrics.mercatorMode){
+    const dx=x-metrics.offX-metrics.sheetW/2,dy=y-metrics.offY-metrics.sheetH/2;
+    // Move the old anchor to the center, then move it back at the new scale.
+    const anchor=panMercator(camera,-dx,-dy,metrics,metrics.mercatorMode);
+    return panMercator({...anchor,zoom},dx,dy,metrics,metrics.mercatorMode);
+  }
   const oldK = 1000 / camera.zoom / Math.max(1, metrics.sheetW);
   const newK = 1000 / zoom / Math.max(1, metrics.sheetW);
   const dx = x - metrics.offX - metrics.sheetW / 2,
