@@ -12,17 +12,21 @@ describe('postcard footprint provenance',()=>{
   expect(postcardFootprints(model([...other,target],[visit('kyoto-visit',[...other.map(p=>p.id),target.id],{tripId:'trip-1'})],[trip('trip-1',[...other.map(p=>p.id),target.id])]),'京都').map(p=>p.id)).toEqual(['kyoto']);
  });
  it('searches later same-city trips when the first matching trip has no images',()=>{
-  const p=photo('later');expect(postcardFootprints(model([p],[],[trip('trip-1',[]),trip('trip-2',[p.id])]),'京都')).toEqual([p]);
+  const p=photo('later');expect(postcardFootprints(model([p],[visit('later-visit',[p.id])],[trip('trip-1',[]),trip('trip-2',[p.id])]),'京都')).toEqual([p]);
  });
- it('prefers explicit matching visits, then same-city fallback, and deduplicates before limiting',()=>{
+ it('orders confirmed same-city visits across trips and deduplicates before limiting',()=>{
   const explicit=photo('visit-photo','京都','trip-2',{capturedAt:20}),duplicate=photo('duplicate','京都','trip-2',{thumbRef:explicit.thumbRef}),fallback=photo('newer','京都','trip-3',{capturedAt:100}),wrong=photo('wrong','大阪');
-  const m=model([fallback,explicit,duplicate,wrong],[visit('v',[wrong.id,explicit.id,explicit.id,duplicate.id,fallback.id])]);
+  const m=model([fallback,explicit,duplicate,wrong],[visit('v',[wrong.id,explicit.id,explicit.id,duplicate.id,fallback.id]),visit('v-later-trip',[fallback.id],{tripId:'trip-3',start:0})]);
   expect(postcardFootprints(m,'京都').map(p=>p.id)).toEqual(['visit-photo','newer']);
  });
  it('does not substitute demo illustrations or missing personal thumbnails',()=>{
-  expect(postcardFootprints(model([photo('demo','京都','trip-1',{origin:'demo'}),photo('missing','京都','trip-1',{thumbRef:null}),photo('other','大阪')]),'京都')).toEqual([]);
+  const photos=[photo('demo','京都','trip-1',{origin:'demo'}),photo('missing','京都','trip-1',{thumbRef:null}),photo('other','大阪','trip-1')];
+  expect(postcardFootprints(model(photos,[visit('v',photos.map(p=>p.id),{tripId:'trip-1'})]),'京都')).toEqual([]);
  });
  it('keeps later candidates available until actual image availability is known',()=>{
-  const photos=Array.from({length:7},(_,i)=>photo(`p${i}`));expect(postcardFootprints(model(photos),'京都')).toHaveLength(7);
+  const photos=Array.from({length:7},(_,i)=>photo(`p${i}`));expect(postcardFootprints(model(photos,[visit('v',photos.map(p=>p.id))]),'京都')).toHaveLength(7);
+ });
+ it('does not treat a grouping cityKey alone as confirmed footprint provenance',()=>{
+  expect(postcardFootprints(model([photo('no-visit')]),'京都')).toEqual([]);
  });
 });
