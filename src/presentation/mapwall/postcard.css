@@ -14,8 +14,8 @@
 .postcard-mark.st-stamped,.postcard-mark.st-fulfilled {color:#426644;}
 .postcard-mark:hover,.postcard-mark.is-hl {background:#fffdf8;box-shadow:0 0 0 2px #8e543e88;}
 .postcard-mark:focus-visible {outline:3px solid #315b41;outline-offset:2px;}
-.postcard-mark.is-arriving {animation:postmark-arrival .6s ease-out;}
-@keyframes postmark-arrival {from {opacity:0;transform:translate(-50%,-50%) scale(.65);}to {opacity:1;transform:translate(-50%,-50%);}}
+.postcard-mark.is-arriving svg {animation:postmark-arrival .6s ease-out;transform-origin:center;}
+@keyframes postmark-arrival {from {opacity:0;transform:scale(.65);}to {opacity:1;transform:scale(1);}}
 .wish-focus {display:grid;place-items:center;box-sizing:border-box;padding:16px;}
 .wish-focus .wish-focus-card {
   position:relative;left:auto;top:auto;box-sizing:border-box;width:min(380px,100%);
@@ -36,4 +36,4 @@
 .wish-focus .wish-focus-card .wf-actions {position:static;display:flex;gap:8px;margin-top:18px;}
 .wish-focus .wish-focus-card .wf-actions button {height:auto;min-height:44px;font:16px/1.4 system-ui;}
 .wish-focus .wish-focus-card .wf-close {right:8px;top:8px;width:44px;height:44px;font-size:24px;}
-@media(prefers-reduced-motion:reduce){.postcard-mark,.wish-focus .wish-focus-card{animation:none;}}
+@media(prefers-reduced-motion:reduce){.postcard-mark.is-arriving svg,.wish-focus .wish-focus-card{animation:none;}}
