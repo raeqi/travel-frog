@@ -1,0 +1,39 @@
+.postcard-mark {
+  position:absolute;box-sizing:border-box;transform:translate(-50%,-50%);
+  display:grid;place-items:center;padding:2px;border:0;border-radius:50%;
+  color:#8e543e;background:#fffaf0ed;box-shadow:0 1px 4px #35291435;
+  pointer-events:auto;cursor:pointer;touch-action:manipulation;
+}
+.postcard-mark svg {width:36px;height:36px;pointer-events:none;}
+.postmark-ring {fill:none;stroke:currentColor;stroke-width:1.5;stroke-dasharray:2 1;}
+.postmark-inner {fill:none;stroke:currentColor;stroke-width:.7;}
+.postmark-check {fill:none;stroke:#426644;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;}
+.postmark-new {position:absolute;right:3px;top:3px;width:7px;height:7px;border:2px solid #fffaf0;border-radius:50%;background:#b84e35;}
+.postcard-mark.st-pending {color:#827764;background:#fffaf0d9;}
+.postcard-mark.st-opened {color:#746b5a;}
+.postcard-mark.st-stamped,.postcard-mark.st-fulfilled {color:#426644;}
+.postcard-mark:hover,.postcard-mark.is-hl {background:#fffdf8;box-shadow:0 0 0 2px #8e543e88;}
+.postcard-mark:focus-visible {outline:3px solid #315b41;outline-offset:2px;}
+.postcard-mark.is-arriving {animation:postmark-arrival .6s ease-out;}
+@keyframes postmark-arrival {from {opacity:0;transform:translate(-50%,-50%) scale(.65);}to {opacity:1;transform:translate(-50%,-50%);}}
+.wish-focus {display:grid;place-items:center;box-sizing:border-box;padding:16px;}
+.wish-focus .wish-focus-card {
+  position:relative;left:auto;top:auto;box-sizing:border-box;width:min(380px,100%);
+  height:auto;min-height:0;max-height:calc(100dvh - 32px);overflow:auto;
+  padding:22px;border-radius:8px;transform:none;animation:postcard-open .18s ease-out;
+}
+@keyframes postcard-open {from {opacity:.5;transform:scale(.97);}to {opacity:1;transform:none;}}
+.wish-focus .wish-focus-card .wf-place {font-size:24px;line-height:1.3;padding-right:36px;}
+.wish-focus .wish-focus-card .wf-status {display:block;margin-top:4px;font:14px/1.5 system-ui;color:#526647;}
+.wish-focus .wish-focus-card .wf-photos {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:14px;}
+.wish-focus .wish-focus-card .wf-photo {display:block;box-sizing:border-box;width:100%;height:auto;aspect-ratio:4/3;object-fit:cover;min-width:0;border:3px solid #fffdf8;border-radius:2px;}
+.wish-focus .wish-focus-card .wf-photo-source {display:block;margin-top:10px;font:14px/1.5 system-ui;color:#756c5d;}
+.wish-focus .wish-focus-card .wf-note {margin-top:14px;padding:0;min-height:0;font-size:18px;line-height:1.6;overflow-wrap:anywhere;white-space:pre-wrap;color:#4a3b2a;}
+.wish-focus .wish-focus-card .wf-date {margin-top:14px;font-size:14px;line-height:1.5;}
+.wish-focus .wish-focus-card .wf-coords {margin-top:3px;font-size:12px;line-height:1.5;}
+.wish-focus .wish-focus-card .wf-kept {display:block;margin-top:12px;font-size:14px;color:#426644;}
+.wish-focus .wish-focus-card .pc-ring,.wish-focus-card .pc-stamp {display:none;}
+.wish-focus .wish-focus-card .wf-actions {position:static;display:flex;gap:8px;margin-top:18px;}
+.wish-focus .wish-focus-card .wf-actions button {height:auto;min-height:44px;font:16px/1.4 system-ui;}
+.wish-focus .wish-focus-card .wf-close {right:8px;top:8px;width:44px;height:44px;font-size:24px;}
+@media(prefers-reduced-motion:reduce){.postcard-mark,.wish-focus .wish-focus-card{animation:none;}}

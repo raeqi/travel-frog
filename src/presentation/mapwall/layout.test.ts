@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { overlaps, placeLabels, type PilePlacement } from './layout';
+import { overlaps, placeLabels, placeWish, type PilePlacement } from './layout';
+import {POSTCARD_MARK_SIZE} from './postcard-mark';
 import type { Metrics } from './geometry';
 
 const METRICS: Metrics = {
@@ -10,6 +11,14 @@ const METRICS: Metrics = {
   offX: 0,
   offY: 0,
 };
+
+describe('postmark target collision bounds',()=>{
+ it('uses its complete 44px hit area and avoids photo/pin/other-stamp rectangles',()=>{
+  const obstacles=[{x:172,y:172,w:56,h:56},{x:230,y:170,w:36,h:36}],placed=[{x:130,y:220,w:44,h:44}];
+  const p=placeWish({anchor:{x:200,y:200},width:POSTCARD_MARK_SIZE,height:POSTCARD_MARK_SIZE,piles:[],placed,frogRect:null,obstacles,metrics:METRICS});
+  expect(p.rect).toEqual({x:p.cx-22,y:p.cy-22,w:44,h:44});for(const o of [...placed,...obstacles])expect(overlaps(p.rect,o)).toBe(false);
+ });
+});
 
 function pile(cityKey: string, title: string, photoIds: string[], sx: number, sy: number): PilePlacement {
   return { cityKey, title, photoIds, sx, sy, year: 2025, long: title.length > 9 };
