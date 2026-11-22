@@ -6,7 +6,9 @@ export function TopBar({
   onTheme,
   onSettings,
   onHome,
+  missingCount = 0,
 }: {
+  readonly missingCount?: number;
   readonly onImport: () => void;
   readonly onDrawer: () => void;
   readonly onSearch: () => void;
@@ -34,19 +36,19 @@ export function TopBar({
           </svg>
           <span>导入照片</span>
         </button>
-        <button className="tbtn" type="button" onClick={onDrawer}>
+        <button className="tbtn" type="button" onClick={onDrawer} aria-label={missingCount?`管理照片，${missingCount} 张照片待补位置`:"管理照片"} title={missingCount?`${missingCount} 张照片待补位置`:"管理照片"}>
           <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
             <rect x="3" y="4" width="14" height="12" rx="1.6" />
             <path d="M3 8h14M8 8v8" />
           </svg>
-          <span>整理</span>
+          <span>管理照片</span>{missingCount>0&&<b className="photo-attention" aria-hidden="true">{missingCount}</b>}
         </button>
-        <button className="tbtn" type="button" onClick={onSearch}>
+        <button className="tbtn" type="button" onClick={onSearch} aria-label="搜索地点">
           <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
             <circle cx="9" cy="9" r="5.2" />
             <path d="m13 13 4 4" />
           </svg>
-          <span>搜索</span>
+          <span>搜索地点</span>
           <kbd>Ctrl K</kbd>
         </button>
         <button className="tbtn icon-only" type="button" aria-label="切换主题" title="切换主题" onClick={onTheme}>
@@ -123,21 +125,6 @@ export function ZoomControls({
       </button>
       <span className="level">{level === 'world' ? 'L0' : level === 'country' ? 'L1' : 'L2'}</span>
     </div>
-  );
-}
-
-export function Tray({ count, onOpen }: { readonly count: number; readonly onOpen: () => void }) {
-  return (
-    <button className="tray" type="button" onClick={onOpen}>
-      <span className="tray-icon" aria-hidden="true">
-        <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-          <path d="M10 17s6-5.2 6-9.2A6 6 0 0 0 4 7.8C4 11.8 10 17 10 17Z" />
-          <path d="M7.4 8.4 10 11l2.6-2.6" />
-        </svg>
-      </span>
-      <span>未定位照片</span>
-      <b>{count}</b>
-    </button>
   );
 }
 

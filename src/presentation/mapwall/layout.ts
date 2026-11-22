@@ -224,6 +224,7 @@ export function placeFrog(input: FrogPlacementInput): Point | null {
 }
 
 export interface WishPlacementInput {
+  readonly obstacles?: readonly Rect[];
   readonly anchor: Point;
   readonly width: number;
   readonly height: number;
@@ -261,6 +262,7 @@ export function placeWish(input: WishPlacementInput): WishPlacement {
       overlap += overlapArea(rect, { x: pile.sx - 38, y: pile.sy - 37, w: 76, h: 74 });
     }
     for (const other of input.placed) overlap += overlapArea(rect, other);
+    for (const other of input.obstacles??[]) overlap += overlapArea(rect,other);
     if (input.frogRect) overlap += overlapArea(rect, input.frogRect);
     const distance = Math.abs(cx - input.anchor.x) + Math.abs(cy - input.anchor.y);
     if (!best || overlap < best.overlap || (overlap === best.overlap && distance < best.distance)) {

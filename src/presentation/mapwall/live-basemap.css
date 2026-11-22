@@ -1,0 +1,18 @@
+/* SDK CSS also sets position on .maplibregl-map. Keep this full-size adapter
+   independent of lazy stylesheet insertion order. */
+.live-basemap,.live-basemap.maplibregl-map {position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;background:#e7edf0;}
+.live-basemap .maplibregl-canvas {pointer-events:none;}
+.live-basemap .maplibregl-control-container {pointer-events:auto;}
+.live-basemap .maplibregl-ctrl-attrib {font:12px/1.5 system-ui,sans-serif;max-width:100%;color:#263b36;background:#fffffff0;}
+.board.has-live-map .map-sheet::before {display:none;}
+/* The provider switch participates in the existing rail/picker flow, rather than
+   covering frog controls or the map footer on short and narrow viewports. */
+.basemap-controls {position:relative;box-sizing:border-box;width:100%;flex:0 0 auto;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 10px;border-radius:8px;background:#fffef8f5;box-shadow:0 2px 8px #172b2820;font:14px/1.4 system-ui,sans-serif;color:#244539;}
+.basemap-controls p {margin:0;overflow-wrap:anywhere;}
+.basemap-controls button {font:inherit;min-height:40px;padding:5px 9px;border:1px solid #496958;border-radius:5px;background:#fff;color:inherit;cursor:pointer;}
+.photo-location-picker > .basemap-controls {margin:8px 0;}
+@media(max-width:700px){.basemap-controls{gap:6px;padding:6px 8px;font-size:13px;}}
+@media(max-width:700px){
+  /* The bottom photo form covers map credits; the upper map remains clear. */
+  .photo-picking .live-basemap .maplibregl-ctrl-bottom-right {top:0;bottom:auto;left:0;right:54px;}
+}

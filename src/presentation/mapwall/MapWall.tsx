@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useArchive, useService } from '../context';
 import { buildWallModel, formattedDay, isNewWish, wallModelIsEmpty, type WallModel, type WallPhoto, type WallWish } from './model';
 import {
@@ -27,6 +27,7 @@ import {
 import { groupPoiRows, poiTotal } from './groups';
 import { availableDestinations, type DestinationCandidate } from './candidates';
 import { usePhotoImages, photoImage } from './usePhotoImages';
+import {BasemapControls} from './BasemapControls';
 import { MapBoard, type CityPhotoMarker, type DestTagPlacement, type RoutePath } from './MapBoard';
 import { PoiList } from './PoiList';
 import { PhotoLocationPicker } from './PhotoLocationPicker';
@@ -39,17 +40,19 @@ import { photoLocationCamera } from './photo-location-camera';
 import type { ManualLocationInput } from './ManualLocationForm';
 import { namedMapPoint } from './waypoint-names';
 import { EntrustChooser } from './EntrustChooser';
-import { Crumb, EmptyCard, TopBar, Toast, Tray, ZoomControls } from './Chrome';
+import { Crumb, EmptyCard, TopBar, Toast, ZoomControls } from './Chrome';
 import { MemoryOverlay } from './MemoryOverlay';
 import { Drawer, type DrawerTab } from './Drawer';
 import { WishFocus, type WishBackPhoto } from './Postcard';
+import { POSTCARD_MARK_SIZE } from './postcard-mark';
+import { postcardFootprints } from './postcard-photos';
 import { HomeRoom, SpecialtyFocus, type SpecialtyProvenance } from './HomeRoom';
 import { ReplayBar, type FrogAction, type FrogMode } from './Frog';
 import { furnitureFor, luggageTier, type SpecialtyAward } from '../../domain/home/collection';
 import type { FrogPerch } from '../../domain/home/perch';
 import type { MapViewState } from '../../domain/home/map-view';
 import { SettingsPanel, type ThemeChoice } from './SettingsPanel';
-import { SearchPanel, type SearchItem } from './SearchPanel';
+import { SearchPanel, type SearchItem, type PlaceSearchTab } from './SearchPanel';
 import type { PlacedPostcard } from './Postcard';
 import { cityCamera } from './city-camera';
 import { boundCamera, maxMapZoom } from './map-gestures';
@@ -61,7 +64,14 @@ import {WaypointPanel,type WaypointDraft} from './WaypointPanel';
 import {routeActivity,type TravelWaypoint} from '../../domain/frog/roaming';
 import {landAt} from '../../infrastructure/geo/frog-landscape';
 import './waypoints.css';
+import './map-left-rail.css';
+import './map-primary-actions.css';
+import {RealPlaces} from './RealPlaces';
+import {useRealPlaces} from './useRealPlaces';
+import {poiArea} from './real-pois';
+import {photoLocationReference,type PhotoLocationReference} from './photo-location-start';
 
+const DetailedPhotoMap=lazy(()=>import('./DetailedPhotoMap').then(m=>({default:m.DetailedPhotoMap})));
 type Mode = 'world' | 'city' | 'region';
 type Level = 'world' | 'country' | 'city' | 'region';
 type PhotoPickReturn =
@@ -71,6 +81,7 @@ type PhotoPickReturn =
 interface PhotoPickSession {
   ids: readonly string[];
   returnTo: PhotoPickReturn;
+  reference: PhotoLocationReference | null;
   draft: WaypointDraft | null;
   view: { camera: Camera; mode: Mode; level: Level };
   suggestion: LocationSuggestion | null;
@@ -253,6 +264,7 @@ export function MapWall() {
   const model = useMemo(() => buildWallModel(snapshot, snapshot.home.city.key), [snapshot]);
   const suggestions = service.suggestions();
   const empty = wallModelIsEmpty(model);
+  const missingPhotoCount=snapshot.photos.filter(p=>!p.ignored&&p.geo===null).length;
 
   const [scene, setScene] = useState<'wall' | 'home'>('wall');
   const [waypointsOpen,setWaypointsOpen]=useState(false),[selecting,setSelecting]=useState(false),[waypointDraft,setWaypointDraft]=useState<WaypointDraft|null>(null);
@@ -260,7 +272,9 @@ export function MapWall() {
   const [locationInbox,setLocationInbox]=useState<{candidateId:string|null}|null>(null);
   const [importSelection,setImportSelection]=useState<readonly File[]>([]);
   const [importing,setImporting]=useState(false);
+  const [detailedPhotoMap,setDetailedPhotoMap]=useState(false);
   const photoSaving=useRef(false);
+  const pendingPhotoFocus=useRef<readonly string[]>([]);
   const [following,setFollowing]=useState(false);
   const followingRef=useRef(false);
   const frogLocation=frogJourneyLocation(travel.current,snapshot.home.city,journeyNow);
@@ -274,7 +288,13 @@ export function MapWall() {
 
   const boardRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
-  const [metrics, setMetrics] = useState<Metrics>(EMPTY_METRICS);
+  const [measuredMetrics, setMetrics] = useState<Metrics>(EMPTY_METRICS);
+  const [liveBasemap,setLiveBasemap]=useState(import.meta.env.VITE_BASEMAP_MODE!=='offline');
+  const [basemapMessage,setBasemapMessage]=useState('正在加载真实底图…');
+  const metrics=useMemo<Metrics>(()=>liveBasemap?{...measuredMetrics,mercatorMode:mode}:measuredMetrics,[liveBasemap,measuredMetrics,mode]);
+  const realPoiArea=poiArea(camera,metrics,mode);
+  const realPlaces=useRealPlaces(realPoiArea);
+  const [searchTab,setSearchTab]=useState<PlaceSearchTab>('archive');
 
   const [theme, setTheme] = useState<ThemeChoice>(snapshot.settings.theme);
   const [hints, setHints] = useState(snapshot.settings.frogHints);
@@ -539,7 +559,7 @@ export function MapWall() {
     frame=requestAnimationFrame(step);return()=>cancelAnimationFrame(frame);
   },[following,scene,metrics,travel,snapshot.home.city,animationInstant]);
 
-  const locateWaypoint=useCallback((point:TravelWaypoint)=>{
+  const locateWaypoint=useCallback((point:Pick<TravelWaypoint,'lat'|'lng'>)=>{
     setScene('wall');setReplay(null);setFan(null);animateCamera({cx:projectWorld(point.lat,point.lng).x,cy:projectWorld(point.lat,point.lng).y,zoom:3600},'world','world');
   },[animateCamera,setReplay]);
   const focusPhotoCamera=useCallback((point:{lat:number;lng:number},zoom:number)=>{
@@ -552,9 +572,11 @@ export function MapWall() {
   },[metrics,animateCamera]);
   const startPhotoPick=useCallback((ids:readonly string[],target:DrawerTab|{returnTo?:PhotoPickReturn}='fill')=>{
     if(!ids.length)return;
+    setDetailedPhotoMap(false);
     const uniqueIds=[...new Set(ids)];
     const selectedPhotos=snapshot.photos.filter(photo=>uniqueIds.includes(photo.id));
     const suggestion=suggestions.find(item=>uniqueIds.includes(item.photoId))??null;
+    const reference=photoLocationReference(uniqueIds,snapshot.photos,suggestions);
     const seedPhoto=selectedPhotos.find(photo=>photo.geo!==null);
     let draft:WaypointDraft|null=null;
     if(seedPhoto?.geo){
@@ -564,19 +586,11 @@ export function MapWall() {
         name:seedPhoto.manualCityRef?.name??named.name,
         country:seedPhoto.manualCityRef?.countryName??named.country,
       };
-    }else if(suggestion){
-      draft={
-        name:`${suggestion.cityRef.name}附近`,
-        country:suggestion.cityRef.countryName,
-        lat:suggestion.geo.lat,
-        lng:suggestion.geo.lng,
-        source:'map',
-      };
     }
     const returnTo:PhotoPickReturn=typeof target==='string'
       ? {kind:'drawer',tab:target}
       : target.returnTo??{kind:'drawer',tab:'fill'};
-    setPhotoPick({ids:uniqueIds,returnTo,draft,view:{camera:cameraRef.current,mode,level},suggestion});
+    setPhotoPick({ids:uniqueIds,returnTo,reference,draft,view:{camera:cameraRef.current,mode,level},suggestion});
     setDrawerOpen(false);setLocationInbox(null);setScene('wall');setWaypointsOpen(false);setSelecting(false);setWaypointDraft(null);
     setListOpen(false);setFan(null);setMemoryTripId(null);setWishFocus(null);setJourneyPanelOpen(false);setFrogActionsOpen(false);setReplay(null);
     followingRef.current=false;setFollowing(false);
@@ -586,7 +600,7 @@ export function MapWall() {
       candidates:snapshot.candidates,
       trips:snapshot.trips,
       visits:snapshot.visits,
-    });
+    })??(reference?{lat:reference.lat,lng:reference.lng,zoom:PHOTO_LOCATION_ZOOM}:null);
     if(focus){
       focusPhotoCamera(focus,focus.zoom);
     }else if(mode!=='world'){
@@ -637,6 +651,7 @@ export function MapWall() {
       }
       const pending=photos.some(p=>p.tripId===null);
       if(pending){
+        pendingPhotoFocus.current=[...session.ids];
         animateCamera(session.view.camera,session.view.mode,session.view.level,true);
         setDrawerTab(photos.some(p=>!p.thumbRef||p.capturedAtSource==='missing')?'progress':'candidates');setDrawerOpen(true);
         notify('位置已保存，继续确认这组照片');
@@ -655,8 +670,11 @@ export function MapWall() {
   const pickMapPoint=useCallback((point:{lat:number;lng:number})=>{
     if(photoSaving.current)return;
     if(photoPick){setPhotoPick(current=>current?{...current,draft:namedMapPoint(point)}:current);revealPhotoPin(point);return;}
-    setWaypointDraft(namedMapPoint(point));setWaypointsOpen(true);setSelecting(false);
+    setWaypointDraft(namedMapPoint(point));setWaypointsOpen(true);setListOpen(false);setSelecting(false);
   },[photoPick,revealPhotoPin]);
+  const startDestinationPick=()=>{setScene('wall');setWaypointDraft(null);setSelecting(true);setWaypointsOpen(false);setListOpen(false);setSearchOpen(false);setJourneyPanelOpen(false);followingRef.current=false;setFollowing(false);setFan(null);setFrogActionsOpen(false);};
+  const cancelDestinationPick=()=>{setSelecting(false);setWaypointDraft(null);setWaypointsOpen(true);};
+  const openDestinationDraft=(point:WaypointDraft)=>{setScene('wall');setSearchOpen(false);setSelecting(false);setListOpen(false);setFan(null);setFrogActionsOpen(false);followingRef.current=false;setFollowing(false);setWaypointDraft(point);setWaypointsOpen(true);};
   const beginFollowing=useCallback(()=>{
     if(following){followingRef.current=false;setFollowing(false);return;}
     if(cameraFrame.current!==null)cancelAnimationFrame(cameraFrame.current);
@@ -667,7 +685,7 @@ export function MapWall() {
     if (cameraFrame.current !== null) cancelAnimationFrame(cameraFrame.current);
     cameraFrame.current = null;
     const current = cameraRef.current;
-    gestureCamera(boundCamera({ ...current, zoom: current.zoom * factor }, metrics, maxMapZoom(mode)));
+    gestureCamera(boundCamera({ ...current, zoom: current.zoom * factor }, metrics, maxMapZoom(mode,!!metrics.mercatorMode)));
   }, [mode, metrics, gestureCamera]);
 
   const focusCountry = useCallback(() => {
@@ -815,8 +833,8 @@ export function MapWall() {
       const anchor = toScreen(projectAt(mode, wish.lat, wish.lng), camera, metrics);
       if (!inBoard(anchor.x, anchor.y, metrics, 40)) continue;
       seen.add(wish.cityKey);
-      const width = level === 'world' ? 64 : 120;
-      const height = level === 'world' ? 44 : 84;
+      const width = POSTCARD_MARK_SIZE;
+      const height = POSTCARD_MARK_SIZE;
       const placement = placeWish({
         anchor,
         width,
@@ -824,6 +842,11 @@ export function MapWall() {
         piles,
         placed: rects,
         frogRect,
+        obstacles: [
+          ...photoPoints.map(p=>({x:p.x-28,y:p.y-28,w:56,h:56})),
+          ...(travel.waypoints??[]).map(p=>toScreen(projectAt(mode,p.lat,p.lng),camera,metrics)).map(p=>({x:p.x-18,y:p.y-18,w:36,h:36})),
+          ...realPlaces.pois.map(p=>toScreen(projectAt(mode,p.lat,p.lng),camera,metrics)).map(p=>({x:p.x-78,y:p.y-15,w:156,h:30})),
+        ],
         metrics,
       });
       cards.push({ wish, cx: placement.cx, cy: placement.cy, width, height });
@@ -841,7 +864,7 @@ export function MapWall() {
       }
     }
     return { cards, rects, links, centers };
-  }, [model, metrics, frogPos, mode, camera, level, piles]);
+  }, [model, metrics, frogPos, mode, camera, level, piles, photoPoints, travel.waypoints, realPlaces.pois]);
 
   const labels = useMemo(
     () =>
@@ -981,6 +1004,7 @@ export function MapWall() {
         title: city.name,
         subtitle: `${city.countryName} · ${city.photoIds.length} 张照片`,
         go: '飞到城市',
+        destination:{name:city.name,country:city.countryName,lat:city.lat,lng:city.lng,source:'map'},
       });
     }
     for (const wish of model.wishes) {
@@ -990,6 +1014,7 @@ export function MapWall() {
         title: wish.name,
         subtitle: `${wish.countryName} · ${wish.note ?? '等青蛙路过'}`,
         go: '查看明信片',
+        destination:{name:wish.name,country:wish.countryName,lat:wish.lat,lng:wish.lng,source:'map'},
       });
     }
     return items;
@@ -1390,14 +1415,7 @@ export function MapWall() {
     if (!wishFocus) return [];
     const wish = model.wishById.get(wishFocus.wishId);
     if (!wish) return [];
-    const trip = model.trips.find(
-      (item) => item.cityKeys.includes(wish.cityKey) || item.visits.some((visit) => visit.cityKey === wish.cityKey),
-    );
-    if (!trip) return [];
-    return trip.photoIds
-      .slice(0, 4)
-      .map((id) => model.photoById.get(id))
-      .filter((photo): photo is WallPhoto => photo !== undefined)
+    return postcardFootprints(model,wish.cityKey)
       .map((photo) => ({ id: photo.id, at: photo.capturedAt }));
   }, [wishFocus, model]);
 
@@ -1424,15 +1442,18 @@ export function MapWall() {
       if(photoPick){if(event.key==='Escape'){event.preventDefault();cancelPhotoPick();}return;}
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        setSearchOpen(true);
+        setSelecting(false);setSearchOpen(true);
         return;
       }
       if (event.key === 'Escape') {
+        if(selecting){setSelecting(false);setWaypointDraft(null);setWaypointsOpen(true);return;}
         if (wishFocus) setWishFocus(null);
         else if (specialtyFocus) setSpecialtyFocus(null);
         else if (scene === 'home') returnToMap();
         else if (entrusting) setEntrusting(false);
         else if (settingsOpen || searchOpen) closeOverlays();
+        else if (waypointsOpen && waypointDraft) setWaypointDraft(null);
+        else if (waypointsOpen) setWaypointsOpen(false);
         else if (memoryTripId) setMemoryTripId(null);
         else if (drawerOpen) setDrawerOpen(false);
         else if (replay) setReplay(null);
@@ -1460,6 +1481,7 @@ export function MapWall() {
     entrusting,
     settingsOpen,
     searchOpen,
+    selecting,waypointsOpen,waypointDraft,
     memoryTripId,
     drawerOpen,
     replay,
@@ -1484,6 +1506,7 @@ export function MapWall() {
       ? '关西'
       : model.cityByKey.get(effectiveCityKey)?.name ?? activeTrip?.visits[0]?.name ?? '京都';
 
+  const basemapControls=<BasemapControls live={liveBasemap} message={liveBasemap?basemapMessage:basemapMessage.includes('失败')?basemapMessage:'离线示意图 · 无真实街道'} onToggle={()=>{setBasemapMessage('正在加载真实底图…');setLiveBasemap(current=>!current);}}/>;
   const photosById = useMemo(() => new Map(snapshot.photos.map((photo) => [photo.id, photo] as const)), [snapshot.photos]);
   const unlocatedPhotos = snapshot.photos.filter((photo) => !photo.ignored && photo.geo === null);
   const locatedCount = snapshot.photos.filter((photo) => !photo.ignored && photo.geo !== null).length;
@@ -1530,6 +1553,9 @@ export function MapWall() {
         />
       ) : (
       <MapBoard
+        liveBasemap={liveBasemap}
+        onBasemapFailure={()=>{setBasemapMessage('真实底图加载失败，已切换离线示意图。');setLiveBasemap(false);}}
+        onBasemapReady={()=>setBasemapMessage('真实底图 · 地名采用服务提供的语言')}
         boardRef={boardRef}
         sheetRef={sheetRef}
         camera={camera}
@@ -1538,10 +1564,12 @@ export function MapWall() {
         selecting={selecting||!!photoPick}
         photoPicking={!!photoPick}
         onMapPick={pickMapPoint}
-        onPoiPick={poi=>{if(photoPick){if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:{name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'}}:current);revealPhotoPin(poi);return;}setFan(null);setFrogActionsOpen(false);followingRef.current=false;setFollowing(false);setWaypointDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'});setWaypointsOpen(true);setSelecting(false);}}
+        realPois={realPlaces.pois}
+        onPoiPick={poi=>{if(photoPick){if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:{name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'}}:current);revealPhotoPin(poi);return;}if(selecting){openDestinationDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'});return;}realPlaces.setSelected(poi);setSearchTab('real');setSearchOpen(true);}}
+
         waypointPins={(photoPick?[]:travel.waypoints??[]).map(point=>{const p=toScreen(projectAt(mode,point.lat,point.lng),camera,metrics);return {...point,x:p.x,y:p.y};}).filter(p=>inBoard(p.x,p.y,metrics,24))}
         draftPin={photoPick?.draft?toScreen(projectAt(mode,photoPick.draft.lat,photoPick.draft.lng),camera,metrics):waypointDraft?toScreen(projectAt(mode,waypointDraft.lat,waypointDraft.lng),camera,metrics):null}
-        onWaypointClick={id=>{const point=travel.waypoints?.find(p=>p.id===id);if(point){setWaypointDraft({...point});setWaypointsOpen(true);}}}
+        onWaypointClick={id=>{const point=travel.waypoints?.find(p=>p.id===id);if(point){setListOpen(false);setWaypointDraft({...point});setWaypointsOpen(true);}}}
         viewBox={viewBox}
         viewWidth={metrics.boardW}
         viewHeight={metrics.boardH}
@@ -1589,47 +1617,74 @@ export function MapWall() {
       />
       )}
 
-      {scene==='wall'&&snapshot.status==='ready'&&!photoPick&&<>
-        <WaypointPanel state={travel} open={waypointsOpen} selecting={selecting} draft={waypointDraft} onOpen={setWaypointsOpen} onSelecting={value=>{setSelecting(value);if(value){followingRef.current=false;setFollowing(false);setFan(null);setFrogActionsOpen(false);}}} onDraft={setWaypointDraft}
+      {scene==='wall'&&snapshot.status==='ready'&&!photoPick&&<aside className="map-left-rail" aria-label="地图侧栏" data-map-controls>
+          {basemapControls}
+          {!photoPick&&<PoiList
+            groups={groups}
+            total={totalPoi}
+            open={listOpen}
+            linked={linked}
+            highlightCity={highlightCity}
+            highlightWish={highlightWish}
+            homeCityName={snapshot.home.city.name}
+            scrollRef={poiScrollRef}
+            imageForPhoto={(photoId) => {
+              const photo = model.photoById.get(photoId);
+              return photo ? imageFor(photo) : null;
+            }}
+            onToggle={() => {setListOpen(!listOpen);if(!listOpen){setWaypointsOpen(false);setSelecting(false);}}}
+            onCity={focusCityFromList}
+            onWish={focusWishRow}
+            onHome={openHome}
+            onScroll={scheduleViewSave}
+          />}
+        <aside className={`roaming-tools${waypointsOpen?' destinations-open':''}`} data-map-controls aria-label="蛙蛙状态与动作">
+          <button className="roaming-title" type="button" aria-label="蛙蛙的旅行" onClick={()=>setJourneyPanelOpen(true)}>{travel.current?.destination.name??snapshot.home.city.name} · {{resting:'在家休息',packing:'收拾行李',outbound:'去程中',visiting:'在目的地停留',returning:'回家路上'}[travelPhase]}</button>
+          {frogLocation&&<output aria-label="蛙蛙模拟位置" aria-live="off" data-frog-lat={frogLocation.lat} data-frog-lng={frogLocation.lng} data-motion-kind={movement}>蛙蛙 · {travel.motionPausedAt!==undefined?'已暂停':movement==='walk'?'落脚点附近漫游':movement==='transit'?'交通转场（可能过海）':'在家'}</output>}
+        <WaypointPanel state={travel} open={waypointsOpen} selecting={selecting} draft={waypointDraft} onOpen={value=>{setWaypointsOpen(value);if(value)setListOpen(false);else{setWaypointDraft(null);setSelecting(false);}}} onSelecting={value=>{if(value)startDestinationPick();else setSelecting(false);}} onDraft={setWaypointDraft}
           onSave={async(point,next)=>{const id=await service.saveTravelWaypoint(point);if(next)await service.setFrogNextWaypoint(id);}}
           onNext={id=>service.setFrogNextWaypoint(id)} onLocate={locateWaypoint} onRemove={id=>service.removeTravelWaypoint(id)}/>
-        <aside className="roaming-tools" data-map-controls aria-label="蛙蛙漫游控制">
-          {frogLocation&&<output aria-label="蛙蛙模拟位置" aria-live="off" data-frog-lat={frogLocation.lat} data-frog-lng={frogLocation.lng} data-motion-kind={movement}>蛙蛙 · {travel.motionPausedAt!==undefined?'已暂停':movement==='walk'?'落脚点附近漫游':movement==='transit'?'交通转场（可能过海）':'在家'}</output>}
-          <div><button type="button" aria-pressed={following} onClick={beginFollowing}>{following?'停止跟随':'跟随蛙蛙'}</button><button type="button" onClick={()=>void guard(()=>service.pauseFrogMotion(travel.motionPausedAt===undefined))}>{travel.motionPausedAt!==undefined?'继续漫游':'暂停漫游'}</button>{!frogAway&&travel.current?<button type="button" onClick={()=>void guard(()=>service.startFrogJourneyNow())}>现在出发</button>:frogAway?<button type="button" onClick={()=>void guard(()=>service.returnFrogHome())}>让蛙蛙回家</button>:null}</div>
+          <div className="roaming-actions"><button type="button" aria-pressed={following} onClick={beginFollowing}>{following?'停止镜头跟随':'镜头跟随'}</button><button type="button" onClick={()=>void guard(()=>service.pauseFrogMotion(travel.motionPausedAt===undefined))}>{travel.motionPausedAt!==undefined?'继续漫游':'暂停漫游'}</button>{!frogAway&&travel.current?<button type="button" onClick={()=>void guard(()=>service.startFrogJourneyNow())}>现在出发</button>:frogAway?<button type="button" onClick={()=>void guard(()=>service.returnFrogHome())}>让蛙蛙回家</button>:null}</div>
+          <small className="camera-follow-status">{following?'镜头跟随中 · 拖地图即退出':'自由查看 · 镜头跟随不改变蛙蛙行程'}</small>
         </aside>
-      </>}
-      {photoPick?<PhotoLocationPicker photos={snapshot.photos.filter(p=>photoPick.ids.includes(p.id))} draft={photoPick.draft} onSave={savePhotoPick} onCancel={cancelPhotoPick} onRepick={()=>{if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:null}:current);}} load={loadThumbnail}
+      </aside>}
+      {selecting&&!photoPick&&scene==='wall'&&<section className="destination-pickbar" aria-label="添加蛙蛙目的地"><strong>添加目的地</strong><p>轻点地图放图钉；可拖动、缩放。确认保存前不会添加。</p><button type="button" onClick={cancelDestinationPick}>取消选点</button></section>}
+      {import.meta.env.DEV&&photoPick&&detailedPhotoMap&&<Suspense fallback={<p className="photo-map-loading" role="status">正在准备街道地图…</p>}><DetailedPhotoMap
+        initialView={{...(photoPick.reference??mapCoordinate(metrics.offX+metrics.sheetW/2,metrics.offY+metrics.sheetH/2,photoPick.view.camera,metrics,photoPick.view.mode)??{lat:0,lng:0}),zoom:photoPick.reference?14:photoPick.view.mode==='world'?Math.log2(Math.max(1,metrics.sheetW)*photoPick.view.camera.zoom/512):14}}
+        reference={photoPick.reference} selected={photoPick.draft} onPick={pickMapPoint} onExit={()=>setDetailedPhotoMap(false)}/></Suspense>}
+      {photoPick?<PhotoLocationPicker mapControls={basemapControls} photos={snapshot.photos.filter(p=>photoPick.ids.includes(p.id))} draft={photoPick.draft} onSave={savePhotoPick} onCancel={cancelPhotoPick} onRepick={()=>{if(!photoSaving.current)setPhotoPick(current=>current?{...current,draft:null}:current);}} load={loadThumbnail} detailedMap={detailedPhotoMap} {...(import.meta.env.DEV?{onDetailedMap:()=>setDetailedPhotoMap(true)}:{})} referenceLabel={photoPick.reference?.label??null}
         searchCities={(query)=>service.searchCities(query)}
         onPickCity={(city)=>{
           const point=city.centroid;
           if(!point)return;
-          setPhotoPick(current=>current?{...current,suggestion:null,draft:{name:city.name,country:city.countryName,lat:point.lat,lng:point.lng,source:'map'}}:current);
+          setPhotoPick(current=>current?{...current,suggestion:null,reference:{lat:point.lat,lng:point.lng,label:city.name,kind:'search'},draft:null}:current);
           focusPhotoCamera(point,PHOTO_LOCATION_ZOOM);
         }}
         suggestion={photoPick.suggestion}
         onUseSuggestion={()=>{
           const suggestion=photoPick.suggestion;
           if(!suggestion)return;
-          setPhotoPick(current=>current?{...current,draft:{name:`${suggestion.cityRef.name}附近`,country:suggestion.cityRef.countryName,lat:suggestion.geo.lat,lng:suggestion.geo.lng,source:'map'}}:current);
+          setPhotoPick(current=>current?{...current,reference:{lat:suggestion.geo.lat,lng:suggestion.geo.lng,label:suggestion.cityRef.name,kind:'suggestion'},draft:{name:`${suggestion.cityRef.name}附近`,country:suggestion.cityRef.countryName,lat:suggestion.geo.lat,lng:suggestion.geo.lng,source:'map'}}:current);
           focusPhotoCamera(suggestion.geo,PHOTO_LOCATION_ZOOM);
         }}
       />:<TopBar
         onHome={openHome}
+        missingCount={missingPhotoCount}
         onImport={() => {
           setDrawerTab('import');
           setDrawerOpen(true);
         }}
         onDrawer={() => {
-          setDrawerTab('candidates');
+          setDrawerTab(missingPhotoCount>0?'fill':'candidates');
           setDrawerOpen(true);
         }}
-        onSearch={() => setSearchOpen(true)}
+        onSearch={() => {setSelecting(false);setSearchOpen(true);}}
         onTheme={toggleTheme}
         onSettings={() => setSettingsOpen(true)}
       />}
 
       {snapshot.status === 'ready' && !photoPick && <FrogJourneyPanel
-        state={travel} home={snapshot.home.city} now={journeyNow}
+        showChip={scene!=='wall'} state={travel} home={snapshot.home.city} now={journeyNow}
         open={journeyPanelOpen} onOpen={setJourneyPanelOpen}
         onConfigure={input=>service.configureFrogTravel(input)}
         onHome={openHome} onEntrust={startEntrust}
@@ -1649,25 +1704,6 @@ export function MapWall() {
 
       {(!empty||!!travel.waypoints?.length||selecting||waypointsOpen||!!photoPick) && scene === 'wall' ? (
         <>
-          {!photoPick&&<PoiList
-            groups={groups}
-            total={totalPoi}
-            open={listOpen}
-            linked={linked}
-            highlightCity={highlightCity}
-            highlightWish={highlightWish}
-            homeCityName={snapshot.home.city.name}
-            scrollRef={poiScrollRef}
-            imageForPhoto={(photoId) => {
-              const photo = model.photoById.get(photoId);
-              return photo ? imageFor(photo) : null;
-            }}
-            onToggle={() => setListOpen((open) => !open)}
-            onCity={focusCityFromList}
-            onWish={focusWishRow}
-            onHome={openHome}
-            onScroll={scheduleViewSave}
-          />}
           {!photoPick ? (
             <Crumb
               level={level}
@@ -1683,13 +1719,6 @@ export function MapWall() {
             onZoomIn={() => zoomBy(1.9)}
             onZoomOut={() => zoomBy(1 / 1.9)}
           />
-          {!photoPick&&<Tray
-            count={model.noGpsCount}
-            onOpen={() => {
-              setDrawerOpen(false);
-              setLocationInbox({ candidateId: null });
-            }}
-          />}
         </>
       ) : null}
 
@@ -1749,7 +1778,9 @@ export function MapWall() {
           await guard(async()=>{
             const tripId=await service.confirmCandidate(id);
             const fresh=buildWallModel(service.getSnapshot(),snapshot.home.city.key);
-            const city=fresh.cities.find(c=>c.tripIds.includes(tripId));
+            const focus=fresh.photos.find(p=>p.tripId===tripId&&pendingPhotoFocus.current.includes(p.id));
+            const city=(focus?fresh.cityByKey.get(focus.cityKey):null)??fresh.cities.find(c=>c.tripIds.includes(tripId));
+            if(focus)pendingPhotoFocus.current=[];
             setActiveTripId(tripId);setDrawerOpen(false);
             if(city){setCityKey(city.key);animateCamera(cityCamera(fresh.photos.filter(p=>p.cityKey===city.key),city,metrics.sheetW>0?metrics.sheetH/metrics.sheetW:.64),'world','city');notify('已确认，正在地图查看这组照片');}
             else notify('已存入档案；缺位置的照片补好后才能上地图');
@@ -1765,10 +1796,11 @@ export function MapWall() {
           await guard(() => service.splitCandidate(id, at), '已拆分为 2 个候选');
         }}
         onApplySuggestions={async (ids) => {
-          await guard(async () => {
-            const applied = await service.applyLocationSuggestions(ids);
-            notify(`已套用 ${applied} 张照片的位置`);
-          });
+          const applied=await service.applyLocationSuggestions(ids);
+          const archive=service.getSnapshot(),photos=archive.photos.filter(p=>ids.includes(p.id));
+          if(applied&&photos.some(p=>p.tripId===null)){setDrawerTab('candidates');notify(`已应用 ${applied} 张照片的位置建议，请继续确认照片`);}
+          else if(applied){const fresh=buildWallModel(archive,archive.home.city.key),located=fresh.photos.find(p=>ids.includes(p.id)),city=located?fresh.cityByKey.get(located.cityKey):null;if(city&&located){setDrawerOpen(false);setScene('wall');setActiveTripId(located.tripId);setCityKey(city.key);animateCamera(cityCamera(fresh.photos.filter(p=>p.cityKey===city.key),city,metrics.sheetW>0?metrics.sheetH/metrics.sheetW:.64),'world','city');}notify(`已应用 ${applied} 张照片的位置建议，正在地图查看`);}
+          else throw new Error('这些照片已没有可用建议，请更新列表后再试');
         }}
       />
 
@@ -1843,8 +1875,7 @@ export function MapWall() {
           top={wishFocus.top}
           photos={focusWishPhotos}
           photoImage={(photoId) => {
-            const photo = model.photoById.get(photoId);
-            return photo ? imageFor(photo) : null;
+            return photoUrls.get(photoId) ?? null;
           }}
           onChoose={(keep) => chooseWish(focusWishValue.id, keep)}
           busy={choosingWish}
@@ -1876,6 +1907,10 @@ export function MapWall() {
       <SearchPanel
         open={searchOpen}
         items={searchItems}
+        tab={searchTab} onTab={setSearchTab}
+        realPlaces={<RealPlaces places={realPlaces} area={realPoiArea} onSave={poi=>openDestinationDraft({name:poi.name,country:landAt(poi)?.name??'未命名地区',lat:poi.lat,lng:poi.lng,source:'poi'})}/>}
+        onDestination={openDestinationDraft}
+        onLocate={point=>{setSearchOpen(false);locateWaypoint(point);}}
         onClose={() => setSearchOpen(false)}
         onPick={(item) => {
           setSearchOpen(false);

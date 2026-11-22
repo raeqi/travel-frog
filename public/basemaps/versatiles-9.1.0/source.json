@@ -1,0 +1,34 @@
+{
+  "version": "9.1.0",
+  "release": "https://github.com/versatiles-org/versatiles-style/releases/tag/v9.1.0",
+  "archives": {
+    "styles.tar.gz": "aa562b131c205332c7f8e1447381cac1b092de7e8958461683f35a098ac52d3a",
+    "sprites.tar.gz": "213786415c738338e0c95744af81d363893456e45471b06d2c8907e32be52903"
+  },
+  "originalStyleSHA256": "b3044c5b624ce25c1c259b94fd35ec03c619342906c6a6b4b4da336274b3e2b7",
+  "source": "muted/style.json",
+  "changes": [
+    "Kept stable OSM source only; omitted optional beta land-cover source",
+    "Sprite URLs refer to bundled same-release assets",
+    "Set flat Mercator projection; added visible VersaTiles attribution",
+    "Relative bundled sprites are resolved against the actual style URL before MapLibre loads them"
+  ],
+  "removedLayers": [
+    "landcover-land-glacier",
+    "landcover-land-residential",
+    "landcover-land-agriculture",
+    "landcover-land-rock",
+    "landcover-land-forest",
+    "landcover-land-grass",
+    "landcover-land-vegetation",
+    "landcover-land-wetland",
+    "landcover-water-area"
+  ],
+  "license": {
+    "style": "MIT",
+    "sprites": "CC0-1.0",
+    "data": "ODbL-1.0; OpenStreetMap contributors"
+  },
+  "policy": "https://docs.versatiles.org/guides/use_tiles_versatiles_org",
+  "availability": "Public demonstration service, no SLA. Normal browser caching; honor 429 Retry-After; no bulk prefetch or offline archive in this app."
+}
