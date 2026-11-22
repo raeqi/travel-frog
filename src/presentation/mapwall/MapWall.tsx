@@ -39,6 +39,8 @@ import { Crumb, EmptyCard, TopBar, Toast, ZoomControls } from './Chrome';
 import { MemoryOverlay } from './MemoryOverlay';
 import { Drawer, type DrawerTab } from './Drawer';
 import { WishFocus, type WishBackPhoto } from './Postcard';
+import { POSTCARD_MARK_SIZE } from './postcard-mark';
+import { postcardFootprints } from './postcard-photos';
 import { HomeRoom, SpecialtyFocus, type SpecialtyProvenance } from './HomeRoom';
 import { ReplayBar, type FrogAction, type FrogMode } from './Frog';
 import { furnitureFor, luggageTier, type SpecialtyAward } from '../../domain/home/collection';
@@ -728,8 +730,8 @@ export function MapWall() {
       const anchor = toScreen(projectAt(mode, wish.lat, wish.lng), camera, metrics);
       if (!inBoard(anchor.x, anchor.y, metrics, 40)) continue;
       seen.add(wish.cityKey);
-      const width = level === 'world' ? 64 : 120;
-      const height = level === 'world' ? 44 : 84;
+      const width = POSTCARD_MARK_SIZE;
+      const height = POSTCARD_MARK_SIZE;
       const placement = placeWish({
         anchor,
         width,
@@ -737,6 +739,11 @@ export function MapWall() {
         piles,
         placed: rects,
         frogRect,
+        obstacles: [
+          ...photoPoints.map(p=>({x:p.x-28,y:p.y-28,w:56,h:56})),
+          ...(travel.waypoints??[]).map(p=>toScreen(projectAt(mode,p.lat,p.lng),camera,metrics)).map(p=>({x:p.x-18,y:p.y-18,w:36,h:36})),
+          ...realPlaces.pois.map(p=>toScreen(projectAt(mode,p.lat,p.lng),camera,metrics)).map(p=>({x:p.x-78,y:p.y-15,w:156,h:30})),
+        ],
         metrics,
       });
       cards.push({ wish, cx: placement.cx, cy: placement.cy, width, height });
@@ -754,7 +761,7 @@ export function MapWall() {
       }
     }
     return { cards, rects, links, centers };
-  }, [model, metrics, frogPos, mode, camera, level, piles]);
+  }, [model, metrics, frogPos, mode, camera, level, piles, photoPoints, travel.waypoints, realPlaces.pois]);
 
   const labels = useMemo(
     () =>
@@ -1305,14 +1312,7 @@ export function MapWall() {
     if (!wishFocus) return [];
     const wish = model.wishById.get(wishFocus.wishId);
     if (!wish) return [];
-    const trip = model.trips.find(
-      (item) => item.cityKeys.includes(wish.cityKey) || item.visits.some((visit) => visit.cityKey === wish.cityKey),
-    );
-    if (!trip) return [];
-    return trip.photoIds
-      .slice(0, 4)
-      .map((id) => model.photoById.get(id))
-      .filter((photo): photo is WallPhoto => photo !== undefined)
+    return postcardFootprints(model,wish.cityKey)
       .map((photo) => ({ id: photo.id, at: photo.capturedAt }));
   }, [wishFocus, model]);
 
@@ -1684,8 +1684,7 @@ export function MapWall() {
           top={wishFocus.top}
           photos={focusWishPhotos}
           photoImage={(photoId) => {
-            const photo = model.photoById.get(photoId);
-            return photo ? imageFor(photo) : null;
+            return photoUrls.get(photoId) ?? null;
           }}
           onChoose={(keep) => chooseWish(focusWishValue.id, keep)}
           busy={choosingWish}
