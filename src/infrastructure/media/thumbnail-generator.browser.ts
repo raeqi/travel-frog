@@ -24,7 +24,11 @@ export class CanvasThumbnailGenerator implements ThumbnailGenerator {
         return null;
       if (file.size > 25 * 1024 * 1024) return null;
       try {
-        const decoderUrl = "/vendor/heic-to-1.6.7.js";
+        // Public assets cannot be statically imported by Vite; resolve the runtime URL instead.
+        const decoderUrl = new URL(
+          "vendor/heic-to-1.6.7.js",
+          window.location.href,
+        ).href;
         const decoder = await import(/* @vite-ignore */ decoderUrl);
         bitmap = await decoder.heicTo({ blob: file, type: "bitmap" });
       } catch {

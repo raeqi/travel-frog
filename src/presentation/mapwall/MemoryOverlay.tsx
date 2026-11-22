@@ -11,6 +11,7 @@ export interface MemoryOverlayProps {
   readonly onReplay: () => void;
   readonly onSaveMemory: (text: string) => void;
   readonly onRenameTrip: (title: string) => void;
+  readonly onEditPhotoLocation?: (photoId: string) => void;
   readonly onDeleteTrip: () => void;
 }
 
@@ -22,6 +23,7 @@ export function MemoryOverlay({
   onReplay,
   onSaveMemory,
   onRenameTrip,
+  onEditPhotoLocation,
   onDeleteTrip,
 }: MemoryOverlayProps) {
   const [editingMemory, setEditingMemory] = useState(false);
@@ -203,7 +205,18 @@ export function MemoryOverlay({
           <figure>
             <img src={photoImage(current)} alt="放大的旅行照片" />
             <figcaption>
-              {formattedDay(current.capturedAt)} · {current.cityKey}
+              <span>
+                {formattedDay(current.capturedAt)} · {current.cityKey}
+              </span>
+              {onEditPhotoLocation ? (
+                <button
+                  className="edit-inline"
+                  type="button"
+                  onClick={() => onEditPhotoLocation(current.id)}
+                >
+                  修改位置
+                </button>
+              ) : null}
             </figcaption>
           </figure>
           <button

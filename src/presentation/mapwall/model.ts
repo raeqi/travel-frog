@@ -183,11 +183,12 @@ export function buildWallModel(snapshot: ArchiveSnapshot, homeCityKey: string | 
   const wallPhotos: WallPhoto[] = [];
   let noGpsCount = 0;
   for (const photo of snapshot.photos) {
-    if (photo.tripId === null || photo.ignored) continue;
+    if (photo.ignored) continue;
     if (photo.geo === null) {
       noGpsCount += 1;
       continue;
     }
+    if (photo.tripId === null) continue;
     const visit = photo.visitId ? visitById.get(photo.visitId) : undefined;
     const nearest = refs.size > 0 ? nearestRef(candidateRefs, photo.geo.lat, photo.geo.lng) : null;
     const cityRef = visit?.cityRef ?? nearest ?? tripById.get(photo.tripId)?.cityRefs[0] ?? null;

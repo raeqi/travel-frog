@@ -49,6 +49,9 @@ export interface ImportSummary {
   readonly ready?: number;
   readonly needsRepair?: number;
   readonly repaired?: number;
+  readonly withLocation?: number;
+  readonly withoutLocation?: number;
+  readonly missingTime?: number;
   readonly issues: readonly ImportIssue[];
 }
 
@@ -65,6 +68,8 @@ export interface ImportProgress {
 }
 
 const SUPPORTED = /\.(jpe?g|png|webp|heic|heif)$/i;
+/** Two files in flight overlap I/O and decode without holding many full images in memory. */
+const IMPORT_CONCURRENCY = 2;
 
 function severityOf(code: ImportIssueCode): "info" | "warning" | "error" {
   switch (code) {
@@ -110,6 +115,12 @@ function isFuture(capturedAt: number, now: number): boolean {
   return capturedAt - now > 24 * 3_600_000;
 }
 
+function assertActive(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new AppError("IMPORT_CANCELLED", "已取消导入，未写入任何照片");
+  }
+}
+
 /**
  * Parses a file into a Photo plus zero or more issues. Never throws for a single bad file:
  * the caller records the issue and keeps importing the rest. Storage failures still throw.
@@ -122,6 +133,7 @@ async function toPhoto(
   batchHashes: Set<string>,
   broken: ReadonlyMap<string, Photo>,
   onPreview: () => void,
+  signal?: AbortSignal,
 ): Promise<
   | { photo: Photo; issues: ImportIssue[]; thumbnail: Blob | null }
   | { duplicate: ImportIssue }
@@ -142,6 +154,7 @@ async function toPhoto(
   }
 
   const exif = await deps.exif.read(file);
+  assertActive(signal);
   if (exif.error === "exif-unreadable" || exif.error === "unreadable-file") {
     issues.push(
       issue(
@@ -155,6 +168,7 @@ async function toPhoto(
   }
 
   const fingerprint = await deps.fingerprints.hash(file);
+  assertActive(signal);
   if (
     (existingHashes.has(fingerprint.hash) &&
       !broken.has(existingHashes.get(fingerprint.hash)!)) ||
@@ -252,8 +266,10 @@ async function toPhoto(
     }
   }
 
+  assertActive(signal);
   onPreview();
   const thumbnail = await deps.thumbnails.create(file, 2048);
+  assertActive(signal);
   const thumbRef = thumbnail ? `thumb_${id}` : null;
   if (!thumbnail)
     issues.push(
@@ -305,6 +321,7 @@ export async function importPhotos(
   deps: ImportDeps,
   files: readonly File[],
   onProgress?: (progress: ImportProgress) => void,
+  signal?: AbortSignal,
 ): Promise<ImportSummary> {
   const now = deps.clock.now();
   const batchId = deps.ids.newImportBatchId();
@@ -336,61 +353,128 @@ export async function importPhotos(
   let duplicates = 0;
   let failed = 0;
 
-  for (let index = 0; index < files.length; index += 1) {
-    const file = files[index];
-    if (!file) continue;
-    onProgress?.({
-      done: index,
-      total: files.length,
-      fileName: file.name,
-      stage: "metadata",
-    });
-    try {
-      const result = await toPhoto(
-        deps,
-        file,
-        batchId,
-        existingHashes,
-        batchHashes,
-        broken,
-        () =>
-          onProgress?.({
-            done: index,
-            total: files.length,
-            fileName: file.name,
-            stage: "preview",
-          }),
-      );
-      if ("duplicate" in result) {
-        duplicates += 1;
-        issues.push(result.duplicate);
+  type FileOutcome =
+    | { readonly kind: "duplicate"; readonly issue: ImportIssue }
+    | {
+        readonly kind: "photo";
+        readonly photo: Photo;
+        readonly thumbnail: Blob | null;
+        readonly issues: ImportIssue[];
+        readonly file: File;
+      }
+    | {
+        readonly kind: "failed";
+        readonly error: unknown;
+        readonly fileName: string;
+      };
+
+  const results: Array<FileOutcome | undefined> = new Array(files.length);
+  let nextIndex = 0;
+  let completed = 0;
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      assertActive(signal);
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= files.length) return;
+      const file = files[index];
+      if (!file) {
+        completed += 1;
         continue;
       }
-      const existing = broken.has(result.photo.id);
-      if (existing && result.thumbnail) repaired++;
-      const photo =
-        !result.thumbnail && file.size <= 25 * 1024 * 1024
-          ? { ...result.photo, sourceRef: `source_${result.photo.id}` }
-          : result.photo;
-      photos.push(photo);
-      if (!result.thumbnail && photo.sourceRef)
-        thumbnails.push({ key: photo.sourceRef, blob: file });
-      issues.push(...result.issues);
-      if (result.thumbnail && result.photo.thumbRef) {
-        thumbnails.push({ key: result.photo.thumbRef, blob: result.thumbnail });
+      onProgress?.({
+        done: completed,
+        total: files.length,
+        fileName: file.name,
+        stage: "metadata",
+      });
+      try {
+        const result = await toPhoto(
+          deps,
+          file,
+          batchId,
+          existingHashes,
+          batchHashes,
+          broken,
+          () =>
+            onProgress?.({
+              done: completed,
+              total: files.length,
+              fileName: file.name,
+              stage: "preview",
+            }),
+          signal,
+        );
+        results[index] =
+          "duplicate" in result
+            ? { kind: "duplicate", issue: result.duplicate }
+            : {
+                kind: "photo",
+                photo: result.photo,
+                thumbnail: result.thumbnail,
+                issues: result.issues,
+                file,
+              };
+      } catch (error) {
+        if (signal?.aborted) return;
+        results[index] = { kind: "failed", error, fileName: file.name };
       }
-    } catch (error) {
+      completed += 1;
+      onProgress?.({
+        done: completed,
+        total: files.length,
+        fileName: file.name,
+        stage: "preview",
+      });
+    }
+  };
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(IMPORT_CONCURRENCY, files.length) },
+      () => worker(),
+    ),
+  );
+  assertActive(signal);
+
+  for (const result of results) {
+    if (!result) continue;
+    if (result.kind === "duplicate") {
+      duplicates += 1;
+      issues.push(result.issue);
+      continue;
+    }
+    if (result.kind === "failed") {
       failed += 1;
-      deps.logger.error("import.file-failed", error, { fileName: file.name });
+      deps.logger.error("import.file-failed", result.error, {
+        fileName: result.fileName,
+      });
       issues.push(
         issue(
           deps,
           batchId,
-          file.name,
+          result.fileName,
           "storage-failed",
           "无法解析或缩略图生成失败",
         ),
       );
+      continue;
+    }
+    const existing = broken.has(result.photo.id);
+    if (existing && result.thumbnail) repaired++;
+    const file = result.file;
+    const photo =
+      !result.thumbnail && file.size <= 25 * 1024 * 1024
+        ? { ...result.photo, sourceRef: `source_${result.photo.id}` }
+        : result.photo;
+    photos.push(photo);
+    if (!result.thumbnail && photo.sourceRef) {
+      thumbnails.push({ key: photo.sourceRef, blob: file });
+    }
+    issues.push(...result.issues);
+    if (result.thumbnail && result.photo.thumbRef) {
+      thumbnails.push({ key: result.photo.thumbRef, blob: result.thumbnail });
     }
   }
 
@@ -457,6 +541,7 @@ export async function importPhotos(
     origin: "user",
   };
 
+  assertActive(signal);
   onProgress?.({
     done: files.length,
     total: files.length,
@@ -499,6 +584,13 @@ export async function importPhotos(
     ready: photos.filter((p) => p.thumbRef).length,
     needsRepair: photos.filter(
       (p) => !p.thumbRef || p.capturedAtSource === "missing",
+    ).length,
+    withLocation: photos.filter((p) => p.geo !== null).length,
+    withoutLocation: photos.filter((p) => p.geo === null).length,
+    missingTime: photos.filter(
+      (p) =>
+        p.capturedAtSource === "missing" ||
+        p.capturedAtSource === "file-mtime",
     ).length,
     repaired,
     candidateCount: candidates.length,

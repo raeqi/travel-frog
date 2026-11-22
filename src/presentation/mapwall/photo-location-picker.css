@@ -1,9 +1,8 @@
 .photo-location-picker {
   position: fixed;
   z-index: 40;
-  left: 50%;
-  bottom: 18px;
-  transform: translateX(-50%);
+  right: 24px;
+  bottom: 24px;
   width: 440px;
   max-width: calc(100vw - 24px);
   max-height: 65dvh;
@@ -83,6 +82,40 @@
 .photo-location-context {
   color: #617052;
 }
+.photo-location-search {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  padding-top: 10px;
+  border-top: 1px solid #e4dfd5;
+}
+.photo-location-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 190px;
+  overflow: auto;
+}
+.photo-location-results button {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 9px;
+  text-align: left;
+}
+.photo-location-results small {
+  color: #756c5c;
+  font-size: 11px;
+}
+.photo-location-picker .btn.wide {
+  width: 100%;
+  margin-top: 6px;
+}
 .photo-location-buttons {
   display: flex;
   gap: 8px;
@@ -115,7 +148,11 @@
 }
 @media (max-width: 700px) {
   .photo-location-picker {
+    left: 50%;
+    right: auto;
     bottom: 10px;
+    transform: translateX(-50%);
+    width: calc(100vw - 20px);
     padding: 12px;
     max-height: 58dvh;
   }

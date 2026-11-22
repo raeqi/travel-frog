@@ -13,6 +13,9 @@ const TAG_GPS_LAT = 0x0002;
 const TAG_GPS_LNG_REF = 0x0003;
 const TAG_GPS_LNG = 0x0004;
 
+/** EXIF usually sits near the start; read a slice first and only fall back for large files. */
+const EXIF_HEAD_BYTES = 2 * 1024 * 1024;
+
 type TagValue = string | number | number[];
 
 interface TiffReader {
@@ -103,6 +106,73 @@ function parseOffset(raw: string): number | null {
   const minutes = Number(match[3] ?? 0);
   const total = sign * (hours * 60 + minutes);
   return total >= -720 && total <= 840 ? total : null;
+}
+
+interface HeicMetadata {
+  capturedAt: number | null;
+  source: 'exif-original' | 'exif-datetime' | null;
+  offsetMinutes: number | null;
+  geo: { lat: number; lng: number } | null;
+  orientation: number | null;
+}
+
+/**
+ * The built-in TIFF/JPEG/PNG/WebP parser cannot reach HEIC's metadata box.
+ * Load exifr only for HEIC/HEIF and only when the fast path found nothing useful.
+ */
+async function readHeicMetadata(buffer: ArrayBuffer): Promise<HeicMetadata | null> {
+  try {
+    const { default: exifr } = await import('exifr');
+    const data = (await exifr.parse(buffer, {
+      gps: true,
+      exif: true,
+      tiff: true,
+      translateValues: false,
+      reviveValues: false,
+    })) as Record<string, unknown> | undefined;
+    if (!data) return null;
+    const rawDate =
+      typeof data.DateTimeOriginal === 'string'
+        ? data.DateTimeOriginal
+        : typeof data.CreateDate === 'string'
+          ? data.CreateDate
+          : typeof data.ModifyDate === 'string'
+            ? data.ModifyDate
+            : null;
+    const source = rawDate
+      ? typeof data.DateTimeOriginal === 'string'
+        ? 'exif-original'
+        : 'exif-datetime'
+      : null;
+    const rawOffset =
+      typeof data.OffsetTimeOriginal === 'string'
+        ? data.OffsetTimeOriginal
+        : typeof data.OffsetTime === 'string'
+          ? data.OffsetTime
+          : typeof data.OffsetTimeDigitized === 'string'
+            ? data.OffsetTimeDigitized
+            : null;
+    const lat = typeof data.latitude === 'number' ? data.latitude : null;
+    const lng = typeof data.longitude === 'number' ? data.longitude : null;
+    const validGeo =
+      lat !== null &&
+      lng !== null &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      Math.abs(lat) <= 90 &&
+      Math.abs(lng) <= 180 &&
+      !(lat === 0 && lng === 0);
+    return {
+      capturedAt: rawDate ? parseExifDate(rawDate) : null,
+      source,
+      offsetMinutes: rawOffset ? parseOffset(rawOffset) : null,
+      geo: validGeo ? { lat, lng } : null,
+      orientation:
+        typeof data.Orientation === 'number' ? data.Orientation : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 interface ParsedTiff {
@@ -252,11 +322,48 @@ export class BrowserExifReader implements ExifReader {
     }
     let buffer: ArrayBuffer;
     try {
-      buffer = await file.arrayBuffer();
+      buffer = await file
+        .slice(0, Math.min(file.size, EXIF_HEAD_BYTES))
+        .arrayBuffer();
     } catch {
       return { capturedAt: null, capturedAtSource: null, offsetMinutes: null, geo: null, orientation: null, mimeType: file.type || null, error: 'unreadable-file' };
     }
-    const parsed = parseExifBytes(new Uint8Array(buffer));
+    let parsed = parseExifBytes(new Uint8Array(buffer));
+    if (
+      (parsed.error === 'no-exif' || parsed.error === 'empty-exif') &&
+      file.size > buffer.byteLength
+    ) {
+      try {
+        buffer = await file.arrayBuffer();
+        parsed = parseExifBytes(new Uint8Array(buffer));
+      } catch {
+        return { capturedAt: null, capturedAtSource: null, offsetMinutes: null, geo: null, orientation: null, mimeType: file.type || null, error: 'unreadable-file' };
+      }
+    }
+    const isHeic = /\.(heic|heif)$/i.test(name) || /image\/(heic|heif)/i.test(type);
+    if (isHeic && (parsed.capturedAt === null || parsed.geo === null)) {
+      if (file.size > buffer.byteLength) {
+        try {
+          buffer = await file.arrayBuffer();
+        } catch {
+          return { capturedAt: null, capturedAtSource: null, offsetMinutes: null, geo: null, orientation: null, mimeType: file.type || null, error: 'unreadable-file' };
+        }
+      }
+      const heic = await readHeicMetadata(buffer);
+      if (heic) {
+        parsed = {
+          capturedAt: parsed.capturedAt ?? heic.capturedAt,
+          source: parsed.source ?? heic.source,
+          offsetMinutes: parsed.offsetMinutes ?? heic.offsetMinutes,
+          geo: parsed.geo ?? heic.geo,
+          orientation: parsed.orientation ?? heic.orientation,
+          error:
+            heic.capturedAt !== null || heic.geo !== null
+              ? null
+              : parsed.error,
+        };
+      }
+    }
     const gpsOffset = parsed.geo ? offsetFromLongitude(parsed.geo.lng) : null;
     const offsetMinutes = parsed.offsetMinutes ?? gpsOffset;
     const capturedAt = parsed.capturedAt === null

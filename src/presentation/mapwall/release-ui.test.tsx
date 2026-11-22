@@ -134,6 +134,7 @@ describe("file preview, explicit import, candidate confirmation and remount", ()
         () => service.getSnapshot(),
       );
       const [tab, setTab] = useState<DrawerTab>("import");
+      const [selection, setSelection] = useState<readonly File[]>([]);
       return (
         <>
           <output>
@@ -149,6 +150,8 @@ describe("file preview, explicit import, candidate confirmation and remount", ()
             issues={snapshot.issues}
             suggestions={[]}
             photosById={new Map(snapshot.photos.map((p) => [p.id, p]))}
+            selection={selection}
+            onSelectionChange={setSelection}
             onImportFiles={(files, p) => service.importFiles(files, p)}
             onConfirmCandidate={async (id) => {
               await service.confirmCandidate(id);

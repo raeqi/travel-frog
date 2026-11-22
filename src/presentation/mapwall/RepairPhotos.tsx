@@ -3,9 +3,11 @@ import type { Photo } from "../../domain/photo/photo";
 export function ImportedPhotoPreview({
   photo,
   load,
+  className,
 }: {
   photo: Photo;
   load?: ((id: string) => Promise<Blob | null>) | undefined;
+  className?: string | undefined;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -26,12 +28,16 @@ export function ImportedPhotoPreview({
     };
   }, [photo.id, photo.thumbRef, load]);
   return (
-    <span data-preview-photo={photo.id}>
+    <span data-preview-photo={photo.id} className={className}>
       {url ? (
         <img
           src={url}
           alt={photo.fileName}
-          style={{ width: 90, height: 65, objectFit: "cover" }}
+          style={
+            className
+              ? undefined
+              : { width: 90, height: 65, objectFit: "cover" }
+          }
         />
       ) : (
         <span>{photo.thumbRef ? "照片预览加载中" : "照片未解码"}</span>
