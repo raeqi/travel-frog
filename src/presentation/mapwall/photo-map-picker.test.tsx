@@ -61,6 +61,8 @@ describe("photo map location confirmation", () => {
             },
           ]}
           photosById={new Map([[photo.id, target]])}
+          selection={[]}
+          onSelectionChange={() => {}}
           onImportFiles={async () => {
             throw new Error("not used");
           }}
@@ -161,6 +163,8 @@ describe("photo map location confirmation", () => {
           issues={[]}
           suggestions={[]}
           photosById={new Map([[photo.id, archived]])}
+          selection={[]}
+          onSelectionChange={() => {}}
           onImportFiles={async () => {
             throw new Error("not used");
           }}
@@ -181,5 +185,115 @@ describe("photo map location confirmation", () => {
     );
     expect(pick).toHaveBeenCalledWith([photo.id], "fill");
     expect(host.querySelector('form[aria-label="手动补位置"]')).toBeNull();
+  });
+
+  it("searches the built-in gazetteer and reports the selected city", async () => {
+    const host = mount(),
+      pick = vi.fn();
+    const paris = {
+      key: "FRA:巴黎",
+      name: "巴黎",
+      countryCode: "FRA",
+      countryName: "法国",
+      centroid: {
+        lat: 48.85,
+        lng: 2.35,
+        accuracyM: null,
+        source: "candidate" as const,
+        approximate: true,
+      },
+      source: "gazetteer" as const,
+      confidence: "high" as const,
+    };
+    await act(async () =>
+      root!.render(
+        <PhotoLocationPicker
+          photos={[photo]}
+          draft={null}
+          onSave={async () => {}}
+          onCancel={() => {}}
+          onRepick={() => {}}
+          load={async () => null}
+          searchCities={() => [paris]}
+          onPickCity={pick}
+        />,
+      ),
+    );
+    const input = host.querySelector<HTMLInputElement>(
+      'input[aria-label="搜索照片拍摄城市"]',
+    )!;
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    await act(async () => {
+      setter.call(input, "巴黎");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const result = [...host.querySelectorAll("button")].find((item) =>
+      item.textContent?.includes("法国"),
+    );
+    expect(result).toBeTruthy();
+    await act(async () =>
+      result!.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(pick).toHaveBeenCalledWith(paris);
+  });
+
+  it("offers the same-day suggestion as an explicit starting point", async () => {
+    const host = mount(),
+      use = vi.fn();
+    const suggestion = {
+      photoId: photo.id,
+      geo: {
+        lat: 48.86,
+        lng: 2.29,
+        accuracyM: null,
+        source: "candidate" as const,
+        approximate: true,
+      },
+      cityRef: {
+        key: "FRA:巴黎",
+        name: "巴黎",
+        countryCode: "FRA",
+        countryName: "法国",
+        centroid: {
+          lat: 48.85,
+          lng: 2.35,
+          accuracyM: null,
+          source: "candidate" as const,
+          approximate: true,
+        },
+        source: "gazetteer" as const,
+        confidence: "high" as const,
+      },
+      reason: "same-day-gps" as const,
+      sourcePhotoIds: ["located"],
+      timeDeltaMs: 1000,
+      distanceKm: 0,
+      confidence: "high" as const,
+    };
+    await act(async () =>
+      root!.render(
+        <PhotoLocationPicker
+          photos={[photo]}
+          draft={null}
+          onSave={async () => {}}
+          onCancel={() => {}}
+          onRepick={() => {}}
+          load={async () => null}
+          suggestion={suggestion}
+          onUseSuggestion={use}
+        />,
+      ),
+    );
+    const button = [...host.querySelectorAll("button")].find((item) =>
+      item.textContent?.includes("使用同日位置"),
+    );
+    expect(button).toBeTruthy();
+    await act(async () =>
+      button!.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(use).toHaveBeenCalledOnce();
   });
 });

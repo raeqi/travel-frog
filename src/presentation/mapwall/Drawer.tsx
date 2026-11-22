@@ -17,10 +17,26 @@ import type {
   ImportProgress,
   ImportSummary,
 } from "../../application/import-photos";
+import { AppError } from "../../application/ports";
 import { fmtDate, fmtLocalDate, fmtMonthDay } from "../format";
-import { droppedPhotos, splitBoundaries } from "./import-selection";
+import {
+  droppedPhotos,
+  mergeSelection,
+  nextStepForImport,
+  removeSelection,
+  splitBoundaries,
+} from "./import-selection";
+import { ImportSelection } from "./ImportSelection";
 
 export type DrawerTab = "import" | "candidates" | "fill" | "progress";
+
+type ImportOutcome =
+  | { readonly kind: "summary"; readonly summary: ImportSummary }
+  | { readonly kind: "cancelled" }
+  | { readonly kind: "error"; readonly message: string };
+
+const NO_FILES: readonly File[] = [];
+const ignoreSelection = (_files: readonly File[]) => {};
 
 const REASON_LABELS: Record<string, string> = {
   "time-gap": "时间间隔",
@@ -71,9 +87,13 @@ export interface DrawerProps {
   readonly issues: readonly ImportIssue[];
   readonly suggestions: readonly LocationSuggestion[];
   readonly photosById: ReadonlyMap<string, Photo>;
+  readonly selection?: readonly File[];
+  readonly onSelectionChange?: (files: readonly File[]) => void;
+  readonly onImportingChange?: (importing: boolean) => void;
   readonly onImportFiles: (
     files: readonly File[],
     onProgress: (progress: ImportProgress) => void,
+    signal?: AbortSignal,
   ) => Promise<ImportSummary>;
   readonly onConfirmCandidate: (id: string) => Promise<void>;
   readonly onIgnoreCandidate: (id: string) => Promise<void>;
@@ -86,6 +106,7 @@ export interface DrawerProps {
     ids: readonly string[],
     returnTab: DrawerTab,
   ) => void;
+  readonly onOpenLocationInbox?: (candidateId: string | null) => void;
   readonly onSetPhotoLocations?: (
     ids: readonly string[],
     input: ManualLocationInput,
@@ -124,7 +145,6 @@ export function Drawer(props: DrawerProps) {
     }
   };
   const [manualIds, setManualIds] = useState<readonly string[]>([]);
-  const [selection, setSelection] = useState<readonly File[]>([]);
   const [splitSelection, setSplitSelection] = useState<{
     id: string;
     index: number;
@@ -137,8 +157,13 @@ export function Drawer(props: DrawerProps) {
   >([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
-  const [importResult, setImportResult] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
   const [fileLog, setFileLog] = useState<readonly string[]>([]);
+  const [cancelling, setCancelling] = useState(false);
+  const [readingDrop, setReadingDrop] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const selection = props.selection ?? NO_FILES;
+  const changeSelection = props.onSelectionChange ?? ignoreSelection;
 
   if (!props.open) return null;
   const pending = props.candidates.filter(
@@ -187,32 +212,101 @@ export function Drawer(props: DrawerProps) {
       ? current.filter((item) => item !== id)
       : [...current, id];
 
-  const runImport = async (files: readonly File[] | null) => {
-    if (!files || files.length === 0) return;
+  const runImport = async () => {
+    const files = selection;
+    if (files.length === 0 || importing) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setImporting(true);
+    props.onImportingChange?.(true);
+    setCancelling(false);
     setFileLog([]);
     setProgress({ done: 0, total: files.length, fileName: "" });
-    setImportResult(null);
+    setOutcome(null);
     try {
-      const summary = await props.onImportFiles(files, (next) => {
-        setProgress(next);
-        if (!next.fileName) return;
-        setFileLog((current) =>
-          current.includes(next.fileName)
-            ? current
-            : [...current, next.fileName].slice(-8),
-        );
-      });
-      setSelection([]);
-      setImportResult(
-        `已保存 ${summary.imported} 条记录 · 可显示照片 ${summary.ready ?? summary.imported} 张 · 需处理 ${summary.needsRepair ?? 0} 张 · 修复 ${summary.repaired ?? 0} 张 · 重复跳过 ${summary.duplicates} · 失败 ${summary.failed} · 待确认 ${summary.candidateCount} 段`,
+      const summary = await props.onImportFiles(
+        files,
+        (next) => {
+          setProgress(next);
+          if (!next.fileName) return;
+          setFileLog((current) =>
+            current.includes(next.fileName)
+              ? current
+              : [...current, next.fileName].slice(-8),
+          );
+        },
+        controller.signal,
       );
+      changeSelection([]);
+      setOutcome({ kind: "summary", summary });
     } catch (error) {
-      setImportResult(error instanceof Error ? error.message : "导入失败");
+      if (error instanceof AppError && error.code === "IMPORT_CANCELLED") {
+        setOutcome({ kind: "cancelled" });
+      } else {
+        setOutcome({
+          kind: "error",
+          message: error instanceof Error ? error.message : "导入失败",
+        });
+      }
     } finally {
       setImporting(false);
+      props.onImportingChange?.(false);
+      abortRef.current = null;
+      setCancelling(false);
       setProgress(null);
     }
+  };
+
+  const cancelImport = () => {
+    if (!importing) return;
+    setCancelling(true);
+    abortRef.current?.abort();
+  };
+
+  const appendFiles = (files: readonly File[]) => {
+    if (files.length === 0) return;
+    changeSelection(mergeSelection(selection, files));
+    setOutcome(null);
+  };
+
+  const outcomeSummary =
+    outcome?.kind === "summary" ? outcome.summary : null;
+  const nextStep = outcomeSummary ? nextStepForImport(outcomeSummary) : null;
+  const importedIds = new Set<string>(
+    outcomeSummary
+      ? [...props.photosById.values()]
+          .filter((photo) => photo.importBatchId === outcomeSummary.batchId)
+          .map((photo) => photo.id)
+      : [],
+  );
+  const importedSuggestionCount = props.suggestions.filter((item) =>
+    importedIds.has(item.photoId),
+  ).length;
+  const nextLabel =
+    nextStep === "repair"
+      ? "下一步：处理问题照片"
+      : nextStep === "location"
+        ? `给 ${outcomeSummary?.withoutLocation ?? 0} 张照片标记位置`
+        : nextStep === "candidates"
+          ? "下一步：确认候选旅行"
+          : "完成";
+  const goNext = () => {
+    if (nextStep === "repair") {
+      setOutcome(null);
+      props.onTab("progress");
+      return;
+    }
+    if (nextStep === "location") {
+      setOutcome(null);
+      props.onOpenLocationInbox?.(null);
+      return;
+    }
+    if (nextStep === "candidates") {
+      setOutcome(null);
+      props.onTab("candidates");
+      return;
+    }
+    setOutcome(null);
   };
 
   const exportIssues = () => {
@@ -305,7 +399,7 @@ export function Drawer(props: DrawerProps) {
         multiple
         hidden
         onChange={(event) => {
-          setSelection(Array.from(event.target.files ?? []));
+          appendFiles(Array.from(event.target.files ?? []));
           event.target.value = "";
         }}
       />
@@ -316,7 +410,7 @@ export function Drawer(props: DrawerProps) {
         hidden
         {...{ webkitdirectory: "" }}
         onChange={(e) => {
-          setSelection(Array.from(e.currentTarget.files ?? []));
+          appendFiles(Array.from(e.currentTarget.files ?? []));
           e.currentTarget.value = "";
         }}
       />
@@ -348,13 +442,17 @@ export function Drawer(props: DrawerProps) {
               onDrop={(event) => {
                 event.preventDefault();
                 if (importing) return;
+                setReadingDrop(true);
                 void droppedPhotos(event.dataTransfer)
-                  .then(setSelection)
+                  .then((files) => appendFiles(files))
                   .catch((error) =>
-                    setImportResult(
-                      error instanceof Error ? error.message : "无法读取文件夹",
-                    ),
-                  );
+                    setOutcome({
+                      kind: "error",
+                      message:
+                        error instanceof Error ? error.message : "无法读取文件夹",
+                    }),
+                  )
+                  .finally(() => setReadingDrop(false));
               }}
             >
               <span className="dz-icon">
@@ -388,52 +486,28 @@ export function Drawer(props: DrawerProps) {
             >
               选择文件夹（含子文件夹）
             </button>
-            {selection.length > 0 && (
-              <section className="card import-preview" aria-label="本次选择">
-                <h3>本次选择 · {selection.length} 个文件</h3>
-                <p className="note">
-                  {(
-                    selection.reduce((sum, file) => sum + file.size, 0) /
-                    1024 /
-                    1024
-                  ).toFixed(1)}{" "}
-                  MB · 按时间和位置生成候选，确认前不会成为旅行。
-                </p>
-                <ul>
-                  {selection.map((file, index) => (
-                    <li key={index}>
-                      <span>{file.webkitRelativePath || file.name}</span>
-                      <small>
-                        {/\.(heic|heif)$/i.test(file.name)
-                          ? "需浏览器解码"
-                          : file.type.startsWith("image/")
-                            ? "可解析"
-                            : "格式待检查"}{" "}
-                        · {(file.size / 1024).toFixed(0)} KB
-                      </small>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  className="btn primary"
-                  disabled={importing}
-                  type="button"
-                  onClick={() => void runImport(selection)}
-                >
-                  导入 {selection.length} 个文件
-                </button>{" "}
-                <button
-                  className="btn ghost"
-                  disabled={importing}
-                  type="button"
-                  onClick={() => setSelection([])}
-                >
-                  取消选择
-                </button>
-              </section>
-            )}
+            <ImportSelection
+              files={selection}
+              importing={importing}
+              onImport={() => void runImport()}
+              onAdd={() =>
+                document.getElementById("wall-file-input")?.click()
+              }
+              onClear={() => {
+                changeSelection([]);
+                setOutcome(null);
+              }}
+              onRemove={(key) =>
+                changeSelection(removeSelection(selection, key))
+              }
+            />
+            {readingDrop ? (
+              <p className="note" role="status">
+                正在读取文件夹…
+              </p>
+            ) : null}
             {progress ? (
-              <div className="card">
+              <div className="card import-progress">
                 <div className="panel-title">
                   <h3>
                     {
@@ -449,43 +523,182 @@ export function Drawer(props: DrawerProps) {
                     }
                   </h3>
                   <span>
-                    {progress.done} / {progress.total}
+                    已完成 {progress.done} / {progress.total}
                   </span>
                 </div>
-                <div className="bar">
+                <div className={`bar${importing ? " is-active" : ""}`}>
                   <i
                     style={{
                       width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%`,
                     }}
                   />
                 </div>
-                <p className="note">{progress.fileName}</p>
-              </div>
-            ) : null}
-            {fileLog.length > 0 ? (
-              <ul className="file-log">
-                {fileLog.map((name) => (
-                  <li key={name}>{name}</li>
-                ))}
-              </ul>
-            ) : null}
-            {importResult ? (
-              <>
-                <p className="note" role="status">
-                  {importResult}
+                <p className="note">
+                  {progress.fileName
+                    ? `正在处理：${progress.fileName}`
+                    : "保存到本机…"}
                 </p>
                 <button
+                  className="btn ghost"
                   type="button"
-                  className="btn primary"
-                  onClick={() =>
-                    props.onTab(repairPhotos.length ? "progress" : "candidates")
-                  }
+                  disabled={cancelling}
+                  onClick={cancelImport}
                 >
-                  {repairPhotos.length
-                    ? "下一步：修复照片或补拍摄时间"
-                    : "下一步：确认照片并在地图查看"}
+                  {cancelling ? "正在取消…" : "取消导入"}
                 </button>
-              </>
+              </div>
+            ) : null}
+            {outcome ? (
+              <section
+                className={`card import-result is-${outcome.kind}`}
+                aria-label="导入结果"
+              >
+                {outcome.kind === "summary" ? (
+                  <>
+                    <div className="panel-title">
+                      <h3>导入完成</h3>
+                      <span>{outcome.summary.imported} 张新增</span>
+                    </div>
+                    <p className="import-saved-line" role="status">
+                      已保存 {outcome.summary.imported} 条记录 · 可显示{" "}
+                      {outcome.summary.ready ?? outcome.summary.imported} 张
+                    </p>
+                    <div className="import-result-grid">
+                      <div>
+                        <strong>{outcome.summary.imported}</strong>
+                        <span>新增照片</span>
+                      </div>
+                      <div>
+                        <strong>
+                          {outcome.summary.ready ?? outcome.summary.imported}
+                        </strong>
+                        <span>可直接查看</span>
+                      </div>
+                      <div>
+                        <strong>{outcome.summary.withLocation ?? 0}</strong>
+                        <span>已识别位置</span>
+                      </div>
+                      <div className={(outcome.summary.withoutLocation ?? 0) > 0 ? "is-warn" : ""}>
+                        <strong>{outcome.summary.withoutLocation ?? 0}</strong>
+                        <span>缺位置</span>
+                      </div>
+                      <div className={(outcome.summary.missingTime ?? 0) > 0 ? "is-warn" : ""}>
+                        <strong>{outcome.summary.missingTime ?? 0}</strong>
+                        <span>缺拍摄时间</span>
+                      </div>
+                      <div>
+                        <strong>{outcome.summary.candidateCount}</strong>
+                        <span>候选旅行</span>
+                      </div>
+                      <div>
+                        <strong>{outcome.summary.duplicates}</strong>
+                        <span>重复跳过</span>
+                      </div>
+                      {(outcome.summary.repaired ?? 0) > 0 ? (
+                        <div>
+                          <strong>{outcome.summary.repaired}</strong>
+                          <span>修复预览</span>
+                        </div>
+                      ) : null}
+                      {outcome.summary.failed > 0 ? (
+                        <div className="is-bad">
+                          <strong>{outcome.summary.failed}</strong>
+                          <span>失败</span>
+                        </div>
+                      ) : null}
+                    </div>
+                    {importedSuggestionCount > 0 &&
+                    (outcome.summary.withoutLocation ?? 0) > 0 ? (
+                      <p className="note">
+                        其中 {importedSuggestionCount} 张有同日位置建议，可在定位工作台一键套用。
+                      </p>
+                    ) : null}
+                    <div className="import-result-actions">
+                      <button
+                        type="button"
+                        className="btn primary"
+                        onClick={goNext}
+                      >
+                        {nextLabel}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        onClick={() => {
+                          setOutcome(null);
+                          changeSelection([]);
+                        }}
+                      >
+                        继续导入
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+                {outcome.kind === "cancelled" ? (
+                  <>
+                    <h3>已取消导入</h3>
+                    <p className="note" role="status">
+                      本次没有写入任何照片，选择仍然保留，可以重新开始。
+                    </p>
+                    <div className="import-result-actions">
+                      <button
+                        type="button"
+                        className="btn primary"
+                        onClick={() => {
+                          setOutcome(null);
+                          void runImport();
+                        }}
+                      >
+                        重新导入
+                      </button>
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        onClick={() => setOutcome(null)}
+                      >
+                        关闭
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+                {outcome.kind === "error" ? (
+                  <>
+                    <h3>导入没有完成</h3>
+                    <p role="alert">{outcome.message}</p>
+                    {selection.length > 0 ? (
+                      <div className="import-result-actions">
+                        <button
+                          type="button"
+                          className="btn primary"
+                          onClick={() => {
+                            setOutcome(null);
+                            void runImport();
+                          }}
+                        >
+                          重试
+                        </button>
+                        <button
+                          type="button"
+                          className="btn ghost"
+                          onClick={() => setOutcome(null)}
+                        >
+                          关闭
+                        </button>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+              </section>
+            ) : null}
+            {fileLog.length > 0 ? (
+              <details className="import-log">
+                <summary>本次处理文件（{fileLog.length}）</summary>
+                <ul className="file-log">
+                  {fileLog.map((name) => (
+                    <li key={name}>{name}</li>
+                  ))}
+                </ul>
+              </details>
             ) : null}
             <p className="note">
               照片只在本机解析。成功后保存预览；解码失败时最多保留25MB原文件供本机重试。导入完成后先生成候选，确认后才成为旅行。
@@ -610,14 +823,18 @@ export function Drawer(props: DrawerProps) {
                         ) {
                           props.onTab("progress");
                         } else if (candidate.locationMissingCount > 0) {
-                          const ids = candidate.photoIds.filter(
-                            (id) => props.photosById.get(id)?.geo === null,
-                          );
-                          if (props.onPickPhotoLocation)
-                            props.onPickPhotoLocation(ids, "candidates");
-                          else {
-                            setManualIds(ids);
-                            props.onTab("fill");
+                          if (props.onOpenLocationInbox) {
+                            props.onOpenLocationInbox(candidate.id);
+                          } else {
+                            const ids = candidate.photoIds.filter(
+                              (id) => props.photosById.get(id)?.geo === null,
+                            );
+                            if (props.onPickPhotoLocation)
+                              props.onPickPhotoLocation(ids, "candidates");
+                            else {
+                              setManualIds(ids);
+                              props.onTab("fill");
+                            }
                           }
                         } else void props.onConfirmCandidate(candidate.id);
                       }}
@@ -627,7 +844,7 @@ export function Drawer(props: DrawerProps) {
                       )
                         ? "先修复照片预览"
                         : candidate.locationMissingCount > 0
-                          ? "先补位置，再上地图"
+                          ? `补 ${candidate.locationMissingCount} 张位置`
                           : "确认并在地图查看"}
                     </button>
                     {candidate.locationMissingCount > 0 && (
@@ -748,6 +965,15 @@ export function Drawer(props: DrawerProps) {
                 每张照片只需确认一次位置。有建议可直接使用，也可以在地图上重新选。
               </p>
             )}
+            {fillCount > 0 && props.onOpenLocationInbox ? (
+              <button
+                className="btn primary wide"
+                type="button"
+                onClick={() => props.onOpenLocationInbox?.(null)}
+              >
+                打开定位工作台 · 缩略图与同日建议
+              </button>
+            ) : null}
             {suggestedIds.length > 0 && (
               <div className="location-batch" aria-label="批量使用地点建议">
                 <label>

@@ -1,12 +1,15 @@
-import { useState,type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import type { CityRef } from "../../domain/city/city-ref";
 import type { Photo } from "../../domain/photo/photo";
+import type { LocationSuggestion } from "../../domain/services/fill-locations";
 import type { ManualLocationInput } from "./ManualLocationForm";
 import type { WaypointDraft } from "./WaypointPanel";
 import { GazetteerCityResolver } from "../../infrastructure/geo/city-resolver";
-const cityNames = new GazetteerCityResolver();
 import { nearbyWaypointCity } from "./waypoint-names";
 import { ImportedPhotoPreview } from "./RepairPhotos";
 import "./photo-location-picker.css";
+
+const cityNames = new GazetteerCityResolver();
 
 export function PhotoLocationPicker({
   photos,
@@ -20,8 +23,12 @@ export function PhotoLocationPicker({
   referenceLabel = null,
   onSearchPlace,
   mapControls,
+  searchCities,
+  onPickCity,
+  suggestion,
+  onUseSuggestion,
 }: {
-  mapControls?:ReactNode;
+  mapControls?: ReactNode;
   detailedMap?: boolean;
   onDetailedMap?: () => void;
   referenceLabel?: string | null;
@@ -32,14 +39,46 @@ export function PhotoLocationPicker({
   onCancel: () => void;
   onRepick: () => void;
   load: (id: string) => Promise<Blob | null>;
+  searchCities?: ((query: string) => CityRef[]) | undefined;
+  onPickCity?: ((city: CityRef) => void) | undefined;
+  suggestion?: LocationSuggestion | null | undefined;
+  onUseSuggestion?: (() => void) | undefined;
 }) {
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const [query, setQuery] = useState("");
+    [error, setError] = useState(""),
+    [query, setQuery] = useState(""),
+    [results, setResults] = useState<CityRef[]>([]);
   const nearby = draft ? nearbyWaypointCity(draft) : null;
-  const matches = query.trim()
-    ? cityNames.suggest(query, 5).filter((c) => c.centroid)
-    : [];
+  const usingSuggestion =
+    !!suggestion &&
+    !!draft &&
+    Math.abs(draft.lat - suggestion.geo.lat) < 1e-6 &&
+    Math.abs(draft.lng - suggestion.geo.lng) < 1e-6;
+  const canSearch = !!onPickCity || !!onSearchPlace;
+  const changeQuery = (value: string) => {
+    setQuery(value);
+    if (!value.trim()) {
+      setResults([]);
+      return;
+    }
+    const matches = searchCities
+      ? searchCities(value).slice(0, 6)
+      : cityNames.suggest(value, 5).filter((city) => city.centroid);
+    setResults(matches);
+  };
+  const chooseCity = (city: CityRef) => {
+    if (onPickCity) {
+      onPickCity(city);
+    } else if (onSearchPlace && city.centroid) {
+      onSearchPlace({
+        name: city.name,
+        lat: city.centroid.lat,
+        lng: city.centroid.lng,
+      });
+    }
+    setQuery("");
+    setResults([]);
+  };
   return (
     <section
       className="photo-location-picker"
@@ -50,7 +89,10 @@ export function PhotoLocationPicker({
       <header>
         <div>
           <strong>给 {photos.length} 张照片选位置</strong>
-          <small title={photos[0]?.fileName}>{photos[0]?.fileName}</small>
+          <small title={photos[0]?.fileName}>
+            {photos[0]?.fileName}
+            {photos.length > 1 ? ` 等 ${photos.length} 张` : ""}
+          </small>
         </div>
         <button type="button" disabled={busy} onClick={onCancel}>
           取消，返回照片
@@ -60,56 +102,72 @@ export function PhotoLocationPicker({
         <div className="photo-location-preview">
           <ImportedPhotoPreview photo={photos[0]} load={load} />
           <p>
-            {draft
-              ? "图钉是你点下的位置。可继续点地图换位置，或改名后确认。"
-              : "轻点地图选位置，也可拖动、缩放。只有最后确认才会保存。"}
+            {usingSuggestion
+              ? "图钉是同日照片推断的位置；可直接保存，或点地图修改。"
+              : draft
+                ? "图钉是你点下的位置。可继续点地图换位置，或改名后确认。"
+                : "轻点地图选位置，也可拖动、缩放。只有最后确认才会保存。"}
           </p>
         </div>
       )}
-      {!draft && (
-        <>
-          {referenceLabel && (
-            <p className="photo-reference">
-              当前参考：{referenceLabel}
-              。这只是起始视野，请在地图上确认准确位置。
+      {referenceLabel && !draft ? (
+        <p className="photo-reference">
+          当前参考：{referenceLabel}。这只是起始视野，请在地图上确认准确位置。
+        </p>
+      ) : null}
+      {suggestion && !usingSuggestion && onUseSuggestion ? (
+        <button
+          className="btn ghost wide"
+          type="button"
+          disabled={busy}
+          onClick={onUseSuggestion}
+        >
+          使用同日位置：{suggestion.cityRef.name}
+        </button>
+      ) : null}
+      {photos.length > 1 ? (
+        <p className="photo-location-context">
+          这 {photos.length} 张照片会保存同一个位置。
+        </p>
+      ) : null}
+      {canSearch ? (
+        <div className="photo-location-search photo-place-search">
+          <label>
+            搜索城市
+            <input
+              aria-label="搜索照片拍摄城市"
+              value={query}
+              placeholder="例如：巴黎、京都"
+              autoComplete="off"
+              onChange={(event) => changeQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setQuery("");
+                  setResults([]);
+                }
+              }}
+            />
+          </label>
+          {query.trim() ? (
+            <p className="photo-location-context">
+              {results.length > 0
+                ? "内置城市名；选中后会飞到城市中心，仍可点地图微调。"
+                : "没有内置城市匹配；可直接在地图上点选。"}
             </p>
-          )}
-          {onSearchPlace && (
-            <div className="photo-place-search">
-              <label>
-                搜索城市
-                <input
-                  aria-label="搜索照片拍摄城市"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="例如：京都"
-                />
-              </label>
-              {matches.length > 0 && (
-                <ul aria-label="照片城市建议">
-                  {matches.map((c) => (
-                    <li key={c.key}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onSearchPlace({
-                            name: c.name,
-                            lat: c.centroid!.lat,
-                            lng: c.centroid!.lng,
-                          });
-                          setQuery("");
-                        }}
-                      >
-                        查看{c.name}附近 · {c.countryName}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </>
-      )}
+          ) : null}
+          {results.length > 0 ? (
+            <ul className="photo-location-results" aria-label="城市搜索结果">
+              {results.map((city) => (
+                <li key={city.key}>
+                  <button type="button" onClick={() => chooseCity(city)}>
+                    查看{city.name}附近 · {city.countryName}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       {!detailedMap && onDetailedMap && (
         <details className="photo-street-optin">
           <summary>使用街道底图 · 本地试验</summary>

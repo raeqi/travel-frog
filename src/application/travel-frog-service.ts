@@ -568,6 +568,7 @@ export class TravelFrogService {
   async importFiles(
     files: readonly File[],
     onProgress?: (progress: ImportProgress) => void,
+    signal?: AbortSignal,
   ): Promise<ImportSummary> {
     try {
       const summary = await importPhotos(
@@ -582,7 +583,8 @@ export class TravelFrogService {
           logger: this.deps.logger,
         },
         files,
-        ...(onProgress ? [onProgress] : []),
+        onProgress,
+        signal,
       );
       await this.refresh();
       return summary;
@@ -927,6 +929,13 @@ export class TravelFrogService {
       resolveCity: (geo) => this.deps.cityResolver.resolve(geo),
       defaultOffsetMinutes: this.offset(),
     });
+  }
+
+  /** Offline gazetteer search used only for naming/jumping; never resolves a photo automatically. */
+  searchCities(query: string, limit = 6): CityRef[] {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    return this.deps.cityResolver.suggest(trimmed, limit);
   }
 
   async applyLocationSuggestions(photoIds: readonly string[]): Promise<number> {

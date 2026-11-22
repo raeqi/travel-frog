@@ -5,6 +5,8 @@ export const CITY_TABLE: readonly CitySeed[] = [
   { name: '北京', countryName: '中国', countryCode: 'CHN', lat: 39.9042, lng: 116.4074 },
   { name: '上海', countryName: '中国', countryCode: 'CHN', lat: 31.2304, lng: 121.4737 },
   { name: '杭州', countryName: '中国', countryCode: 'CHN', lat: 30.2741, lng: 120.1551 },
+  { name: '台州', countryName: '中国', countryCode: 'CHN', lat: 28.6564, lng: 121.4208 },
+  { name: '临海', countryName: '中国', countryCode: 'CHN', lat: 28.8584, lng: 121.1449 },
   { name: '成都', countryName: '中国', countryCode: 'CHN', lat: 30.5728, lng: 104.0668 },
   { name: '重庆', countryName: '中国', countryCode: 'CHN', lat: 29.563, lng: 106.5516 },
   { name: '青岛', countryName: '中国', countryCode: 'CHN', lat: 36.0671, lng: 120.3826 },
